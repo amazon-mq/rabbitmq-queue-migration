@@ -1,0 +1,105 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+// vim:ft=javascript:
+// -*- mode: javascript; -*-
+
+dispatcher_add(function(sammy) {
+    sammy.get('#/queue-migration/status', function() {
+        render({queue_migration_status: '/queue-migration/status', vhosts: '/vhosts'},
+               'queue-migration-status', '#/queue-migration/status');
+    });
+
+    sammy.get('#/queue-migration/status/:migration_id', function() {
+        render({queue_migration_detail_status: '/queue-migration/status/' + esc(this.params['migration_id'])},
+               'queue-migration-detail-status', '#/queue-migration/status');
+    });
+
+    sammy.put('#/queue-migration/start', function() {
+        var self = this;
+
+        // Use the existing with_req function for async requests with proper error handling
+        with_req('PUT', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), null, function(resp) {
+            // Success callback - migration started successfully
+            $('#start-migration-section').hide();
+            $('#migration-started-message').show();
+            // Give the backend time to create migration record before refreshing
+            setTimeout(function() {
+                update();
+            }, 3000); // 3 second delay
+        });
+
+        return false;
+    });
+});
+
+NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
+
+$(document).on('change', 'select#migration-id', function() {
+    var migrationId = $(this).val();
+    if (migrationId) {
+        go_to('#/queue-migration/status/' + migrationId);
+    } else {
+        go_to('#/queue-migration/status');
+    }
+});
+
+function fmt_migration_status(status) {
+    if (status === 'in_progress') {
+        return '<span class="status-blue">In Progress</span>';
+    } else if (status === 'completed') {
+        return '<span class="status-green">Completed</span>';
+    } else if (status === 'failed') {
+        return '<span class="status-red">Failed</span>';
+    } else {
+        return '<span>' + status + '</span>';
+    }
+}
+
+function fmt_queue_status(status) {
+    if (status === 'pending') {
+        return '<span class="status-yellow">Pending</span>';
+    } else if (status === 'in_progress') {
+        return '<span class="status-blue">In Progress</span>';
+    } else if (status === 'completed') {
+        return '<span class="status-green">Completed</span>';
+    } else if (status === 'failed') {
+        return '<span class="status-red">Failed</span>';
+    } else {
+        return '<span>' + status + '</span>';
+    }
+}
+
+function fmt_progress_bar(completed, total) {
+    if (total === 0) return '<div class="progress-bar"><div class="progress" style="width: 0%"></div></div> 0%';
+
+    var percent = Math.round((completed / total) * 100);
+    return '<div class="progress-bar"><div class="progress" style="width: ' + percent + '%"></div></div> ' + percent + '%';
+}
+
+function fmt_queue_resource(resource) {
+    if (!resource) return '';
+
+    // Try to use link_queue if available, otherwise fallback to plain text
+    try {
+        if (typeof link_queue === 'function') {
+            return link_queue(resource.vhost, resource.name);
+        } else {
+            // Fallback: just show the queue name as plain text
+            return resource.name;
+        }
+    } catch (e) {
+        // If link_queue fails, fallback to plain text
+        return resource.name;
+    }
+}
+
+// Custom sort function for migration tables that defaults to descending order
+function fmt_sort_desc_by_default(display, sort) {
+    var prefix = '';
+    if (current_sort == sort) {
+        prefix = '<span class="arrow">' +
+            (current_sort_reverse ? '&#9650; ' : '&#9660; ') +
+            '</span>';
+    }
+    return '<a class="sort" sort="' + sort + '">' + prefix + display + '</a>';
+}

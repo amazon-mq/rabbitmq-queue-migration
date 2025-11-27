@@ -1,0 +1,222 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<style>
+.status-green {
+  color: #008800;
+  font-weight: bold;
+}
+.status-red {
+  color: #cc0000;
+  font-weight: bold;
+}
+.status-yellow {
+  color: #ddaa00;
+  font-weight: bold;
+}
+.status-blue {
+  color: #0088ce;
+  font-weight: bold;
+}
+.system-checks-table th, .queue-compatibility-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+.check-passed {
+  background-color: #f0f8f0;
+}
+.check-failed {
+  background-color: #fdf0f0;
+}
+.check-warning {
+  background-color: #fffbf0;
+}
+</style>
+
+<h1>Migration Pre Check</h1>
+
+<%
+// Handle both single vhost and "all vhosts" data structures
+var data;
+if (compatibility_results.vhost === "all" && compatibility_results.vhost_results) {
+  // For "all" case, use the first (and likely only) vhost result
+  data = compatibility_results.vhost_results[0];
+} else {
+  // For single vhost case, use the data directly
+  data = compatibility_results;
+}
+%>
+
+<div class="section">
+  <h2>Results for <%= compatibility_results.vhost === "all" ? "All Virtual Hosts" : "Virtual Host: " + fmt_string(data.vhost) %></h2>
+
+  <!-- Overall Status -->
+  <div class="overall-status">
+    <% if (data.overall_ready) { %>
+      <div class="alert alert-success">
+        <h3><span class="status-green">✓ Ready for Migration</span></h3>
+        <p>All system requirements are met and all queues are compatible.</p>
+      </div>
+    <% } else { %>
+      <div class="alert alert-danger">
+        <h3><span class="status-red">✗ Not Ready for Migration</span></h3>
+        <p>Please address the issues below before proceeding with migration.</p>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- System Requirements Section -->
+  <div class="system-requirements">
+    <h2>System Requirements</h2>
+    <div class="updater">
+      <% if (data.system_checks && data.system_checks.all_passed) { %>
+        <div class="alert alert-success">
+          <h4>✓ All System Requirements Met</h4>
+        </div>
+      <% } else { %>
+        <div class="alert alert-warning">
+          <h4>⚠ System Requirements Status</h4>
+        </div>
+      <% } %>
+
+      <% if (data.system_checks && data.system_checks.checks) { %>
+      <table class="list system-checks-table">
+        <thead>
+          <tr>
+            <th>Requirement</th>
+            <th>Status</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% data.system_checks.checks.forEach(function(check) { %>
+          <tr class="<%= check.status === 'passed' ? 'check-passed' : 'check-failed' %>">
+            <td><%= fmt_check_type_name(check.check_type) %></td>
+            <td>
+              <span class="<%= check.status === 'passed' ? 'status-green' : 'status-red' %>">
+                <%= check.status === 'passed' ? '✓ Passed' : '✗ Failed' %>
+              </span>
+            </td>
+            <td><%= check.message %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- Queue Compatibility Section -->
+  <div class="queue-compatibility">
+    <h2>Queue Compatibility</h2>
+    <div class="updater">
+      <% if (data.queue_checks && data.queue_checks.summary) { %>
+      <% if (data.queue_checks.summary.incompatible_queues === 0) { %>
+        <div class="alert alert-success">
+          <h4>✓ All Queues Compatible</h4>
+        </div>
+      <% } else { %>
+        <div class="alert alert-warning">
+          <h4>⚠ Queue Compatibility Issues Found</h4>
+        </div>
+      <% } %>
+
+      <!-- Summary Stats Table -->
+      <table class="list queue-compatibility-table">
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Count</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="<%= data.queue_checks.summary.total_queues === 0 ? 'check-passed' : 'check-passed' %>">
+          <td>Total Classic Queues</td>
+          <td><%= data.queue_checks.summary.total_queues %></td>
+          <td><%= data.queue_checks.summary.total_queues === 0 ? 'No queues to migrate' : 'Queues found' %></td>
+        </tr>
+        <tr class="<%= data.queue_checks.summary.compatible_queues === data.queue_checks.summary.total_queues ? 'check-passed' : 'check-failed' %>">
+          <td>Compatible Queues</td>
+          <td><%= data.queue_checks.summary.compatible_queues %></td>
+          <td>
+            <% if (data.queue_checks.summary.total_queues === 0) { %>
+              N/A
+            <% } else if (data.queue_checks.summary.compatible_queues === data.queue_checks.summary.total_queues) { %>
+              <span class="status-green">✓ All Compatible</span>
+            <% } else { %>
+              <span class="status-yellow">⚠ Some Compatible</span>
+            <% } %>
+          </td>
+        </tr>
+        <tr class="<%= data.queue_checks.summary.incompatible_queues === 0 ? 'check-passed' : 'check-failed' %>">
+          <td>Incompatible Queues</td>
+          <td><%= data.queue_checks.summary.incompatible_queues %></td>
+          <td>
+            <% if (data.queue_checks.summary.incompatible_queues === 0) { %>
+              <span class="status-green">✓ None Found</span>
+            <% } else { %>
+              <span class="status-red">✗ Issues Found</span>
+            <% } %>
+          </td>
+        </tr>
+        <tr class="<%= data.queue_checks.summary.compatibility_percentage === 100 ? 'check-passed' : (data.queue_checks.summary.compatibility_percentage >= 80 ? 'check-warning' : 'check-failed') %>">
+          <td>Compatibility Percentage</td>
+          <td><%= data.queue_checks.summary.compatibility_percentage %>%</td>
+          <td>
+            <% var percentage = data.queue_checks.summary.compatibility_percentage; %>
+            <% if (percentage === 100) { %>
+              <span class="status-green">✓ Fully Compatible</span>
+            <% } else if (percentage >= 80) { %>
+              <span class="status-yellow">⚠ Mostly Compatible</span>
+            <% } else { %>
+              <span class="status-red">✗ Needs Attention</span>
+            <% } %>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <% } %>
+
+    <!-- Incompatible Queues Details -->
+    <% if (data.queue_checks && data.queue_checks.summary && data.queue_checks.summary.incompatible_queues > 0) { %>
+    <div class="incompatible-queues">
+      <h3>Incompatible Queues</h3>
+      <table class="list">
+        <thead>
+          <tr>
+            <th>Queue Name</th>
+            <th>Virtual Host</th>
+            <th>Status</th>
+            <th>Issues</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (data.queue_checks.results) { %>
+          <% data.queue_checks.results.forEach(function(queue) { %>
+          <tr>
+            <td><%= fmt_queue_resource({name: queue.name, vhost: queue.vhost}) %></td>
+            <td><%= fmt_string(queue.vhost) %></td>
+            <td><%= queue.compatible ? 'Compatible' : 'Incompatible' %></td>
+            <td>
+              <% if (queue.issues) { %>
+              <% queue.issues.forEach(function(issue, index) { %>
+                <div class="issue-item">
+                  <strong><%= fmt_issue_type(issue.type) %>:</strong> <%= issue.reason %>
+                </div>
+              <% }); %>
+              <% } %>
+            </td>
+          </tr>
+          <% }); %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+    </div>
+  </div>
+  </div>
+</div>

@@ -1,11 +1,17 @@
-## My Project
+# RabbitMQ Queue Migration Plugin
 
-TODO: Fill this README out!
+This plugin adds information on queue migration status to the management
+plugin.
 
-Be sure to:
+## Installation
 
-* Change the title in this README
-* Edit your repository description on GitHub
+```shell
+rabbitmq-plugins enable rabbitmq_queue_migration
+```
+
+If you have a heterogenous cluster (where the nodes have different plugins
+installed), this should be installed on the same nodes as the management
+plugin.
 
 ## Security
 
@@ -14,4 +20,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
-

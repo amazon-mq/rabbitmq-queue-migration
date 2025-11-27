@@ -1,0 +1,56 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<h1>Queue Compatibility Checker</h1>
+
+<div class="section">
+  <h2>Check Queue Compatibility</h2>
+  <p>
+    This tool checks classic queues for compatibility with quorum queues in the current virtual host.
+  </p>
+  
+  <form action="#/queue-compatibility" method="get" class="queue-compatibility-form">
+    <input type="button" id="check-compatibility-btn" value="Check Compatibility" />
+  </form>
+</div>
+
+<div class="section-hidden">
+  <h2>About Queue Compatibility</h2>
+  <div class="hider">
+    <p>
+      Quorum queues are a replicated queue type that provides higher availability and data safety guarantees compared to classic mirrored queues.
+    </p>
+    <p>
+      However, not all classic queue features are supported by quorum queues. This tool helps you identify which classic queues in your RabbitMQ cluster can be migrated to quorum queues and which ones have compatibility issues.
+    </p>
+    <h3>Key Compatibility Considerations:</h3>
+    <ul>
+      <li><strong>Exclusive Queues:</strong> Quorum queues do not support exclusive queues.</li>
+      <li><strong>Priority Queues:</strong> Quorum queues don't support the x-max-priority argument, but they do support high and low priorities that can be set when publishing messages.</li>
+      <li><strong>Lazy Mode:</strong> Quorum queues handle lazy mode differently.</li>
+      <li><strong>Overflow Behavior:</strong> Quorum queues only support drop-head and reject-publish overflow behaviors.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+$(document).ready(function() {
+  $('#check-compatibility-btn').click(function() {
+    var vhost = current_vhost;
+    if (vhost === "") {
+      // "All" vhosts is selected in the global dropdown
+      go_to('#/queue-compatibility/all');
+    } else {
+      go_to('#/queue-compatibility/' + esc(vhost));
+    }
+  });
+});
+</script>
+
+<style type="text/css">
+.queue-compatibility-form {
+  margin: 20px 0;
+}
+</style>

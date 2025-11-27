@@ -1,0 +1,162 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<h1>Queue Migration</h1>
+
+<!-- Message shown when migration is started -->
+<div id="migration-started-message" class="info" style="display: none;">
+  <p>Migration has been started. The page will refresh automatically to show progress.</p>
+</div>
+
+<div class="section">
+  <h2>Current Status</h2>
+  <% if (queue_migration_status) { %>
+    <p>Migration system status: <b><%= fmt_string(queue_migration_status.status) %></b></p>
+    
+    <% if (queue_migration_status.migrations && queue_migration_status.migrations.length > 0) { %>
+      <p>
+        Select migration:
+        <select id="migration-id">
+          <option value="">-- Select a migration --</option>
+          <% for (var i = 0; i < queue_migration_status.migrations.length; i++) { %>
+            <option value="<%= queue_migration_status.migrations[i].id %>">
+              <%= queue_migration_status.migrations[i].display_id %>
+            </option>
+          <% } %>
+        </select>
+      </p>
+      
+      <table class="list updatable">
+        <thead>
+          <tr>
+            <th><%= fmt_sort_desc_by_default('Migration', 'display_id') %></th>
+            <th><%= fmt_sort_desc_by_default('Started', 'started_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Completed', 'completed_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Status', 'status') %></th>
+            <th><%= fmt_sort_desc_by_default('Progress', 'progress_percentage') %></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (var i = 0; i < queue_migration_status.migrations.length; i++) { %>
+            <tr<%= alt_rows(i) %>>
+              <td><%= fmt_string(queue_migration_status.migrations[i].display_id) %></td>
+              <td><%= fmt_string(queue_migration_status.migrations[i].started_at) %></td>
+              <td><%= fmt_string(queue_migration_status.migrations[i].completed_at) %></td>
+              <td><%= fmt_migration_status(queue_migration_status.migrations[i].status) %></td>
+              <td>
+                <%= fmt_progress_bar(
+                  queue_migration_status.migrations[i].completed_queues,
+                  queue_migration_status.migrations[i].total_queues
+                ) %>
+              </td>
+              <td>
+                <a href="#/queue-migration/status/<%= queue_migration_status.migrations[i].id %>">View Details</a>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p>No migrations have been performed yet.</p>
+    <% } %>
+  <% } else { %>
+    <p>Unable to retrieve migration status.</p>
+  <% } %>
+</div>
+
+<% if (queue_migration_status && queue_migration_status.status !== 'cmq_qq_migration_in_progress') { %>
+<div class="section updatable" id="start-migration-section">
+  <h2>Start New Migration</h2>
+  <div class="hider">
+    <form action="#/queue-migration/start" method="put">
+      <table class="form">
+        <tr>
+          <th>Virtual Host:</th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+                <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Start Migration"/>
+    </form>
+  </div>
+</div>
+<% } else if (queue_migration_status && queue_migration_status.status === 'cmq_qq_migration_in_progress') { %>
+<div class="section updatable" id="migration-in-progress-section">
+  <h2>Migration In Progress</h2>
+  <p class="warning">A migration is currently in progress. Starting a new migration is not allowed until the current one completes.</p>
+</div>
+<% } %>
+
+<div class="section-hidden">
+  <h2>About Queue Migration</h2>
+  <div class="hider">
+    <p>
+      This tool migrates classic mirrored queues to quorum queues. The migration process:
+    </p>
+    <ol>
+      <li>Identifies all classic mirrored queues in the selected virtual host</li>
+      <li>Creates temporary quorum queues for each classic queue</li>
+      <li>Transfers all messages from classic queues to quorum queues</li>
+      <li>Renames the quorum queues to the original queue names</li>
+    </ol>
+    <p>
+      <b>Note:</b> Migration requires that no clients are connected to the broker.
+    </p>
+  </div>
+</div>
+
+<style type="text/css">
+.progress-bar {
+  width: 100px;
+  height: 10px;
+  background-color: #f0f0f0;
+  border-radius: 5px;
+  display: inline-block;
+  margin-right: 5px;
+}
+.progress {
+  height: 100%;
+  background-color: #0088ce;
+  border-radius: 5px;
+}
+.status-green {
+  color: #008800;
+  font-weight: bold;
+}
+.status-blue {
+  color: #0088ce;
+  font-weight: bold;
+}
+.status-red {
+  color: #cc0000;
+  font-weight: bold;
+}
+.status-yellow {
+  color: #ddaa00;
+  font-weight: bold;
+}
+.info {
+  background-color: #d9edf7;
+  border: 1px solid #bce8f1;
+  color: #31708f;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+.warning {
+  background-color: #fcf8e3;
+  border: 1px solid #faebcc;
+  color: #8a6d3b;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+</style>

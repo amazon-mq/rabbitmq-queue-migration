@@ -1,0 +1,124 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<h1>Queue Migration Details</h1>
+
+<% if (queue_migration_detail_status && queue_migration_detail_status.migration) { %>
+  <div class="section">
+    <h2>Migration Information</h2>
+    <table class="facts">
+      <tr>
+        <th>Migration:</th>
+        <td><%= queue_migration_detail_status.migration.display_id %></td>
+      </tr>
+      <tr>
+        <th>Virtual Host:</th>
+        <td><%= fmt_string(queue_migration_detail_status.migration.vhost) %></td>
+      </tr>
+      <tr>
+        <th>Started:</th>
+        <td><%= fmt_string(queue_migration_detail_status.migration.started_at) %></td>
+      </tr>
+      <tr>
+        <th>Completed:</th>
+        <td><%= fmt_string(queue_migration_detail_status.migration.completed_at) %></td>
+      </tr>
+      <tr>
+        <th>Status:</th>
+        <td><%= fmt_migration_status(queue_migration_detail_status.migration.status) %></td>
+      </tr>
+      <tr>
+        <th>Progress:</th>
+        <td class="updatable">
+          <%= queue_migration_detail_status.migration.completed_queues %> of <%= queue_migration_detail_status.migration.total_queues %> queues
+          (<%= Math.round((queue_migration_detail_status.migration.completed_queues / queue_migration_detail_status.migration.total_queues) * 100) || 0 %>%)
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Queue Migration Status</h2>
+    <p>
+      <a href="#/queue-migration/status">Back to Migration List</a>
+    </p>
+
+    <% if (queue_migration_detail_status.queues && queue_migration_detail_status.queues.length > 0) { %>
+      <table class="list updatable">
+        <thead>
+          <tr>
+            <th><%= fmt_sort_desc_by_default('Queue', 'queue_name') %></th>
+            <th><%= fmt_sort_desc_by_default('Status', 'status') %></th>
+            <th><%= fmt_sort_desc_by_default('Started', 'started_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Completed', 'completed_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Messages', 'total_messages') %></th>
+            <th><%= fmt_sort_desc_by_default('Progress', 'progress_percentage') %></th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (var i = 0; i < queue_migration_detail_status.queues.length; i++) {
+               var queue = queue_migration_detail_status.queues[i];
+               var progress = queue.total_messages > 0 ?
+                 Math.round((queue.migrated_messages / queue.total_messages) * 100) :
+                 (queue.status === 'completed' ? 100 : 0);
+          %>
+            <tr<%= alt_rows(i) %>>
+              <td><%= fmt_queue_resource(queue.resource) %></td>
+              <td><%= fmt_queue_status(queue.status) %></td>
+              <td><%= fmt_string(queue.started_at) %></td>
+              <td><%= fmt_string(queue.completed_at) %></td>
+              <td>
+                <%= queue.migrated_messages %> / <%= queue.total_messages %>
+              </td>
+              <td>
+                <%= fmt_progress_bar(queue.migrated_messages, queue.total_messages) %>
+              </td>
+              <td><%= fmt_string(queue.error) %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p>No queue migration details available.</p>
+    <% } %>
+  </div>
+<% } else { %>
+  <div class="section">
+    <p>Migration details not found. <a href="#/queue-migration/status">Return to migration list</a>.</p>
+  </div>
+<% } %>
+
+<style type="text/css">
+.progress-bar {
+  width: 100px;
+  height: 10px;
+  background-color: #f0f0f0;
+  border-radius: 5px;
+  display: inline-block;
+  margin-right: 5px;
+}
+.progress {
+  height: 100%;
+  background-color: #0088ce;
+  border-radius: 5px;
+}
+.status-green {
+  color: #008800;
+  font-weight: bold;
+}
+.status-blue {
+  color: #0088ce;
+  font-weight: bold;
+}
+.status-red {
+  color: #cc0000;
+  font-weight: bold;
+}
+.status-yellow {
+  color: #ddaa00;
+  font-weight: bold;
+}
+</style>

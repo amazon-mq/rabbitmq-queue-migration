@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 16 * * *' # Runs daily at 16:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - id: restore-rabbitmq-server-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/rabbitmq-server
+          key: rmq-v3.13.7-otp-26-elixir-1.16
+      - id: maybe-fail-rabbitmq-server-miss
+        if: steps.restore-rabbitmq-server-cache.outputs.cache-hit != 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.setFailed('could not restore cached rabbitmq-server build');
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 26
+          elixir-version: 1.16
+      - uses: actions/checkout@v5
+        with:
+          path: rabbitmq-server/deps/rabbitmq_queue_migration
+      - run: make -C ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration
+      - run: make -C ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration tests
