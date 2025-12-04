@@ -6,6 +6,8 @@
 -module(rqm_checks).
 
 -export([
+    check_shovel_plugin/0,
+    check_khepri_disabled/0,
     check_relaxed_checks_setting/0,
     check_leader_balance/1,
     check_leader_balance/2,
@@ -33,6 +35,25 @@
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
+
+%% @doc Check if rabbitmq_shovel plugin is enabled.
+%% This plugin is required for queue migration to work properly.
+-spec check_shovel_plugin() -> ok | {error, shovel_plugin_not_enabled}.
+check_shovel_plugin() ->
+    ActivePlugins = rabbit_plugins:active(),
+    case lists:member(rabbitmq_shovel, ActivePlugins) of
+        true -> ok;
+        false -> {error, shovel_plugin_not_enabled}
+    end.
+
+%% @doc Check if khepri_db is disabled.
+%% Khepri must be disabled for queue migration to work properly.
+-spec check_khepri_disabled() -> ok | {error, khepri_enabled}.
+check_khepri_disabled() ->
+    case rabbit_khepri:is_enabled() of
+        false -> ok;
+        true -> {error, khepri_enabled}
+    end.
 
 %% @doc Check if quorum_relaxed_checks_on_redeclaration is enabled.
 %% This setting is required for queue migration to work properly as it allows

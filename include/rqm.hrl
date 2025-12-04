@@ -67,8 +67,8 @@
     total_queues,
     % Number of queues completed
     completed_queues,
-    % Status: 'in_progress', 'completed', 'failed', 'rollback_pending'
-    status,
+    % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
+    status :: migration_status(),
     % Timestamp when rollback started
     rollback_started_at,
     % Timestamp when rollback completed
@@ -97,8 +97,8 @@
     total_messages,
     % Number of messages migrated so far
     migrated_messages,
-    % Status: 'pending', 'in_progress', 'completed', 'failed', 'rollback_pending'
-    status,
+    % Status: 'pending', 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
+    status :: migration_status(),
     % Error details if failed (null otherwise)
     error,
     % When rollback started for this queue
@@ -111,3 +111,6 @@
 
 %% Type definitions
 -type snapshot_id() :: binary().
+
+-type migration_status() ::
+    'pending' | 'in_progress' | 'completed' | 'failed' | 'rollback_pending' | 'rollback_completed'.
