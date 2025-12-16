@@ -12,7 +12,7 @@ jobs:
   build-cache-rabbitmq-server:
     runs-on: ubuntu-latest
     steps:
-      - uses: erlef/setup-beam@v1
+      - uses: erlef/setup-beam@e6d7c94229049569db56a7ad5a540c051a010af9 # v1.20.4
         with:
           otp-version: 26
           elixir-version: 1.16
@@ -21,7 +21,7 @@ jobs:
           git clone --branch v3.13.7 https://github.com/rabbitmq/rabbitmq-server.git ${{ github.workspace }}/rabbitmq-server
       - id: build-rabbitmq-server
         run: make -C ${{ github.workspace }}/rabbitmq-server
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
           path: ${{ github.workspace }}/rabbitmq-server
           key: rmq-v3.13.7-otp-26-elixir-1.16
