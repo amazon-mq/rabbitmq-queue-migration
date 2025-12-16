@@ -18,6 +18,7 @@
     status/0,
     get_migration_status/0,
     get_queue_migration_status/1,
+    get_rollback_pending_migration_json/0,
     start_migration_preparation_on_node/2,
     start_post_migration_restore_on_node/3,
     start_migration_on_node/4
@@ -34,8 +35,6 @@ start() ->
 
 start(VHost) ->
     try
-        %% TODO: CHECK FOR ALARMS
-        % Step 0: Check that quorum_relaxed_checks_on_redeclaration is enabled (required for migration)
         pre_migration_validation(VHost)
     catch
         Class:Reason:Stack ->
@@ -71,13 +70,18 @@ status() ->
 
 %% Private
 
-%% Validation-only function that run checks but don't start migration
+%% Validation-only function that run checks but doesn't start migration
 pre_migration_validation_only(VHost) ->
-    pre_migration_validation({validation_only, relaxed_checks_setting}, VHost).
+    pre_migration_validation({validation_only, shovel_plugin}, VHost).
 
+%% Function that run checks AND starts migration
 pre_migration_validation(VHost) ->
-    pre_migration_validation({migration, relaxed_checks_setting}, VHost).
+    pre_migration_validation({migration, shovel_plugin}, VHost).
 
+pre_migration_validation({V, shovel_plugin}, VHost) ->
+    handle_check_shovel_plugin(V, rqm_checks:check_shovel_plugin(), VHost);
+pre_migration_validation({V, khepri_disabled}, VHost) ->
+    handle_check_khepri_disabled(V, rqm_checks:check_khepri_disabled(), VHost);
 pre_migration_validation({V, relaxed_checks_setting}, VHost) ->
     handle_check_relaxed_checks_setting(V, rqm_checks:check_relaxed_checks_setting(), VHost);
 pre_migration_validation({V, balanced_queue_leaders}, VHost) ->
@@ -97,8 +101,25 @@ pre_migration_validation({V, memory_usage}, VHost) ->
 pre_migration_validation({V, cluster_partitions}, VHost) ->
     handle_check_cluster_partitions(V, rqm_checks:check_cluster_partitions(), VHost).
 
+handle_check_shovel_plugin(V, ok, VHost) ->
+    pre_migration_validation({V, khepri_disabled}, VHost);
+handle_check_shovel_plugin(_V, {error, shovel_plugin_not_enabled}, _VHost) ->
+    ?LOG_ERROR(
+        "rqm: rabbitmq_shovel plugin must be enabled for migration. "
+        "Enable the plugin with: rabbitmq-plugins enable rabbitmq_shovel"
+    ),
+    {error, shovel_plugin_not_enabled}.
+
+handle_check_khepri_disabled(V, ok, VHost) ->
+    pre_migration_validation({V, relaxed_checks_setting}, VHost);
+handle_check_khepri_disabled(_V, {error, khepri_enabled}, _VHost) ->
+    ?LOG_ERROR(
+        "rqm: khepri_db must be disabled for migration. "
+        "Khepri is not compatible with classic queue migration."
+    ),
+    {error, khepri_enabled}.
+
 handle_check_relaxed_checks_setting(V, {ok, enabled}, VHost) ->
-    % Step 1.0: Check that queue leaders are balanced
     pre_migration_validation({V, balanced_queue_leaders}, VHost);
 handle_check_relaxed_checks_setting(_V, {error, disabled}, _VHost) ->
     ?LOG_ERROR(
@@ -108,7 +129,6 @@ handle_check_relaxed_checks_setting(_V, {error, disabled}, _VHost) ->
     {error, relaxed_checks_disabled}.
 
 handle_check_leader_balance(V, {ok, balanced}, VHost) ->
-    % Step 1.1: Check queue synchronization (new step)
     pre_migration_validation({V, queue_synchronization}, VHost);
 handle_check_leader_balance(_V, {error, {imbalanced, _}}, _VHost) ->
     ?LOG_ERROR(
@@ -118,7 +138,6 @@ handle_check_leader_balance(_V, {error, {imbalanced, _}}, _VHost) ->
     {error, queue_leaders_imbalanced}.
 
 handle_check_queue_synchronization(V, ok, VHost) ->
-    % Step 1.2: Check queue suitability
     pre_migration_validation({V, queue_suitability}, VHost);
 handle_check_queue_synchronization(_V, {error, {unsynchronized_queues, QueueNames}}, _VHost) ->
     ?LOG_ERROR(
@@ -129,7 +148,6 @@ handle_check_queue_synchronization(_V, {error, {unsynchronized_queues, QueueName
     {error, {unsynchronized_queues, QueueNames}}.
 
 handle_check_queue_suitability(V, ok, VHost) ->
-    % Step 1.3: Check queue message count
     pre_migration_validation({V, queue_message_count}, VHost);
 handle_check_queue_suitability(_V, {error, {too_many_queues, Details}}, _VHost) ->
     QueueCount = maps:get(queue_count, Details),
@@ -151,7 +169,6 @@ handle_check_queue_suitability(_V, {error, _} = Error, _VHost) ->
     Error.
 
 handle_check_queue_message_count(V, ok, VHost) ->
-    % Step 1.4: Check free disk space
     pre_migration_validation({V, disk_space}, VHost);
 handle_check_queue_message_count(_V, {error, queues_too_deep}, _VHost) ->
     ?LOG_ERROR("rqm: stopping migration due to queue(s) that have too many messages."),
@@ -573,7 +590,7 @@ mcq_qq_migration(MigrationId, PreparationState, Nodes, VHost) ->
             case MigrationRecord#queue_migration.status of
                 rollback_pending ->
                     ?LOG_CRITICAL(
-                        "rqm: rollback is needed and pending",
+                        "rqm: rollback_pending | migration_id ~s",
                         [format_migration_id(MigrationId)]
                     ),
                     error({migration_failed_rollback_pending, {errors, Errors}});
@@ -1492,6 +1509,17 @@ get_migration_status() ->
 
 get_queue_migration_status(MigrationId) ->
     rqm_db:get_queue_migration_status(MigrationId).
+
+%% @doc Get rollback pending migration as JSON string for HOTW workflow
+%% Returns {ok, JsonBinary} if rollback_pending migration exists, {error, not_found} otherwise
+-spec get_rollback_pending_migration_json() -> {ok, binary()} | {error, not_found}.
+get_rollback_pending_migration_json() ->
+    case rqm_db:get_rollback_pending_migration() of
+        {ok, Migration} ->
+            rabbit_json:encode(rqm_mgmt:migration_to_json_detail(Migration));
+        {error, not_found} ->
+            {error, not_found}
+    end.
 
 %% Helper function to format migration ID for logging
 %% Extracts timestamp from {Timestamp, Node} tuple and formats as string

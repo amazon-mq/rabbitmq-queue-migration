@@ -44,7 +44,8 @@
 %% API for retrieving migration status
 -export([
     get_migration_status/0,
-    get_queue_migration_status/1
+    get_queue_migration_status/1,
+    get_rollback_pending_migration/0
 ]).
 
 %% General queue operations
@@ -94,33 +95,31 @@ create_migration(MigrationId, VHost, StartTime) ->
     {ok, MigrationRecord}.
 
 %% @doc Update migration status
--spec update_migration_status(term(), atom()) -> {ok, #queue_migration{}} | {error, not_found}.
+-spec update_migration_status(term(), migration_status()) ->
+    {ok, #queue_migration{}} | {error, not_found}.
+update_migration_status(MigrationId, rollback_completed) ->
+    F = fun(M) ->
+        M#queue_migration{status = rollback_completed, rollback_completed_at = os:timestamp()}
+    end,
+    update_migration(MigrationId, F);
 update_migration_status(MigrationId, Status) ->
-    case mnesia:dirty_read(queue_migration, MigrationId) of
-        [] ->
-            {error, not_found};
-        [Migration] ->
-            UpdatedMigration = Migration#queue_migration{status = Status},
-            mnesia:dirty_write(UpdatedMigration),
-            {ok, UpdatedMigration}
-    end.
+    F = fun(M) ->
+        M#queue_migration{status = Status}
+    end,
+    update_migration(MigrationId, F).
 
 %% @doc Update migration as completed
 -spec update_migration_completed(term(), non_neg_integer()) ->
     {ok, #queue_migration{}} | {error, not_found}.
 update_migration_completed(MigrationId, TotalQueues) ->
-    case mnesia:dirty_read(queue_migration, MigrationId) of
-        [] ->
-            {error, not_found};
-        [Migration] ->
-            UpdatedMigration = Migration#queue_migration{
-                completed_at = os:timestamp(),
-                completed_queues = TotalQueues,
-                status = completed
-            },
-            mnesia:dirty_write(UpdatedMigration),
-            {ok, UpdatedMigration}
-    end.
+    F = fun(M) ->
+        M#queue_migration{
+            status = completed,
+            completed_at = os:timestamp(),
+            completed_queues = TotalQueues
+        }
+    end,
+    update_migration(MigrationId, F).
 
 %% @doc Update migration completed count based on completed queue statuses
 -spec update_migration_completed_count(term()) -> {ok, non_neg_integer()} | {error, not_found}.
@@ -427,6 +426,21 @@ is_current_status(MigrationId, ExpectedStatus) ->
             false
     end.
 
+%% @doc Get the most recent migration with rollback_pending status
+-spec get_rollback_pending_migration() -> {ok, #queue_migration{}} | {error, not_found}.
+get_rollback_pending_migration() ->
+    Pattern = #queue_migration{status = rollback_pending, _ = '_'},
+    case mnesia:dirty_match_object(queue_migration, Pattern) of
+        [] ->
+            {error, not_found};
+        Migrations ->
+            [MostRecent | _] = lists:sort(
+                fun(A, B) -> A#queue_migration.started_at >= B#queue_migration.started_at end,
+                Migrations
+            ),
+            {ok, MostRecent}
+    end.
+
 %% Store original queue metadata for rollback
 -spec store_original_queue_metadata(#resource{}, term(), term()) -> {ok, term()} | {error, term()}.
 store_original_queue_metadata(Resource, OriginalArgs, OriginalBindings) ->
@@ -446,4 +460,14 @@ store_original_queue_metadata(Resource, OriginalArgs, OriginalBindings) ->
     case mnesia:transaction(Fun) of
         {atomic, Result} -> Result;
         {aborted, Reason} -> {error, Reason}
+    end.
+
+update_migration(MigrationId, UpdateFun) ->
+    case mnesia:dirty_read(queue_migration, MigrationId) of
+        [] ->
+            {error, not_found};
+        [Migration0] ->
+            Migration1 = UpdateFun(Migration0),
+            ok = mnesia:dirty_write(Migration1),
+            {ok, Migration1}
     end.

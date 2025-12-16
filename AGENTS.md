@@ -1,8 +1,9 @@
 # RabbitMQ Queue Migration Plugin - Codebase Summary
 
-**Version**: RabbitMQ 3.13.x  
-**Purpose**: Migrate mirrored classic queues to quorum queues  
+**Version**: RabbitMQ 3.13.x
+**Purpose**: Migrate mirrored classic queues to quorum queues
 **Plugin Name**: `rabbitmq_queue_migration`
+**Repository**: https://github.com/amazon-mq/rabbitmq-queue-migration
 
 ## Overview
 
@@ -24,6 +25,8 @@ This plugin provides a production-ready solution for migrating mirrored classic 
 | `rqm_compat_checker.erl` | Queue compatibility analysis | Individual queue eligibility assessment |
 | `rqm_compat_checker_mgmt.erl` | Compatibility API | HTTP endpoints for queue compatibility checking |
 | `rqm_snapshot.erl` | EBS snapshot management | Creates EBS or tar-based snapshots during pre-migration preparation |
+| `rqm_ebs.erl` | AWS EBS operations | Low-level EBS snapshot creation/deletion, volume discovery |
+| `rqm_db_queue.erl` | Queue database queries | Query queues by vhost/type, supports both Mnesia and Khepri |
 | `rqm_gatherer.erl` | Distributed result collection | Coordinates asynchronous task results across cluster nodes |
 
 ### Data Structures
@@ -37,7 +40,7 @@ This plugin provides a production-ready solution for migrating mirrored classic 
     completed_at,           % Timestamp when migration completed (null if in progress)
     total_queues,           % Total number of queues to migrate
     completed_queues,       % Number of queues completed
-    status,                 % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rolling_back', 'rollback_completed'
+    status,                 % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
     rollback_started_at,    % Timestamp when rollback started
     rollback_completed_at,  % Timestamp when rollback completed
     rollback_errors         % List of rollback errors per queue
@@ -55,7 +58,7 @@ This plugin provides a production-ready solution for migrating mirrored classic 
     completed_at,           % When this queue's migration completed (null if in progress)
     total_messages,         % Total messages in queue at start
     migrated_messages,      % Number of messages migrated so far
-    status,                 % Status: 'pending', 'in_progress', 'completed', 'failed', 'rolling_back', 'rollback_completed', 'rollback_failed'
+    status,                 % Status: 'pending', 'in_progress', 'completed', 'failed', 'rollback_completed', 'rollback_failed'
     error,                  % Error details if failed (null otherwise)
     rollback_started_at,    % When rollback started for this queue
     rollback_completed_at,  % When rollback completed for this queue
@@ -90,7 +93,7 @@ Phase 1: Classic Queue → Temporary Quorum Queue
 ├── Delete original classic queue
 └── Progress: ~50% completion
 
-Phase 2: Temporary Quorum Queue → Final Quorum Queue  
+Phase 2: Temporary Quorum Queue → Final Quorum Queue
 ├── Create final quorum queue with original name
 ├── Copy all bindings from temporary to final queue
 ├── Migrate messages from temporary to final queue
@@ -260,6 +263,17 @@ This allows applications to redeclare queues with classic arguments without erro
 - `create_ebs_snapshot/1` - Create EBS snapshot for discovered volume
 - `cleanup_snapshot/1` - Clean up snapshot using configured mode
 - `cleanup_snapshot/2` - Clean up snapshot with specific mode
+
+### `rqm_ebs.erl`
+- `instance_volumes/0` - List all EBS volumes attached to current instance
+- `create_volume_snapshot/1` - Create snapshot for volume with default description
+- `create_volume_snapshot/2` - Create snapshot with custom description
+- `delete_volume_snapshot/1` - Delete snapshot with default region
+- `delete_volume_snapshot/2` - Delete snapshot with specific region
+
+### `rqm_db_queue.erl`
+- `get_all_by_vhost_and_type/2` - Query queues by vhost and type (supports Mnesia and Khepri)
+- `get_all_by_type_and_node/2` - Query queues by type and node (supports Mnesia and Khepri)
 
 ### `rqm_util.erl`
 - `has_ha_policy/1` - Check if queue has HA policy applied
