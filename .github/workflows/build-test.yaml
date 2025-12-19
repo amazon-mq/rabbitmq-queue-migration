@@ -36,3 +36,44 @@ jobs:
           path: rabbitmq-server/deps/rabbitmq_queue_migration
       - run: make -C ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration
       - run: make -C ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration tests
+      - name: Build plugin ez file
+        run: |
+          make -C ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration DIST_AS_EZS=true dist
+          cp -vf ${{ github.workspace }}/rabbitmq-server/deps/rabbitmq_queue_migration/plugins/rabbitmq_queue_migration-*.ez \
+            ${{ github.workspace }}/rabbitmq_queue_migration.ez
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: rabbitmq_queue_migration.ez
+          path: ${{ github.workspace }}/rabbitmq_queue_migration.ez
+          retention-days: 1
+
+  integration-test:
+    needs: build-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: rabbitmq_queue_migration.ez
+          path: ${{ github.workspace }}/test/integration/docker
+      - uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # v5.1.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+      - run: |
+          echo "127.0.0.1 rmq0" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 rmq1" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 rmq2" | sudo tee -a /etc/hosts
+      - run: make --file ${{ github.workspace }}/integration-test.mk integration-test
+      - if: failure()
+        run: |
+          echo "=== Node 0 Logs ==="
+          docker logs rabbitmq0 | tail -100
+          echo ""
+          echo "=== Node 1 Logs ==="
+          docker logs rabbitmq1 | tail -100
+          echo ""
+          echo "=== Node 2 Logs ==="
+          docker logs rabbitmq2 | tail -100
