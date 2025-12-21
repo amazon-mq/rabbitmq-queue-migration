@@ -1,0 +1,62 @@
+{
+  "languages": {
+    "java": {
+      "name": "jdtls",
+      "command": "jdtls",
+      "args": [],
+      "file_extensions": [
+        "java"
+      ],
+      "project_patterns": [
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        ".project"
+      ],
+      "exclude_patterns": [
+        "**/target/**",
+        "**/build/**",
+        "**/.gradle/**"
+      ],
+      "multi_workspace": false,
+      "initialization_options": {
+        "settings": {
+          "java": {
+            "compile": {
+              "nullAnalysis": {
+                "mode": "automatic"
+              }
+            },
+            "configuration": {
+              "annotationProcessing": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      },
+      "request_timeout_secs": 60
+    },
+    "erlang": {
+      "name": "elp",
+      "command": "elp",
+      "args": [
+        "server"
+      ],
+      "file_extensions": [
+        "erl"
+      ],
+      "project_patterns": [
+        "erlang.mk",
+        "rebar.config"
+      ],
+      "exclude_patterns": [
+        "**/.erlang.mk/**"
+      ],
+      "source_patterns": [],
+      "multi_workspace": false,
+      "initialization_options": {},
+      "request_timeout_secs": 60
+    }
+  }
+}

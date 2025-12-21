@@ -1,0 +1,28 @@
+networks:
+  rabbitmq-migration-cluster:
+services:
+  rmq0:
+    networks:
+      - rabbitmq-migration-cluster
+    hostname: rmq0
+    build: rmq0
+    ports:
+      # HOST:CONTAINER
+      - "5672:5672"
+      - "15672:15672"
+  rmq1:
+    networks:
+      - rabbitmq-migration-cluster
+    hostname: rmq1
+    build: rmq1
+    ports:
+      - "5673:5673"
+      - "15673:15673"
+  rmq2:
+    networks:
+      - rabbitmq-migration-cluster
+    hostname: rmq2
+    build: rmq2
+    ports:
+      - "5674:5674"
+      - "15674:15674"
