@@ -439,13 +439,20 @@ check_disk_space_sufficiency(
 %% Returns ok if no snapshots in progress, {error, snapshot_in_progress} otherwise
 -spec check_snapshot_not_in_progress() -> ok | {error, {snapshot_in_progress, term()}}.
 check_snapshot_not_in_progress() ->
-    case rqm_snapshot:find_rabbitmq_volume(node()) of
-        {ok, VolumeId} ->
-            check_volume_snapshots(VolumeId);
+    case rqm_ebs:instance_volumes() of
+        {ok, Volumes} ->
+            case rqm_snapshot:find_rabbitmq_volume(Volumes) of
+                {ok, VolumeId} ->
+                    check_volume_snapshots(VolumeId);
+                {error, _} = Error ->
+                    % If we can't find the volume, we're likely in tar mode or not on EBS
+                    % Allow migration to proceed
+                    ?LOG_DEBUG("rqm: skipping snapshot check, volume not found: ~p", [Error]),
+                    ok
+            end;
         {error, _} = Error ->
-            % If we can't find the volume, we're likely in tar mode or not on EBS
-            % Allow migration to proceed
-            ?LOG_DEBUG("rqm: skipping snapshot check, volume not found: ~p", [Error]),
+            % If we can't get volumes, allow migration to proceed
+            ?LOG_DEBUG("rqm: skipping snapshot check, cannot get volumes: ~p", [Error]),
             ok
     end.
 
