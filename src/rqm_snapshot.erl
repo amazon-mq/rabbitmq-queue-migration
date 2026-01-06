@@ -10,7 +10,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
--export([create_snapshot/1, cleanup_snapshot/1]).
+-export([create_snapshot/1, cleanup_snapshot/1, check_no_snapshots_in_progress/0]).
 
 %% @doc Create a snapshot using the configured snapshot mode
 -spec create_snapshot(rabbit_types:vhost()) -> {ok, snapshot_id()} | {error, term()}.
@@ -81,6 +81,99 @@ create_snapshot(ebs, VHost) ->
 create_snapshot(InvalidMode, VHost) ->
     ?LOG_WARNING("rqm: invalid snapshot mode ~p, defaulting to tar", [InvalidMode]),
     create_snapshot(tar, VHost).
+
+%% @doc Check if there are any in-progress EBS snapshots for RabbitMQ volumes
+%% Returns ok if no snapshots in progress, {error, {snapshot_in_progress, Details}} otherwise
+-spec check_no_snapshots_in_progress() -> ok | {error, {snapshot_in_progress, term()}}.
+check_no_snapshots_in_progress() ->
+    SnapshotMode = rqm_config:snapshot_mode(),
+    check_no_snapshots_in_progress(SnapshotMode).
+
+%% @doc Check if there are any in-progress EBS snapshots for RabbitMQ volumes
+%% Returns ok if no snapshots in progress, {error, {snapshot_in_progress, Details}} otherwise
+-spec check_no_snapshots_in_progress(atom()) -> ok | {error, {snapshot_in_progress, term()}}.
+check_no_snapshots_in_progress(tar) ->
+    ?LOG_DEBUG("rqm: skipping snapshot check in tar mode"),
+    ok;
+check_no_snapshots_in_progress(ebs) ->
+    check_ebs_snapshots_in_progress();
+check_no_snapshots_in_progress(InvalidMode) ->
+    ?LOG_WARNING("rqm: invalid snapshot mode ~p", [InvalidMode]),
+    ok.
+
+check_ebs_snapshots_in_progress() ->
+    {ok, Region} = rabbitmq_aws_config:region(),
+    ok = rabbitmq_aws:set_region(Region),
+    case rqm_ebs:instance_volumes() of
+        {ok, Volumes} ->
+            case find_rabbitmq_volume(Volumes) of
+                {ok, VolumeId} ->
+                    check_volume_snapshots_in_progress(VolumeId);
+                {error, _} = Error ->
+                    ?LOG_DEBUG("rqm: skipping snapshot check, volume not found: ~p", [Error]),
+                    ok
+            end;
+        {error, _} = Error ->
+            ?LOG_DEBUG("rqm: skipping snapshot check, cannot get volumes: ~p", [Error]),
+            ok
+    end.
+
+check_volume_snapshots_in_progress(VolumeId) ->
+    case describe_snapshots(VolumeId) of
+        {ok, Snapshots} ->
+            InProgress = lists:filter(fun is_snapshot_in_progress/1, Snapshots),
+            case InProgress of
+                [] ->
+                    ok;
+                [Snapshot | _] ->
+                    SnapshotId = proplists:get_value(snapshot_id, Snapshot, "unknown"),
+                    State = proplists:get_value(state, Snapshot, "unknown"),
+                    {error, {snapshot_in_progress, #{
+                        volume_id => VolumeId,
+                        snapshot_id => SnapshotId,
+                        state => State
+                    }}}
+            end;
+        {error, Reason} ->
+            ?LOG_WARNING("rqm: failed to check snapshots for volume ~s: ~p", [VolumeId, Reason]),
+            ok
+    end.
+
+describe_snapshots(VolumeId) ->
+    Path = "/?Action=DescribeSnapshots"
+           "&Filter.1.Name=volume-id&Filter.1.Value.1=" ++ VolumeId ++
+           "&Version=2016-11-15",
+    case rabbitmq_aws:api_get_request("ec2", Path) of
+        {ok, Response} -> parse_snapshots_response(Response);
+        {error, Reason} -> {error, Reason}
+    end.
+
+parse_snapshots_response([{"DescribeSnapshotsResponse", Data}]) ->
+    case proplists:get_value("snapshotSet", Data, []) of
+        [] ->
+            {ok, []};
+        SnapshotSet when is_list(SnapshotSet) ->
+            Snapshots = lists:map(fun parse_snapshot/1, SnapshotSet),
+            {ok, Snapshots};
+        _ ->
+            {error, parse_error}
+    end;
+parse_snapshots_response(_) ->
+    {error, parse_error}.
+
+parse_snapshot({"item", Props}) ->
+    [
+        {snapshot_id, proplists:get_value("snapshotId", Props, "")},
+        {volume_id, proplists:get_value("volumeId", Props, "")},
+        {state, proplists:get_value("status", Props, "")},
+        {progress, proplists:get_value("progress", Props, "")}
+    ];
+parse_snapshot(_) ->
+    [].
+
+is_snapshot_in_progress(Snapshot) ->
+    State = proplists:get_value(state, Snapshot, ""),
+    State =:= "pending".
 
 %%----------------------------------------------------------------------------
 %% Internal functions
