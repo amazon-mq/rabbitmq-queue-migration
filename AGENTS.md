@@ -326,7 +326,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `QUEUE_MIGRATION_TIMEOUT_MS` - 120,000ms (2 minutes)
 - `QUEUE_MIGRATION_TIMEOUT_RETRIES` - 15 retries (30 minutes total)
 - `DEFAULT_PROGRESS_UPDATE_FREQUENCY` - 10 messages
-- `DEFAULT_WORKER_POOL_MAX` - 1 worker (configurable)
+- `DEFAULT_WORKER_POOL_MAX` - 8 worker (configurable)
 - `DEFAULT_ROLLBACK_ON_ERROR` - true (configurable)
 - `MAX_QUEUES_FOR_MIGRATION` - 500 queues maximum
 - `MAX_MESSAGES_IN_QUEUE` - 15,000 messages per queue
