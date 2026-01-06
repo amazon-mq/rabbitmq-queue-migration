@@ -5,7 +5,7 @@
 
 %% Worker pool configuration
 -define(QUEUE_MIGRATION_WORKER_POOL, rqm_worker_pool).
--define(DEFAULT_WORKER_POOL_MAX, 8).
+-define(DEFAULT_WORKER_POOL_MAX, 32).
 
 %% Timeout configuration
 
