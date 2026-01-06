@@ -17,6 +17,7 @@
     check_disk_space/1,
     check_disk_space/2,
     check_system_migration_readiness/1,
+    check_snapshot_not_in_progress/0,
     check_cluster_partitions/0,
     check_active_alarms/0,
     check_memory_usage/0
@@ -433,6 +434,78 @@ check_disk_space_sufficiency(
             ),
             {error, {insufficient_disk_space, Details#{reason => Reason}}}
     end.
+
+%% @doc Check if there are any in-progress EBS snapshots for RabbitMQ volumes
+%% Returns ok if no snapshots in progress, {error, snapshot_in_progress} otherwise
+-spec check_snapshot_not_in_progress() -> ok | {error, {snapshot_in_progress, term()}}.
+check_snapshot_not_in_progress() ->
+    case rqm_snapshot:find_rabbitmq_volume(node()) of
+        {ok, VolumeId} ->
+            check_volume_snapshots(VolumeId);
+        {error, _} = Error ->
+            % If we can't find the volume, we're likely in tar mode or not on EBS
+            % Allow migration to proceed
+            ?LOG_DEBUG("rqm: skipping snapshot check, volume not found: ~p", [Error]),
+            ok
+    end.
+
+check_volume_snapshots(VolumeId) ->
+    case describe_snapshots(VolumeId) of
+        {ok, Snapshots} ->
+            InProgress = lists:filter(fun is_snapshot_in_progress/1, Snapshots),
+            case InProgress of
+                [] ->
+                    ok;
+                [Snapshot | _] ->
+                    SnapshotId = proplists:get_value(snapshot_id, Snapshot, "unknown"),
+                    State = proplists:get_value(state, Snapshot, "unknown"),
+                    {error, {snapshot_in_progress, #{
+                        volume_id => VolumeId,
+                        snapshot_id => SnapshotId,
+                        state => State
+                    }}}
+            end;
+        {error, Reason} ->
+            ?LOG_WARNING("rqm: failed to check snapshots for volume ~s: ~p", [VolumeId, Reason]),
+            % Allow migration to proceed if we can't check
+            ok
+    end.
+
+describe_snapshots(VolumeId) ->
+    Path = "/?Action=DescribeSnapshots"
+           "&Filter.1.Name=volume-id&Filter.1.Value.1=" ++ VolumeId ++
+           "&Version=2016-11-15",
+    case rabbitmq_aws:api_get_request("ec2", Path) of
+        {ok, Response} -> parse_snapshots_response(Response);
+        {error, Reason} -> {error, Reason}
+    end.
+
+parse_snapshots_response([{"DescribeSnapshotsResponse", Data}]) ->
+    case proplists:get_value("snapshotSet", Data, []) of
+        [] ->
+            {ok, []};
+        SnapshotSet when is_list(SnapshotSet) ->
+            Snapshots = lists:map(fun parse_snapshot/1, SnapshotSet),
+            {ok, Snapshots};
+        _ ->
+            {error, parse_error}
+    end;
+parse_snapshots_response(_) ->
+    {error, parse_error}.
+
+parse_snapshot({"item", Props}) ->
+    [
+        {snapshot_id, proplists:get_value("snapshotId", Props, "")},
+        {volume_id, proplists:get_value("volumeId", Props, "")},
+        {state, proplists:get_value("status", Props, "")},
+        {progress, proplists:get_value("progress", Props, "")}
+    ];
+parse_snapshot(_) ->
+    [].
+
+is_snapshot_in_progress(Snapshot) ->
+    State = proplists:get_value(state, Snapshot, ""),
+    State =:= "pending".
 
 %% @doc Check if cluster has any partitions and all nodes are up.
 %% Returns ok if no partitions detected, {error, nodes_down| or {error, partitions_detected} otherwise

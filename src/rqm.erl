@@ -98,6 +98,8 @@ pre_migration_validation({V, active_alarms}, VHost) ->
     handle_check_active_alarms(V, rqm_checks:check_active_alarms(), VHost);
 pre_migration_validation({V, memory_usage}, VHost) ->
     handle_check_memory_usage(V, rqm_checks:check_memory_usage(), VHost);
+pre_migration_validation({V, snapshot_not_in_progress}, VHost) ->
+    handle_check_snapshot_not_in_progress(V, rqm_checks:check_snapshot_not_in_progress(), VHost);
 pre_migration_validation({V, cluster_partitions}, VHost) ->
     handle_check_cluster_partitions(V, rqm_checks:check_cluster_partitions(), VHost).
 
@@ -197,7 +199,7 @@ handle_check_active_alarms(_V, {error, alarms_active}, _VHost) ->
     {error, alarms_active}.
 
 handle_check_memory_usage(V, {ok, sufficient}, VHost) ->
-    pre_migration_validation({V, cluster_partitions}, VHost);
+    pre_migration_validation({V, snapshot_not_in_progress}, VHost);
 handle_check_memory_usage(_V, {error, {memory_usage_too_high, Details}}, _VHost) ->
     MaxPercent = maps:get(max_allowed_percent, Details),
     ProblematicNodes = maps:get(problematic_nodes, Details),
@@ -208,6 +210,18 @@ handle_check_memory_usage(_V, {error, {memory_usage_too_high, Details}}, _VHost)
         [NodeCount, MaxPercent]
     ),
     {error, {memory_usage_too_high, Details}}.
+
+handle_check_snapshot_not_in_progress(V, ok, VHost) ->
+    pre_migration_validation({V, cluster_partitions}, VHost);
+handle_check_snapshot_not_in_progress(_V, {error, {snapshot_in_progress, Details}}, _VHost) ->
+    VolumeId = maps:get(volume_id, Details, "unknown"),
+    SnapshotId = maps:get(snapshot_id, Details, "unknown"),
+    ?LOG_ERROR(
+        "rqm: snapshot ~s is already in progress for volume ~s. "
+        "Wait for the snapshot to complete before starting a new migration.",
+        [SnapshotId, VolumeId]
+    ),
+    {error, {snapshot_in_progress, Details}}.
 
 handle_check_cluster_partitions(validation_only, {ok, _Nodes}, _VHost) ->
     % Validation passed - return ok without starting migration
