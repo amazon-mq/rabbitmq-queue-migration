@@ -144,7 +144,7 @@ worker_pool_max() ->
 -spec calculate_worker_pool_size() -> pos_integer().
 calculate_worker_pool_size() ->
     S = erlang:system_info(schedulers),
-    min(S * 2, worker_pool_max()).
+    min(S, worker_pool_max()).
 
 %%----------------------------------------------------------------------------
 %% Timeout configuration
