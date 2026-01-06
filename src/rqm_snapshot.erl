@@ -128,11 +128,12 @@ check_volume_snapshots_in_progress(VolumeId) ->
                 [Snapshot | _] ->
                     SnapshotId = proplists:get_value(snapshot_id, Snapshot, "unknown"),
                     State = proplists:get_value(state, Snapshot, "unknown"),
-                    {error, {snapshot_in_progress, #{
-                        volume_id => VolumeId,
-                        snapshot_id => SnapshotId,
-                        state => State
-                    }}}
+                    {error,
+                        {snapshot_in_progress, #{
+                            volume_id => VolumeId,
+                            snapshot_id => SnapshotId,
+                            state => State
+                        }}}
             end;
         {error, Reason} ->
             ?LOG_WARNING("rqm: failed to check snapshots for volume ~s: ~p", [VolumeId, Reason]),
@@ -140,9 +141,10 @@ check_volume_snapshots_in_progress(VolumeId) ->
     end.
 
 describe_snapshots(VolumeId) ->
-    Path = "/?Action=DescribeSnapshots"
-           "&Filter.1.Name=volume-id&Filter.1.Value.1=" ++ VolumeId ++
-           "&Version=2016-11-15",
+    Path =
+        "/?Action=DescribeSnapshots"
+        "&Filter.1.Name=volume-id&Filter.1.Value.1=" ++ VolumeId ++
+            "&Version=2016-11-15",
     case rabbitmq_aws:api_get_request("ec2", Path) of
         {ok, Response} -> parse_snapshots_response(Response);
         {error, Reason} -> {error, Reason}
