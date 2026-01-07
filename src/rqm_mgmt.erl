@@ -146,30 +146,16 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 reason => Message
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
-        {error, {too_many_queues, Details}} ->
-            QueueCount = maps:get(queue_count, Details),
-            MaxQueues = maps:get(max_queues, Details),
-            Message = rqm_util:unicode_format(
-                "Too many queues (~p) for migration. Maximum allowed: ~p", [QueueCount, MaxQueues]
-            ),
-            ErrorJson = rabbit_json:encode(#{
-                error => bad_request,
-                reason => Message,
-                queue_count => QueueCount,
-                max_queues => MaxQueues
-            }),
-            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, {unsuitable_queues, Details}} ->
-            QueueCount = maps:get(queue_count, Details),
+            ProblematicQueues = maps:get(problematic_queues, Details, []),
             Message = rqm_util:unicode_format(
-                "Some queues have too many messages or bytes for the current queue count (~p)", [
-                    QueueCount
-                ]
+                "Found ~p queue(s) with issues (too many messages, too many bytes, or incompatible arguments)",
+                [length(ProblematicQueues)]
             ),
             ErrorJson = rabbit_json:encode(#{
                 error => bad_request,
                 reason => Message,
-                queue_count => QueueCount
+                problematic_queue_count => length(ProblematicQueues)
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, queue_leaders_imbalanced} ->

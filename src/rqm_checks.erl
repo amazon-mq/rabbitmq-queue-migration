@@ -859,13 +859,6 @@ format_queue_suitability_error({incompatible_overflow_behavior, _Details}) ->
         "✗ Some queues are incompatible, see below",
         []
     );
-format_queue_suitability_error({too_many_queues, Details}) ->
-    QueueCount = maps:get(queue_count, Details),
-    MaxQueues = maps:get(max_queues, Details),
-    rqm_util:unicode_format(
-        "Too many queues for migration (~tp queues found, maximum allowed: ~tp). Reduce queue count before migration.",
-        [QueueCount, MaxQueues]
-    );
 format_queue_suitability_error({unsuitable_queues, Details}) ->
     ProblematicQueues = maps:get(problematic_queues, Details),
     QueueCount = length(ProblematicQueues),

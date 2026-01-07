@@ -151,15 +151,6 @@ handle_check_queue_synchronization(_V, {error, {unsynchronized_queues, QueueName
 
 handle_check_queue_suitability(V, ok, VHost) ->
     pre_migration_validation({V, queue_message_count}, VHost);
-handle_check_queue_suitability(_V, {error, {too_many_queues, Details}}, _VHost) ->
-    QueueCount = maps:get(queue_count, Details),
-    MaxQueues = maps:get(max_queues, Details),
-    ?LOG_ERROR(
-        "rqm: stopping migration due to too many queues (~p). "
-        "Maximum allowed: ~p",
-        [QueueCount, MaxQueues]
-    ),
-    {error, {too_many_queues, Details}};
 handle_check_queue_suitability(_V, {error, {unsuitable_queues, Details}}, _VHost) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
