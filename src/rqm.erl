@@ -161,10 +161,11 @@ handle_check_queue_suitability(_V, {error, {too_many_queues, Details}}, _VHost) 
     ),
     {error, {too_many_queues, Details}};
 handle_check_queue_suitability(_V, {error, {unsuitable_queues, Details}}, _VHost) ->
+    ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
         "rqm: stopping migration due to unsuitable queues. "
-        "Some queues have too many messages or bytes for the current queue count (~p).",
-        [maps:get(queue_count, Details)]
+        "Found ~p queue(s) with issues (too many messages, too many bytes, or incompatible arguments).",
+        [length(ProblematicQueues)]
     ),
     {error, {unsuitable_queues, Details}};
 handle_check_queue_suitability(_V, {error, _} = Error, _VHost) ->
