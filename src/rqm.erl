@@ -1174,9 +1174,9 @@ migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase) ->
     ],
 
     try
-        %% Start the shovel
+        %% Start the shovel with retries
         ?LOG_DEBUG("rqm: creating shovel ~ts", [ShovelName]),
-        ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, ShovelDef, none),
+        ok = create_shovel_with_retry(VHost, ShovelName, ShovelDef, 10),
 
         %% Wait for shovel to complete migration
         ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
@@ -1433,6 +1433,29 @@ verify_and_update_progress(ExpectedTotal, FinalResource, SrcQueue, DestQueue) ->
     end.
 
 %% Clean up migration shovel
+create_shovel_with_retry(_VHost, ShovelName, _ShovelDef, 0) ->
+    ?LOG_ERROR("rqm: failed to create shovel ~ts after all retries", [ShovelName]),
+    error({shovel_creation_failed, ShovelName});
+create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
+    case catch rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, ShovelDef, none) of
+        ok ->
+            ok;
+        {'EXIT', Reason} ->
+            ?LOG_WARNING(
+                "rqm: exception creating shovel ~ts: ~tp, retrying (~p attempts left)",
+                [ShovelName, Reason, Retries - 1]
+            ),
+            timer:sleep(1000),
+            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1);
+        Other ->
+            ?LOG_WARNING(
+                "rqm: unexpected result creating shovel ~ts: ~tp, retrying (~p attempts left)",
+                [ShovelName, Other, Retries - 1]
+            ),
+            timer:sleep(1000),
+            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1)
+    end.
+
 cleanup_migration_shovel(ShovelName, VHost) ->
     case rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName) of
         not_found ->
