@@ -1426,25 +1426,49 @@ verify_message_counts(Expected, Expected, FinalResource, DestFinalCount) ->
 verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, DestFinalCount) ->
     LostMessages = ExpectedTotal - ActualTotal,
     Strict = rqm_config:strict_message_count_verification(),
-    handle_message_count_mismatch(Strict, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount).
+    handle_message_count_mismatch(
+        Strict, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount
+    ).
 
-handle_message_count_mismatch(true, ExpectedTotal, ActualTotal, LostMessages, _FinalResource, _DestFinalCount) ->
+handle_message_count_mismatch(
+    true, ExpectedTotal, ActualTotal, LostMessages, _FinalResource, _DestFinalCount
+) ->
     ?LOG_ERROR("rqm: message count verification FAILED - Lost ~tp messages", [LostMessages]),
     error({message_count_mismatch, ExpectedTotal, ActualTotal, LostMessages});
-handle_message_count_mismatch(false, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount) ->
+handle_message_count_mismatch(
+    false, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount
+) ->
     Diff = abs(LostMessages),
     TolerancePercent = rqm_config:message_count_tolerance_percent(),
     Tolerance = round(ExpectedTotal * TolerancePercent / 100.0),
     WithinTolerance = Diff =< Tolerance,
-    check_within_tolerance(WithinTolerance, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount).
+    check_within_tolerance(
+        WithinTolerance,
+        TolerancePercent,
+        ExpectedTotal,
+        ActualTotal,
+        LostMessages,
+        FinalResource,
+        DestFinalCount
+    ).
 
-check_within_tolerance(true, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount) ->
+check_within_tolerance(
+    true, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages, FinalResource, DestFinalCount
+) ->
     ?LOG_WARNING(
         "rqm: message count mismatch within tolerance (~tp%) - Expected: ~tp, Actual: ~tp, Diff: ~tp",
         [TolerancePercent, ExpectedTotal, ActualTotal, LostMessages]
     ),
     rqm_db:update_queue_status_progress(FinalResource, DestFinalCount);
-check_within_tolerance(false, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages, _FinalResource, _DestFinalCount) ->
+check_within_tolerance(
+    false,
+    TolerancePercent,
+    ExpectedTotal,
+    ActualTotal,
+    LostMessages,
+    _FinalResource,
+    _DestFinalCount
+) ->
     ?LOG_ERROR(
         "rqm: message count mismatch exceeds tolerance (~tp%) - Expected: ~tp, Actual: ~tp, Diff: ~tp",
         [TolerancePercent, ExpectedTotal, ActualTotal, LostMessages]
