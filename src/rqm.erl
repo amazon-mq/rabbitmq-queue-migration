@@ -777,6 +777,13 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     {ok, Status} = rqm_db:update_queue_status_started(Resource, MigrationId, TotalMessageCount),
 
     Fun = fun() ->
+        % Note:
+        % In testing, it has been observed that some shovels exit with the following reason
+        % when they are stopping:
+        %
+        % exit:{{{badmatch,[]},[{mirrored_supervisor,child,2,...
+        %
+        % This is caught in the "catch" clause of this function.
         ?LOG_INFO(
             "rqm: worker starting for ~ts (migration ~s)",
             [rabbit_misc:rs(Resource), format_migration_id(MigrationId)]
@@ -1434,16 +1441,20 @@ cleanup_migration_shovel(ShovelName, VHost) ->
             error({shovel_not_found_during_cleanup, ShovelName});
         _ShovelDef ->
             %% Delete the shovel parameter
-            Result = rabbit_runtime_parameters:clear(
+            case catch rabbit_runtime_parameters:clear(
                 VHost, <<"shovel">>, ShovelName, <<"migration-system">>
-            ),
-            case Result of
+            ) of
                 ok ->
                     ?LOG_DEBUG("rqm: cleaned up shovel parameter ~ts", [ShovelName]);
                 {error_string, ClearReason} ->
                     ?LOG_WARNING(
                         "rqm: failed to clean up shovel parameter ~ts: ~tp",
                         [ShovelName, ClearReason]
+                    );
+                {'EXIT', Reason} ->
+                    ?LOG_WARNING(
+                        "rqm: exception during shovel cleanup for ~ts (shovel likely already removed): ~tp",
+                        [ShovelName, Reason]
                     );
                 Other ->
                     ?LOG_WARNING(
