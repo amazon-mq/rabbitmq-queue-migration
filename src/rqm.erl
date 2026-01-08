@@ -281,9 +281,10 @@ start_with_lock(GlobalLockId, Nodes, VHost, MigrationId) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_migration_exception(Class, Ex, Stack, VHost, MigrationId) ->
+    % Log exception class without the full error details
     ?LOG_ERROR(
-        "rqm: CRITICAL EXCEPTION in migration ~s: ~tp:~tp",
-        [format_migration_id(MigrationId), Class, Ex]
+        "rqm: CRITICAL EXCEPTION in migration ~s: ~tp",
+        [format_migration_id(MigrationId), Class]
     ),
     ?LOG_ERROR("~tp", [Stack]),
 
@@ -291,15 +292,17 @@ handle_migration_exception(Class, Ex, Stack, VHost, MigrationId) ->
     case Ex of
         {badmatch, _} ->
             ?LOG_ERROR("rqm: badmatch error in migration ~s", [format_migration_id(MigrationId)]);
-        {migration_failed_rollback_pending, Error} ->
+        {migration_failed_rollback_pending, {errors, Errors}} ->
+            {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
             ?LOG_WARNING(
-                "rqm: migration ~s failed, rollback is pending! ~tp",
-                [format_migration_id(MigrationId), Error]
+                "rqm: migration ~s failed, rollback is pending! ~p error(s), ~p aborted",
+                [format_migration_id(MigrationId), ErrorCount, AbortedCount]
             );
-        {migration_failed_no_rollback, Error} ->
+        {migration_failed_no_rollback, {errors, Errors}} ->
+            {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
             ?LOG_WARNING(
-                "rqm: migration ~s failed but no rollback is needed! ~tp",
-                [format_migration_id(MigrationId), Error]
+                "rqm: migration ~s failed but no rollback is needed! ~p error(s), ~p aborted",
+                [format_migration_id(MigrationId), ErrorCount, AbortedCount]
             );
         _ ->
             ?LOG_ERROR("rqm: unexpected error in migration ~s: ~tp", [
@@ -1544,6 +1547,12 @@ get_rollback_pending_migration_json() ->
 %% Extracts timestamp from {Timestamp, Node} tuple and formats as string
 format_migration_id({Timestamp, _Node}) ->
     integer_to_list(Timestamp).
+
+%% Helper function to count errors and aborted results
+count_errors_and_aborted(Errors) ->
+    ErrorCount = length([E || E <- Errors, element(1, E) =:= error]),
+    AbortedCount = length([A || A <- Errors, element(1, A) =:= aborted]),
+    {ErrorCount, AbortedCount}.
 
 %% =============================================================================
 %% Connection management for migrations
