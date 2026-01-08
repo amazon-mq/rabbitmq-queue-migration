@@ -7,6 +7,10 @@
 -define(QUEUE_MIGRATION_WORKER_POOL, rqm_worker_pool).
 -define(DEFAULT_WORKER_POOL_MAX, 32).
 
+%% Message count verification configuration
+-define(DEFAULT_STRICT_MESSAGE_COUNT_VERIFICATION, false).
+-define(DEFAULT_MESSAGE_COUNT_TOLERANCE_PERCENT, 5.0).
+
 %% Timeout configuration
 
 % 15 retries of 2 minutes each, 30 minutes total to migrate queue

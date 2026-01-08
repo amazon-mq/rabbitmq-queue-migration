@@ -47,6 +47,10 @@
     % Progress update configuration
     progress_update_frequency/0,
 
+    % Message count verification configuration
+    strict_message_count_verification/0,
+    message_count_tolerance_percent/0,
+
     % Snapshot configuration
     snapshot_mode/0,
     cleanup_snapshots_on_success/0,
@@ -172,6 +176,30 @@ progress_update_frequency() ->
             Value;
         _ ->
             ?DEFAULT_PROGRESS_UPDATE_FREQUENCY
+    end.
+
+%%----------------------------------------------------------------------------
+%% Message count verification configuration
+%%----------------------------------------------------------------------------
+
+%% @doc Get whether to use strict message count verification
+-spec strict_message_count_verification() -> boolean().
+strict_message_count_verification() ->
+    case application:get_env(rabbitmq_queue_migration, strict_message_count_verification) of
+        {ok, Value} when is_boolean(Value) ->
+            Value;
+        _ ->
+            ?DEFAULT_STRICT_MESSAGE_COUNT_VERIFICATION
+    end.
+
+%% @doc Get the message count tolerance percentage
+-spec message_count_tolerance_percent() -> float().
+message_count_tolerance_percent() ->
+    case application:get_env(rabbitmq_queue_migration, message_count_tolerance_percent) of
+        {ok, Value} when is_number(Value), Value >= 0.0, Value =< 100.0 ->
+            float(Value);
+        _ ->
+            ?DEFAULT_MESSAGE_COUNT_TOLERANCE_PERCENT
     end.
 
 %%----------------------------------------------------------------------------
