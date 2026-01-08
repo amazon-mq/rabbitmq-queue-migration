@@ -11,6 +11,9 @@
 -define(DEFAULT_STRICT_MESSAGE_COUNT_VERIFICATION, false).
 -define(DEFAULT_MESSAGE_COUNT_TOLERANCE_PERCENT, 5.0).
 
+%% Shovel configuration
+-define(DEFAULT_SHOVEL_PREFETCH_COUNT, 1024).
+
 %% Timeout configuration
 
 % 15 retries of 2 minutes each, 30 minutes total to migrate queue

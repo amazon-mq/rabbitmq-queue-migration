@@ -51,6 +51,9 @@
     strict_message_count_verification/0,
     message_count_tolerance_percent/0,
 
+    % Shovel configuration
+    shovel_prefetch_count/0,
+
     % Snapshot configuration
     snapshot_mode/0,
     cleanup_snapshots_on_success/0,
@@ -200,6 +203,20 @@ message_count_tolerance_percent() ->
             float(Value);
         _ ->
             ?DEFAULT_MESSAGE_COUNT_TOLERANCE_PERCENT
+    end.
+
+%%----------------------------------------------------------------------------
+%% Shovel configuration
+%%----------------------------------------------------------------------------
+
+%% @doc Get the shovel prefetch count
+-spec shovel_prefetch_count() -> pos_integer().
+shovel_prefetch_count() ->
+    case application:get_env(rabbitmq_queue_migration, shovel_prefetch_count) of
+        {ok, Value} when is_integer(Value), Value > 0 ->
+            Value;
+        _ ->
+            ?DEFAULT_SHOVEL_PREFETCH_COUNT
     end.
 
 %%----------------------------------------------------------------------------

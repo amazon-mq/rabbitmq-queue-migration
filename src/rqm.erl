@@ -1170,7 +1170,7 @@ migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase) ->
         {<<"dest-queue">>, NewQName},
         {<<"ack-mode">>, <<"on-confirm">>},
         {<<"src-delete-after">>, <<"never">>},
-        {<<"prefetch-count">>, 1024}
+        {<<"prefetch-count">>, rqm_config:shovel_prefetch_count()}
     ],
 
     try
