@@ -1441,9 +1441,11 @@ cleanup_migration_shovel(ShovelName, VHost) ->
             error({shovel_not_found_during_cleanup, ShovelName});
         _ShovelDef ->
             %% Delete the shovel parameter
-            case catch rabbit_runtime_parameters:clear(
-                VHost, <<"shovel">>, ShovelName, <<"migration-system">>
-            ) of
+            case
+                catch rabbit_runtime_parameters:clear(
+                    VHost, <<"shovel">>, ShovelName, <<"migration-system">>
+                )
+            of
                 ok ->
                     ?LOG_DEBUG("rqm: cleaned up shovel parameter ~ts", [ShovelName]);
                 {error_string, ClearReason} ->
