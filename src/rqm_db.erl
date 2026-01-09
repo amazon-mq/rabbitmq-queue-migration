@@ -31,12 +31,12 @@
     create_queue_status/2,
     create_skipped_queue_status/3,
     update_queue_status_started/3,
-    update_queue_status_progress/2,
+    update_queue_status_progress/3,
     update_queue_status_completed/5,
     update_queue_status_failed/6,
-    get_queue_status/1,
+    get_queue_status/2,
     get_queue_statuses_for_migration/1,
-    store_original_queue_metadata/3
+    store_original_queue_metadata/4
 ]).
 
 %% Transaction operations
@@ -178,6 +178,7 @@ get_all_migrations() ->
 -spec create_queue_status(#resource{}, term()) -> {ok, #queue_migration_status{}}.
 create_queue_status(Resource, MigrationId) ->
     QueueStatus = #queue_migration_status{
+        key = {Resource, MigrationId},
         queue_resource = Resource,
         migration_id = MigrationId,
         started_at = undefined,
@@ -194,6 +195,7 @@ create_queue_status(Resource, MigrationId) ->
 -spec create_skipped_queue_status(#resource{}, term(), term()) -> {ok, #queue_migration_status{}}.
 create_skipped_queue_status(Resource, MigrationId, SkipReason) ->
     QueueStatus = #queue_migration_status{
+        key = {Resource, MigrationId},
         queue_resource = Resource,
         migration_id = MigrationId,
         started_at = os:timestamp(),
@@ -210,10 +212,12 @@ create_skipped_queue_status(Resource, MigrationId, SkipReason) ->
 -spec update_queue_status_started(#resource{}, term(), non_neg_integer()) ->
     {ok, #queue_migration_status{}} | {error, not_found}.
 update_queue_status_started(Resource, MigrationId, TotalMessageCount) ->
-    case mnesia:dirty_read(queue_migration_status, Resource) of
+    Key = {Resource, MigrationId},
+    case mnesia:dirty_read(queue_migration_status, Key) of
         [] ->
             % Create record if it doesn't exist
             QueueStatus = #queue_migration_status{
+                key = Key,
                 queue_resource = Resource,
                 migration_id = MigrationId,
                 started_at = os:timestamp(),
@@ -237,10 +241,11 @@ update_queue_status_started(Resource, MigrationId, TotalMessageCount) ->
     end.
 
 %% @doc Update queue migration progress
--spec update_queue_status_progress(#resource{}, non_neg_integer()) ->
+-spec update_queue_status_progress(#resource{}, term(), non_neg_integer()) ->
     {ok, #queue_migration_status{}} | {error, not_found}.
-update_queue_status_progress(Resource, CurrentMigratedMessageCount) ->
-    case mnesia:dirty_read(queue_migration_status, Resource) of
+update_queue_status_progress(Resource, MigrationId, CurrentMigratedMessageCount) ->
+    Key = {Resource, MigrationId},
+    case mnesia:dirty_read(queue_migration_status, Key) of
         [] ->
             {error, not_found};
         [Status] ->
@@ -258,6 +263,7 @@ update_queue_status_progress(Resource, CurrentMigratedMessageCount) ->
     {ok, #queue_migration_status{}} | {error, not_found}.
 update_queue_status_completed(Resource, MigrationId, StartedAt, TotalMessages, MigratedMessages) ->
     QueueStatus = #queue_migration_status{
+        key = {Resource, MigrationId},
         queue_resource = Resource,
         migration_id = MigrationId,
         started_at = StartedAt,
@@ -304,6 +310,7 @@ update_queue_status_failed(
                 rqm_util:unicode_format("Migration failed: ~p", [Other])
         end,
     QueueStatus = #queue_migration_status{
+        key = {Resource, MigrationId},
         queue_resource = Resource,
         migration_id = MigrationId,
         started_at = StartedAt,
@@ -316,10 +323,11 @@ update_queue_status_failed(
     mnesia:dirty_write(QueueStatus),
     {ok, QueueStatus}.
 
-%% @doc Get queue status by resource
--spec get_queue_status(#resource{}) -> {ok, #queue_migration_status{}} | {error, not_found}.
-get_queue_status(Resource) ->
-    case mnesia:dirty_read(queue_migration_status, Resource) of
+%% @doc Get queue status by resource and migration ID
+-spec get_queue_status(#resource{}, term()) -> {ok, #queue_migration_status{}} | {error, not_found}.
+get_queue_status(Resource, MigrationId) ->
+    Key = {Resource, MigrationId},
+    case mnesia:dirty_read(queue_migration_status, Key) of
         [] -> {error, not_found};
         [Status] -> {ok, Status}
     end.
@@ -465,10 +473,12 @@ get_rollback_pending_migration() ->
     end.
 
 %% Store original queue metadata for rollback
--spec store_original_queue_metadata(#resource{}, term(), term()) -> {ok, term()} | {error, term()}.
-store_original_queue_metadata(Resource, OriginalArgs, OriginalBindings) ->
+-spec store_original_queue_metadata(#resource{}, term(), term(), term()) ->
+    {ok, term()} | {error, term()}.
+store_original_queue_metadata(Resource, MigrationId, OriginalArgs, OriginalBindings) ->
+    Key = {Resource, MigrationId},
     Fun = fun() ->
-        case mnesia:read(queue_migration_status, Resource, write) of
+        case mnesia:read(queue_migration_status, Key, write) of
             [Status] ->
                 UpdatedStatus = Status#queue_migration_status{
                     original_queue_args = OriginalArgs,

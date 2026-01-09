@@ -99,7 +99,9 @@
 
 %% Record to track individual queue migration status
 -record(queue_migration_status, {
-    % Queue resource record (primary key)
+    % Composite primary key: {QueueResource, MigrationId}
+    key,
+    % Queue resource record
     queue_resource,
     % Reference to parent migration
     migration_id,

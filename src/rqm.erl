@@ -751,11 +751,11 @@ start_migration_on_node(QueueCountGatherer, Gatherer, VHost, MigrationId) ->
         [length(EligibleQueues0), node(), format_migration_id(MigrationId)]
     ),
 
-    % Filter out queues that already have status records (e.g., skipped queues)
+    % Filter out queues that already have status records for this migration (e.g., skipped queues)
     EligibleQueues1 = lists:filter(
         fun(Q) ->
             Resource = amqqueue:get_name(Q),
-            case rqm_db:get_queue_status(Resource) of
+            case rqm_db:get_queue_status(Resource, MigrationId) of
                 {ok, _Status} -> false;
                 {error, not_found} -> true
             end
@@ -856,7 +856,9 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     ?LOG_DEBUG("rqm: storing original metadata for ~ts", [rabbit_misc:rs(Resource)]),
     OriginalArgs = amqqueue:get_arguments(ClassicQ),
     OriginalBindings = rabbit_binding:list_for_destination(Resource),
-    {ok, _} = rqm_db:store_original_queue_metadata(Resource, OriginalArgs, OriginalBindings),
+    {ok, _} = rqm_db:store_original_queue_metadata(
+        Resource, MigrationId, OriginalArgs, OriginalBindings
+    ),
     ?LOG_DEBUG(
         "rqm: stored ~w bindings for ~ts",
         [length(OriginalBindings), rabbit_misc:rs(Resource)]
@@ -912,10 +914,12 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                                         "rqm: ~ts has zero messages, using fast-path migration",
                                         [rabbit_misc:rs(Resource)]
                                     ),
-                                    migrate_empty_queue_fast_path(ClassicQ, Resource, Status);
+                                    migrate_empty_queue_fast_path(
+                                        ClassicQ, Resource, MigrationId, Status
+                                    );
                                 _ ->
                                     % Existing two-phase migration process
-                                    migrate_with_messages(ClassicQ, Resource, Status)
+                                    migrate_with_messages(ClassicQ, Resource, MigrationId, Status)
                             end,
                         PPid ! {self(), Ref, {ok, Resource, qstr(QuorumQ)}}
                     catch
@@ -1024,20 +1028,20 @@ wait_for_migration(CPid, Ref, Retries0) ->
         wait_for_migration(CPid, Ref, Retries1)
     end.
 
-migrate_to_tmp_qq(FinalResource, Q) ->
+migrate_to_tmp_qq(FinalResource, MigrationId, Q) ->
     AddTmpPrefixFun = fun(Name) ->
         <<"tmp_", Name/binary>>
     end,
-    migrate(FinalResource, Q, AddTmpPrefixFun, phase_one).
+    migrate(FinalResource, MigrationId, Q, AddTmpPrefixFun, phase_one).
 
-tmp_qq_to_qq(FinalResource, Q) ->
+tmp_qq_to_qq(FinalResource, MigrationId, Q) ->
     RemoveTmpPrefixFun = fun(Name) ->
         <<"tmp_", CleanName/binary>> = Name,
         CleanName
     end,
-    migrate(FinalResource, Q, RemoveTmpPrefixFun, phase_two).
+    migrate(FinalResource, MigrationId, Q, RemoveTmpPrefixFun, phase_two).
 
-migrate_empty_queue_fast_path(ClassicQ, Resource, Status) ->
+migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     ?LOG_INFO("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
 
     % Create final quorum queue directly (skip temporary queue)
@@ -1100,7 +1104,7 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, Status) ->
     ?LOG_INFO("rqm: marking empty ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
-        Status#queue_migration_status.migration_id,
+        MigrationId,
         Status#queue_migration_status.started_at,
         % total_messages
         0,
@@ -1114,13 +1118,13 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, Status) ->
     ?LOG_INFO("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
     {ok, NewQ}.
 
-migrate_with_messages(ClassicQ, Resource, Status) ->
+migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
     ?LOG_INFO(
         "rqm: ~ts entering phase 1 - creating temporary quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     StartTime = erlang:system_time(millisecond),
-    {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, ClassicQ),
+    {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, MigrationId, ClassicQ),
     Phase1Time = erlang:system_time(millisecond) - StartTime,
     ?LOG_INFO(
         "rqm: ~ts phase 1 completed in ~wms",
@@ -1132,7 +1136,7 @@ migrate_with_messages(ClassicQ, Resource, Status) ->
         [rabbit_misc:rs(Resource)]
     ),
     Phase2Start = erlang:system_time(millisecond),
-    {ok, QuorumQ1} = tmp_qq_to_qq(Resource, QuorumQ0),
+    {ok, QuorumQ1} = tmp_qq_to_qq(Resource, MigrationId, QuorumQ0),
     Phase2Time = erlang:system_time(millisecond) - Phase2Start,
     ?LOG_INFO(
         "rqm: ~ts phase 2 completed in ~wms",
@@ -1155,7 +1159,7 @@ migrate_with_messages(ClassicQ, Resource, Status) ->
     ?LOG_INFO("rqm: ~ts migration completed successfully", [rabbit_misc:rs(Resource)]),
     {ok, QuorumQ1}.
 
-migrate(FinalResource, Q, NameFun, Phase) ->
+migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     Resource = amqqueue:get_name(Q),
     QName = Resource#resource.name,
     NewQName = NameFun(QName),
@@ -1199,7 +1203,7 @@ migrate(FinalResource, Q, NameFun, Phase) ->
      || B <- FilteredBindings
     ],
 
-    ok = migrate_queue_messages(FinalResource, Q, NewQ, Phase),
+    ok = migrate_queue_messages(FinalResource, MigrationId, Q, NewQ, Phase),
 
     %% Delete the source queue after successful message migration
     ?LOG_INFO("rqm: deleting source ~ts after successful migration", [rabbit_misc:rs(Resource)]),
@@ -1222,11 +1226,11 @@ migrate(FinalResource, Q, NameFun, Phase) ->
 
     {ok, NewQ}.
 
-migrate_queue_messages(FinalResource, OldQ, NewQ, Phase) ->
-    ok = migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase).
+migrate_queue_messages(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
+    ok = migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase).
 
 %% Shovel-based message migration implementation
-migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase) ->
+migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
     OldQName = get_queue_name(OldQ),
     NewQName = get_queue_name(NewQ),
     VHost = get_vhost_from_resource(FinalResource),
@@ -1273,7 +1277,7 @@ migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase) ->
         %% Wait for shovel to complete migration
         ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
         ok = wait_for_shovel_completion(
-            ShovelName, VHost, FinalResource, OldQ, NewQ, PreMigrationCounts
+            ShovelName, VHost, FinalResource, MigrationId, OldQ, NewQ, PreMigrationCounts
         ),
 
         ?LOG_INFO("rqm: shovel ~ts completed successfully", [ShovelName])
@@ -1374,16 +1378,25 @@ filter_default_bindings(Bindings, QueueName) ->
 
 %% Wait for shovel to complete migration using message count-based detection
 wait_for_shovel_completion(
-    ShovelName, VHost, FinalResource, SrcQueue, DestQueue, PreMigrationCounts
+    ShovelName, VHost, FinalResource, MigrationId, SrcQueue, DestQueue, PreMigrationCounts
 ) when ?is_amqqueue(SrcQueue), ?is_amqqueue(DestQueue) ->
     wait_for_shovel_completion_stable(
-        ShovelName, VHost, FinalResource, SrcQueue, DestQueue, PreMigrationCounts, 180, []
+        ShovelName,
+        VHost,
+        FinalResource,
+        MigrationId,
+        SrcQueue,
+        DestQueue,
+        PreMigrationCounts,
+        180,
+        []
     ).
 
 wait_for_shovel_completion_stable(
     ShovelName,
     VHost,
     FinalResource,
+    MigrationId,
     SrcQueue,
     DestQueue,
     PreMigrationCounts,
@@ -1417,7 +1430,7 @@ wait_for_shovel_completion_stable(
                         [Reason, SrcCount, DestCount]
                     ),
                     {ok, _} = verify_and_update_progress(
-                        ExpectedTotal, FinalResource, SrcQueue, DestQueue
+                        ExpectedTotal, FinalResource, MigrationId, SrcQueue, DestQueue
                     ),
                     ok;
                 in_progress ->
@@ -1432,13 +1445,14 @@ wait_for_shovel_completion_stable(
                             DestCount
                         ]
                     ),
-                    update_queue_status_progress(FinalResource, DestQueue),
+                    update_queue_status_progress(FinalResource, MigrationId, DestQueue),
                     % TODO LRB configurable?
                     timer:sleep(5000),
                     wait_for_shovel_completion_stable(
                         ShovelName,
                         VHost,
                         FinalResource,
+                        MigrationId,
                         SrcQueue,
                         DestQueue,
                         PreMigrationCounts,
@@ -1476,11 +1490,13 @@ check_shovel_completion_by_stability(_ExpectedTotal, SrcCount, _DestCount, _Dest
     % Source still has messages - shovel must be in progress.
     in_progress.
 
-update_queue_status_progress(#resource{} = FinalResource, DestQueue) when ?is_amqqueue(DestQueue) ->
+update_queue_status_progress(#resource{} = FinalResource, MigrationId, DestQueue) when
+    ?is_amqqueue(DestQueue)
+->
     DestQueueResource = amqqueue:get_name(DestQueue),
     try
         {ok, TotalMessageCount} = rqm_db:get_message_count(DestQueueResource),
-        case rqm_db:update_queue_status_progress(FinalResource, TotalMessageCount) of
+        case rqm_db:update_queue_status_progress(FinalResource, MigrationId, TotalMessageCount) of
             {ok, _} ->
                 ok;
             {error, Reason0} ->
@@ -1500,7 +1516,7 @@ update_queue_status_progress(#resource{} = FinalResource, DestQueue) when ?is_am
     end.
 
 %% Verify message counts and update progress with actual counts
-verify_and_update_progress(ExpectedTotal, FinalResource, SrcQueue, DestQueue) ->
+verify_and_update_progress(ExpectedTotal, FinalResource, MigrationId, SrcQueue, DestQueue) ->
     {ok, SrcFinalCount} = rqm_db:get_message_count(SrcQueue),
     {ok, DestFinalCount} = rqm_db:get_message_count(DestQueue),
     ActualTotal = SrcFinalCount + DestFinalCount,
@@ -1510,19 +1526,19 @@ verify_and_update_progress(ExpectedTotal, FinalResource, SrcQueue, DestQueue) ->
         [ExpectedTotal, ActualTotal, SrcFinalCount, DestFinalCount]
     ),
 
-    verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, DestFinalCount).
+    verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount).
 
-verify_message_counts(Expected, Expected, FinalResource, DestFinalCount) ->
+verify_message_counts(Expected, Expected, FinalResource, MigrationId, DestFinalCount) ->
     ?LOG_INFO("rqm: message count verification PASSED"),
-    rqm_db:update_queue_status_progress(FinalResource, DestFinalCount);
-verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, DestFinalCount) ->
+    rqm_db:update_queue_status_progress(FinalResource, MigrationId, DestFinalCount);
+verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount) ->
     LostMessages = ExpectedTotal - ActualTotal,
     check_message_count_tolerance(
-        LostMessages, ExpectedTotal, ActualTotal, FinalResource, DestFinalCount
+        LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
     ).
 
 check_message_count_tolerance(
-    LostMessages, ExpectedTotal, ActualTotal, FinalResource, DestFinalCount
+    LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
 ) when
     LostMessages < 0
 ->
@@ -1538,10 +1554,11 @@ check_message_count_tolerance(
         ActualTotal,
         LostMessages,
         FinalResource,
+        MigrationId,
         DestFinalCount
     );
 check_message_count_tolerance(
-    LostMessages, ExpectedTotal, ActualTotal, FinalResource, DestFinalCount
+    LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
 ) when
     LostMessages > 0
 ->
@@ -1557,6 +1574,7 @@ check_message_count_tolerance(
         ActualTotal,
         LostMessages,
         FinalResource,
+        MigrationId,
         DestFinalCount
     ).
 
@@ -1568,13 +1586,14 @@ check_within_tolerance(
     ActualTotal,
     LostMessages,
     FinalResource,
+    MigrationId,
     DestFinalCount
 ) ->
     ?LOG_WARNING(
         "rqm: message count ~p-delivery within tolerance (~tp%) - Expected: ~tp, Actual: ~tp, Diff: ~tp",
         [Direction, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages]
     ),
-    rqm_db:update_queue_status_progress(FinalResource, DestFinalCount);
+    rqm_db:update_queue_status_progress(FinalResource, MigrationId, DestFinalCount);
 check_within_tolerance(
     false,
     Direction,
@@ -1583,6 +1602,7 @@ check_within_tolerance(
     ActualTotal,
     LostMessages,
     _FinalResource,
+    _MigrationId,
     _DestFinalCount
 ) ->
     ?LOG_ERROR(
