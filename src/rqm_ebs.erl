@@ -177,7 +177,7 @@ build_delete_body(SnapshotId, DryRun) ->
         false -> BaseBody
     end.
 
--spec parse_snapshot_response(term()) -> {ok, string(), snapshot_metadata()}.
+-spec parse_snapshot_response(term()) -> {ok, string(), snapshot_metadata()} | {error, term()}.
 parse_snapshot_response([{"CreateSnapshotResponse", SnapshotData}]) ->
     SnapshotId = proplists:get_value("snapshotId", SnapshotData, ""),
     Metadata = #{
@@ -188,7 +188,9 @@ parse_snapshot_response([{"CreateSnapshotResponse", SnapshotData}]) ->
         progress => proplists:get_value("progress", SnapshotData, ""),
         description => proplists:get_value("description", SnapshotData, "")
     },
-    {ok, SnapshotId, Metadata}.
+    {ok, SnapshotId, Metadata};
+parse_snapshot_response({error, ErrorType, ErrorDetails}) ->
+    {error, {snapshot_creation_failed, ErrorType, ErrorDetails}}.
 
 -spec parse_delete_response(term(), string()) -> {ok, string()}.
 parse_delete_response([{"DeleteSnapshotResponse", _ResponseData}], SnapshotId) ->
