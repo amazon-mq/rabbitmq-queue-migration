@@ -60,6 +60,13 @@
 
 %% Records for tracking migration progress
 
+%% Record to track unsuitable queues during validation
+-record(unsuitable_queue, {
+    resource,
+    reason :: atom(),
+    details :: term()
+}).
+
 %% Record to track the overall migration status
 -record(queue_migration, {
     % Unique migration ID (timestamp + node)

@@ -31,7 +31,10 @@
 ]).
 -endif.
 
+-include("rqm.hrl").
+
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 %% API
@@ -98,7 +101,7 @@ check_leader_balance(VHost, MaxImbalanceRatio) ->
 %% Returns ok if all queues have all mirrors synchronized,
 %% {error, {unsynchronized_queues, QueueNames}} if any queues are not fully synchronized.
 -spec check_queue_synchronization(rabbit_types:vhost()) ->
-    ok | {error, {unsynchronized_queues, [binary()]}}.
+    ok | {error, {unsynchronized_queues, [#unsuitable_queue{}]}}.
 check_queue_synchronization(VHost) ->
     MigratableQueues = get_mirrored_classic_queues(VHost),
     UnsynchronizedQueues = lists:filter(
@@ -115,13 +118,23 @@ check_queue_synchronization(VHost) ->
             ),
             ok;
         _ ->
-            QueueNames = [amqqueue:get_name(Q) || Q <- UnsynchronizedQueues],
-            QueueNameBinaries = [rabbit_misc:rs(Name) || Name <- QueueNames],
+            UnsuitableRecords = [
+                #unsuitable_queue{
+                    resource = amqqueue:get_name(Q),
+                    reason = unsynchronized,
+                    details = #{}
+                }
+             || Q <- UnsynchronizedQueues
+            ],
+            QueueNameBinaries = [
+                rabbit_misc:rs(R#unsuitable_queue.resource)
+             || R <- UnsuitableRecords
+            ],
             ?LOG_ERROR(
                 "rqm: synchronization check: ~tp queues are not fully synchronized: ~tp",
                 [length(UnsynchronizedQueues), QueueNameBinaries]
             ),
-            {error, {unsynchronized_queues, QueueNameBinaries}}
+            {error, {unsynchronized_queues, UnsuitableRecords}}
     end.
 
 %% @doc Check if mirrored classic queues have more messages than is allowed.
@@ -582,11 +595,13 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
             true ->
                 % Mark all mirrored queues as having too_many_queues issue
                 [
-                    {
-                        amqqueue:get_name(Q),
-                        too_many_queues,
-                        MirroredQueueCount,
-                        rqm_config:max_queues_for_migration()
+                    #unsuitable_queue{
+                        resource = amqqueue:get_name(Q),
+                        reason = too_many_queues,
+                        details = #{
+                            queue_count => MirroredQueueCount,
+                            max_queues => rqm_config:max_queues_for_migration()
+                        }
                     }
                  || Q <- MirroredClassicQueues
                 ];
@@ -625,11 +640,10 @@ collect_reject_publish_dlx_issues(Queues) ->
             Args = amqqueue:get_arguments(Queue),
             case rabbit_misc:table_lookup(Args, <<"x-overflow">>) of
                 {_, <<"reject-publish-dlx">>} ->
-                    {true, {
-                        amqqueue:get_name(Queue),
-                        incompatible_overflow,
-                        <<"reject-publish-dlx">>,
-                        <<"not supported">>
+                    {true, #unsuitable_queue{
+                        resource = amqqueue:get_name(Queue),
+                        reason = incompatible_overflow,
+                        details = #{overflow => <<"reject-publish-dlx">>}
                     }};
                 _ ->
                     false
@@ -652,9 +666,17 @@ collect_message_and_byte_issues(Queues, MaxMessagesPerQueue, MaxBytesPerQueue) -
 
             case {Messages > MaxMessagesPerQueue, MessageBytes > MaxBytesPerQueue} of
                 {true, _} ->
-                    {true, {Name, too_many_messages, Messages, MaxMessagesPerQueue}};
+                    {true, #unsuitable_queue{
+                        resource = Name,
+                        reason = too_many_messages,
+                        details = #{messages => Messages, max_messages => MaxMessagesPerQueue}
+                    }};
                 {_, true} ->
-                    {true, {Name, too_many_bytes, MessageBytes, MaxBytesPerQueue}};
+                    {true, #unsuitable_queue{
+                        resource = Name,
+                        reason = too_many_bytes,
+                        details = #{message_bytes => MessageBytes, max_bytes => MaxBytesPerQueue}
+                    }};
                 _ ->
                     false
             end
@@ -867,11 +889,19 @@ format_queue_suitability_error({unsuitable_queues, Details}) ->
     {MessageProblems, ByteProblems, MaxMessagesPerQueue, MaxBytesPerQueue} =
         lists:foldl(
             fun
-                ({_, too_many_messages, _, Max}, {M, B, MaxMsg, MaxBytes}) ->
+                (
+                    #unsuitable_queue{reason = too_many_messages, details = IssueDetails},
+                    {M, B, MaxMsg, MaxBytes}
+                ) ->
+                    Max = maps:get(max_messages, IssueDetails),
                     {M + 1, B, max(MaxMsg, Max), MaxBytes};
-                ({_, too_many_bytes, _, Max}, {M, B, MaxMsg, MaxBytes}) ->
+                (
+                    #unsuitable_queue{reason = too_many_bytes, details = IssueDetails},
+                    {M, B, MaxMsg, MaxBytes}
+                ) ->
+                    Max = maps:get(max_bytes, IssueDetails),
                     {M, B + 1, MaxMsg, max(MaxBytes, Max)};
-                ({_, incompatible_overflow, _, _}, {M, B, MaxMsg, MaxBytes}) ->
+                (#unsuitable_queue{reason = incompatible_overflow}, {M, B, MaxMsg, MaxBytes}) ->
                     {M, B, MaxMsg, MaxBytes};
                 (_, {M, B, MaxMsg, MaxBytes}) ->
                     {M, B, MaxMsg, MaxBytes}

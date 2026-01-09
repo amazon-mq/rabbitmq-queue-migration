@@ -15,7 +15,8 @@
 -record(migration_opts, {
     vhost :: binary(),
     mode :: validation_only | migration,
-    skip_unsuitable_queues = false :: boolean()
+    skip_unsuitable_queues = false :: boolean(),
+    unsuitable_queues = [] :: list()
 }).
 
 -export([
@@ -153,21 +154,26 @@ handle_check_leader_balance({error, {imbalanced, _}}, _Opts) ->
 handle_check_queue_synchronization(ok, Opts) ->
     pre_migration_validation(queue_suitability, Opts);
 handle_check_queue_synchronization(
-    {error, {unsynchronized_queues, QueueNames}},
+    {error, {unsynchronized_queues, UnsuitableQueues}},
     #migration_opts{skip_unsuitable_queues = true} = Opts
 ) ->
     ?LOG_INFO(
-        "rqm: found ~p unsynchronized queue(s), will skip during migration: ~p",
-        [length(QueueNames), QueueNames]
+        "rqm: found ~p unsynchronized queue(s), will skip during migration",
+        [length(UnsuitableQueues)]
     ),
-    pre_migration_validation(queue_suitability, Opts);
-handle_check_queue_synchronization({error, {unsynchronized_queues, QueueNames}}, _Opts) ->
+    UpdatedOpts = opts_add_unsuitable_queues(UnsuitableQueues, Opts),
+    pre_migration_validation(queue_suitability, UpdatedOpts);
+handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQueues}}, _Opts) ->
+    QueueNameBinaries = [
+        rabbit_misc:rs(R#unsuitable_queue.resource)
+     || R <- UnsuitableQueues
+    ],
     ?LOG_ERROR(
         "rqm: stopping migration due to unsynchronized queues: ~p. "
         "Wait for all mirrors to synchronize before migration.",
-        [QueueNames]
+        [QueueNameBinaries]
     ),
-    {error, {unsynchronized_queues, QueueNames}}.
+    {error, {unsynchronized_queues, QueueNameBinaries}}.
 
 handle_check_queue_suitability(ok, Opts) ->
     pre_migration_validation(queue_message_count, Opts);
@@ -180,7 +186,8 @@ handle_check_queue_suitability(
         "rqm: found ~p unsuitable queue(s), will skip during migration",
         [length(ProblematicQueues)]
     ),
-    pre_migration_validation(queue_message_count, Opts);
+    UpdatedOpts = opts_add_unsuitable_queues(ProblematicQueues, Opts),
+    pre_migration_validation(queue_message_count, UpdatedOpts);
 handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
@@ -1941,3 +1948,6 @@ opts_vhost(#migration_opts{vhost = VHost}) ->
 
 opts_skip(#migration_opts{skip_unsuitable_queues = Skip}) ->
     Skip.
+
+opts_add_unsuitable_queues(Queues, #migration_opts{unsuitable_queues = Existing} = Opts) ->
+    Opts#migration_opts{unsuitable_queues = Existing ++ Queues}.

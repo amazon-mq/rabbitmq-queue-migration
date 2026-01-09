@@ -5,6 +5,8 @@
 
 -module(rqm_compat_checker).
 
+-include("rqm.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Public API
@@ -136,29 +138,40 @@ extract_queue_suitability_issues(Queue, SuitabilityResult) ->
             QueueResource = amqqueue:get_name(Queue),
             lists:filtermap(
                 fun
-                    ({QueueName, IssueType, Value, Limit}) when QueueName =:= QueueResource ->
+                    (
+                        #unsuitable_queue{
+                            resource = QueueName,
+                            reason = IssueType,
+                            details = IssueDetails
+                        }
+                    ) when QueueName =:= QueueResource ->
                         case IssueType of
                             too_many_messages ->
+                                Messages = maps:get(messages, IssueDetails),
+                                MaxMessages = maps:get(max_messages, IssueDetails),
                                 {true,
                                     {message_count_limit,
                                         io_lib:format(
-                                            "Queue has ~p messages, exceeds limit of ~p", [
-                                                Value, Limit
-                                            ]
+                                            "Queue has ~p messages, exceeds limit of ~p",
+                                            [Messages, MaxMessages]
                                         )}};
                             too_many_bytes ->
+                                MessageBytes = maps:get(message_bytes, IssueDetails),
+                                MaxBytes = maps:get(max_bytes, IssueDetails),
                                 {true,
                                     {data_size_limit,
-                                        io_lib:format("Queue has ~p bytes, exceeds limit of ~p", [
-                                            Value, Limit
-                                        ])}};
+                                        io_lib:format(
+                                            "Queue has ~p bytes, exceeds limit of ~p",
+                                            [MessageBytes, MaxBytes]
+                                        )}};
                             too_many_queues ->
+                                QueueCount = maps:get(queue_count, IssueDetails),
+                                MaxQueues = maps:get(max_queues, IssueDetails),
                                 {true,
                                     {too_many_queues,
                                         io_lib:format(
-                                            "Too many queues for migration (~p found, max ~p)", [
-                                                Value, Limit
-                                            ]
+                                            "Too many queues for migration (~p found, max ~p)",
+                                            [QueueCount, MaxQueues]
                                         )}};
                             incompatible_overflow ->
                                 {true,
