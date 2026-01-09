@@ -208,6 +208,12 @@ handle_check_queue_suitability({error, _} = Error, _Opts) ->
 
 handle_check_queue_message_count(ok, Opts) ->
     pre_migration_validation(disk_space, Opts);
+handle_check_queue_message_count(
+    {error, queues_too_deep},
+    #migration_opts{skip_unsuitable_queues = true} = Opts
+) ->
+    ?LOG_INFO("rqm: found queue(s) with too many messages, will skip during migration"),
+    pre_migration_validation(disk_space, Opts);
 handle_check_queue_message_count({error, queues_too_deep}, _Opts) ->
     ?LOG_ERROR("rqm: stopping migration due to queue(s) that have too many messages."),
     {error, queues_too_deep};

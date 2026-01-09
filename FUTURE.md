@@ -90,6 +90,17 @@ Production logs should show clear, actionable information without overwhelming o
 - [ ] Ensure all error messages are actionable
 - [ ] Verify cleanup happens in all error paths
 
+### Code Quality and Consistency
+
+**Status:** Needs Work
+
+**Tasks:**
+- [ ] Refactor `check_queue_message_count` to return unsuitable queue list
+  - Currently returns `{error, queues_too_deep}` without queue details
+  - Should return list of `unsuitable_queue` records like other checks
+  - Would allow proper tracking of which queues are skipped due to message count
+  - Currently skip mode just bypasses the check without recording specific queues
+
 ---
 
 ## Immediate Tasks
