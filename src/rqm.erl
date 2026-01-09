@@ -22,7 +22,9 @@
 -export([
     start/0,
     start/1,
+    start/2,
     validate_migration/1,
+    validate_migration/2,
     status/0,
     get_migration_status/0,
     get_queue_migration_status/1,
@@ -42,8 +44,17 @@ start() ->
     start(<<"/">>).
 
 start(VHost) ->
+    start(VHost, #{}).
+
+start(VHost, OptsMap) ->
     try
-        pre_migration_validation(VHost)
+        SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
+        Opts = #migration_opts{
+            vhost = VHost,
+            mode = migration,
+            skip_unsuitable_queues = SkipUnsuitableQueues
+        },
+        pre_migration_validation(shovel_plugin, Opts)
     catch
         Class:Reason:Stack ->
             ?LOG_ERROR("rqm: exception in ~tp", [?MODULE]),
@@ -57,10 +68,16 @@ start(VHost) ->
 %% This function runs all validation checks synchronously and returns
 %% ok if validation passes, or {error, Reason} if validation fails.
 validate_migration(VHost) ->
-    case pre_migration_validation_only(VHost) of
-        ok -> ok;
-        {error, _} = Error -> Error
-    end.
+    validate_migration(VHost, #{}).
+
+validate_migration(VHost, OptsMap) ->
+    SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
+    Opts = #migration_opts{
+        vhost = VHost,
+        mode = validation_only,
+        skip_unsuitable_queues = SkipUnsuitableQueues
+    },
+    pre_migration_validation(shovel_plugin, Opts).
 
 status() ->
     Id = {?MODULE, self()},
@@ -77,16 +94,6 @@ status() ->
     end.
 
 %% Private
-
-%% Validation-only function that run checks but doesn't start migration
-pre_migration_validation_only(VHost) ->
-    Opts = #migration_opts{vhost = VHost, mode = validation_only},
-    pre_migration_validation(shovel_plugin, Opts).
-
-%% Function that run checks AND starts migration
-pre_migration_validation(VHost) ->
-    Opts = #migration_opts{vhost = VHost, mode = migration},
-    pre_migration_validation(shovel_plugin, Opts).
 
 pre_migration_validation(shovel_plugin, Opts) ->
     handle_check_shovel_plugin(rqm_checks:check_shovel_plugin(), Opts);

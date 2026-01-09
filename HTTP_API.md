@@ -35,13 +35,29 @@ PUT /api/queue-migration/start/:vhost
 **Parameters:**
 - `:vhost` (optional) - Virtual host name (URL-encoded). Defaults to `/` if not specified.
 
+**Request Body (optional):**
+```json
+{
+  "skip_unsuitable_queues": true
+}
+```
+
+**Request Body Fields:**
+- `skip_unsuitable_queues` (optional, boolean) - When `true`, skip queues that fail validation checks instead of blocking the entire migration. Defaults to `false`.
+
 **Request:**
 ```bash
-# Default vhost (/)
+# Default vhost (/) with default behavior
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
 
 # Specific vhost
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/my-vhost
+
+# Skip unsuitable queues
+curl -u guest:guest -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"skip_unsuitable_queues": true}' \
+  http://localhost:15672/api/queue-migration/start
 ```
 
 **Response (200 OK):**
@@ -223,6 +239,7 @@ curl -u guest:guest \
   - `in_progress` - Currently migrating
   - `completed` - Successfully migrated
   - `failed` - Migration failed
+  - `skipped` - Skipped due to validation issues (when `skip_unsuitable_queues` is enabled)
   - `rollback_completed` - Rollback completed
   - `rollback_failed` - Rollback failed
 - `started_at` - Queue migration start timestamp
@@ -230,7 +247,7 @@ curl -u guest:guest \
 - `total_messages` - Total messages in queue at start
 - `migrated_messages` - Messages migrated so far
 - `progress_percentage` - Queue progress (0-100)
-- `error` - Error details (if status is `failed`)
+- `error` - Error details (if status is `failed`) or skip reason (if status is `skipped`)
 
 **Error Response (404 Not Found):**
 ```json

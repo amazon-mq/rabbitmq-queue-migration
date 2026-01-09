@@ -58,6 +58,15 @@ Migrate all mirrored classic queues on the default vhost:
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
 ```
 
+To skip unsuitable queues instead of blocking migration:
+
+```bash
+curl -u guest:guest -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"skip_unsuitable_queues": true}' \
+  http://localhost:15672/api/queue-migration/start
+```
+
 ### 3. Monitor Progress
 
 Check migration status:

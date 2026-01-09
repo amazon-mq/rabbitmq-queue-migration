@@ -118,11 +118,13 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
             undefined -> <<"/">>;
             _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
         end,
+    % Parse request body for options
+    OptsMap = parse_migration_options(ReqData),
     % First, run validation synchronously to catch errors before spawning
-    case rqm:validate_migration(VHost) of
+    case rqm:validate_migration(VHost, OptsMap) of
         ok ->
             % Validation passed, spawn the actual migration asynchronously
-            spawn(rqm, start, [VHost]),
+            spawn(rqm, start, [VHost, OptsMap]),
             {true, ReqData, {EndpointType, Context}};
         {error, shovel_plugin_not_enabled} ->
             Message =
@@ -342,3 +344,29 @@ format_snapshot({Node, SnapshotId, VolumeId}) ->
         snapshot_id => SnapshotId,
         volume_id => VolumeId
     }.
+
+parse_migration_options(ReqData) ->
+    case cowboy_req:has_body(ReqData) of
+        true ->
+            {ok, Body, _} = cowboy_req:read_body(ReqData),
+            case Body of
+                <<>> ->
+                    #{};
+                _ ->
+                    case rabbit_json:try_decode(Body) of
+                        {ok, Json} when is_map(Json) ->
+                            parse_skip_unsuitable_queues(Json);
+                        _ ->
+                            #{}
+                    end
+            end;
+        false ->
+            #{}
+    end.
+
+parse_skip_unsuitable_queues(Json) ->
+    case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
+        true -> #{skip_unsuitable_queues => true};
+        false -> #{skip_unsuitable_queues => false};
+        _ -> #{}
+    end.
