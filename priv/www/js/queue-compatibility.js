@@ -17,7 +17,7 @@ dispatcher_add(function(sammy) {
             requestBody.skip_unsuitable_queues = true;
         }
 
-        with_req('POST', '/queue-compatibility/check/' + encodeURIComponent(vhost), requestBody, function(resp) {
+        with_req('POST', '/queue-compatibility/check/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
             // Parse response and render template directly
             var data = JSON.parse(resp.responseText);
             var html = format('queue-compatibility-results', {compatibility_results: data});
