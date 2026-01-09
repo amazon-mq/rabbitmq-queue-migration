@@ -385,7 +385,8 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
 get_migration_status() ->
     Migrations = get_all_migrations(),
     [
-        {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, Status}
+        {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
+            SkipUnsuitableQueues}
      || #queue_migration{
             id = Id,
             vhost = VHost,
@@ -393,7 +394,9 @@ get_migration_status() ->
             completed_at = CompletedAt,
             total_queues = TotalQueues,
             completed_queues = CompletedQueues,
-            status = Status
+            skipped_queues = SkippedQueues,
+            status = Status,
+            skip_unsuitable_queues = SkipUnsuitableQueues
         } <- Migrations
     ].
 

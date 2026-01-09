@@ -250,7 +250,10 @@ accept_status_update(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
             bad_request(ErrorJson, ReqData2, {EndpointType, Context})
     end.
 
-migration_to_json({Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, Status}) ->
+migration_to_json(
+    {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
+        SkipUnsuitableQueues}
+) ->
     #{
         id => rqm_util:format_migration_id(Id),
         display_id => format_display_id(Id, VHost, StartedAt),
@@ -259,8 +262,10 @@ migration_to_json({Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueu
         completed_at => format_timestamp(CompletedAt),
         total_queues => TotalQueues,
         completed_queues => CompletedQueues,
+        skipped_queues => SkippedQueues,
         progress_percentage => calculate_progress_percentage(CompletedQueues, TotalQueues),
-        status => Status
+        status => Status,
+        skip_unsuitable_queues => SkipUnsuitableQueues
     }.
 
 migration_to_json_detail(#queue_migration{
