@@ -173,12 +173,14 @@ format_issue({Type, Reason}) ->
 format_migration_readiness_response(#{
     vhost := VHost,
     overall_ready := OverallReady,
+    skip_unsuitable_queues := SkipUnsuitableQueues,
     system_checks := SystemChecks,
     queue_checks := QueueChecks
 }) ->
     #{
         vhost => VHost,
         overall_ready => OverallReady,
+        skip_unsuitable_queues => SkipUnsuitableQueues,
         system_checks => format_system_checks_for_ui(SystemChecks),
         queue_checks => format_queue_checks_for_ui(QueueChecks)
     }.
