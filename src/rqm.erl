@@ -11,6 +11,13 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+%% Internal record for validation options
+-record(migration_opts, {
+    vhost :: binary(),
+    mode :: validation_only | migration,
+    skip_unsuitable_queues = false :: boolean()
+}).
+
 -export([
     start/0,
     start/1,
@@ -72,76 +79,78 @@ status() ->
 
 %% Validation-only function that run checks but doesn't start migration
 pre_migration_validation_only(VHost) ->
-    pre_migration_validation({validation_only, shovel_plugin}, VHost).
+    Opts = #migration_opts{vhost = VHost, mode = validation_only},
+    pre_migration_validation(shovel_plugin, Opts).
 
 %% Function that run checks AND starts migration
 pre_migration_validation(VHost) ->
-    pre_migration_validation({migration, shovel_plugin}, VHost).
+    Opts = #migration_opts{vhost = VHost, mode = migration},
+    pre_migration_validation(shovel_plugin, Opts).
 
-pre_migration_validation({V, shovel_plugin}, VHost) ->
-    handle_check_shovel_plugin(V, rqm_checks:check_shovel_plugin(), VHost);
-pre_migration_validation({V, khepri_disabled}, VHost) ->
-    handle_check_khepri_disabled(V, rqm_checks:check_khepri_disabled(), VHost);
-pre_migration_validation({V, relaxed_checks_setting}, VHost) ->
-    handle_check_relaxed_checks_setting(V, rqm_checks:check_relaxed_checks_setting(), VHost);
-pre_migration_validation({V, balanced_queue_leaders}, VHost) ->
-    handle_check_leader_balance(V, rqm_checks:check_leader_balance(VHost), VHost);
-pre_migration_validation({V, queue_synchronization}, VHost) ->
-    handle_check_queue_synchronization(V, rqm_checks:check_queue_synchronization(VHost), VHost);
-pre_migration_validation({V, queue_suitability}, VHost) ->
-    handle_check_queue_suitability(V, rqm_checks:check_queue_suitability(VHost), VHost);
-pre_migration_validation({V, queue_message_count}, VHost) ->
-    handle_check_queue_message_count(V, rqm_checks:check_queue_message_count(VHost), VHost);
-pre_migration_validation({V, disk_space}, VHost) ->
-    handle_check_disk_space(V, rqm_checks:check_disk_space(VHost), VHost);
-pre_migration_validation({V, active_alarms}, VHost) ->
-    handle_check_active_alarms(V, rqm_checks:check_active_alarms(), VHost);
-pre_migration_validation({V, memory_usage}, VHost) ->
-    handle_check_memory_usage(V, rqm_checks:check_memory_usage(), VHost);
-pre_migration_validation({V, snapshot_not_in_progress}, VHost) ->
-    handle_check_snapshot_not_in_progress(V, rqm_checks:check_snapshot_not_in_progress(), VHost);
-pre_migration_validation({V, cluster_partitions}, VHost) ->
-    handle_check_cluster_partitions(V, rqm_checks:check_cluster_partitions(), VHost).
+pre_migration_validation(shovel_plugin, Opts) ->
+    handle_check_shovel_plugin(rqm_checks:check_shovel_plugin(), Opts);
+pre_migration_validation(khepri_disabled, Opts) ->
+    handle_check_khepri_disabled(rqm_checks:check_khepri_disabled(), Opts);
+pre_migration_validation(relaxed_checks_setting, Opts) ->
+    handle_check_relaxed_checks_setting(rqm_checks:check_relaxed_checks_setting(), Opts);
+pre_migration_validation(balanced_queue_leaders, Opts) ->
+    handle_check_leader_balance(rqm_checks:check_leader_balance(opts_vhost(Opts)), Opts);
+pre_migration_validation(queue_synchronization, Opts) ->
+    handle_check_queue_synchronization(rqm_checks:check_queue_synchronization(opts_vhost(Opts)), Opts);
+pre_migration_validation(queue_suitability, Opts) ->
+    handle_check_queue_suitability(rqm_checks:check_queue_suitability(opts_vhost(Opts)), Opts);
+pre_migration_validation(queue_message_count, Opts) ->
+    handle_check_queue_message_count(rqm_checks:check_queue_message_count(opts_vhost(Opts)), Opts);
+pre_migration_validation(disk_space, Opts) ->
+    handle_check_disk_space(rqm_checks:check_disk_space(opts_vhost(Opts)), Opts);
+pre_migration_validation(active_alarms, Opts) ->
+    handle_check_active_alarms(rqm_checks:check_active_alarms(), Opts);
+pre_migration_validation(memory_usage, Opts) ->
+    handle_check_memory_usage(rqm_checks:check_memory_usage(), Opts);
+pre_migration_validation(snapshot_not_in_progress, Opts) ->
+    handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
+pre_migration_validation(cluster_partitions, Opts) ->
+    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
-handle_check_shovel_plugin(V, ok, VHost) ->
-    pre_migration_validation({V, khepri_disabled}, VHost);
-handle_check_shovel_plugin(_V, {error, shovel_plugin_not_enabled}, _VHost) ->
+handle_check_shovel_plugin(ok, Opts) ->
+    pre_migration_validation(khepri_disabled, Opts);
+handle_check_shovel_plugin({error, shovel_plugin_not_enabled}, _Opts) ->
     ?LOG_ERROR(
         "rqm: rabbitmq_shovel plugin must be enabled for migration. "
         "Enable the plugin with: rabbitmq-plugins enable rabbitmq_shovel"
     ),
     {error, shovel_plugin_not_enabled}.
 
-handle_check_khepri_disabled(V, ok, VHost) ->
-    pre_migration_validation({V, relaxed_checks_setting}, VHost);
-handle_check_khepri_disabled(_V, {error, khepri_enabled}, _VHost) ->
+handle_check_khepri_disabled(ok, Opts) ->
+    pre_migration_validation(relaxed_checks_setting, Opts);
+handle_check_khepri_disabled({error, khepri_enabled}, _Opts) ->
     ?LOG_ERROR(
         "rqm: khepri_db must be disabled for migration. "
         "Khepri is not compatible with classic queue migration."
     ),
     {error, khepri_enabled}.
 
-handle_check_relaxed_checks_setting(V, {ok, enabled}, VHost) ->
-    pre_migration_validation({V, balanced_queue_leaders}, VHost);
-handle_check_relaxed_checks_setting(_V, {error, disabled}, _VHost) ->
+handle_check_relaxed_checks_setting({ok, enabled}, Opts) ->
+    pre_migration_validation(balanced_queue_leaders, Opts);
+handle_check_relaxed_checks_setting({error, disabled}, _Opts) ->
     ?LOG_ERROR(
         "rqm: quorum_relaxed_checks_on_redeclaration must be set to true for migration to work properly. "
         "This setting allows applications to continue declaring queues as classic after migration to quorum."
     ),
     {error, relaxed_checks_disabled}.
 
-handle_check_leader_balance(V, {ok, balanced}, VHost) ->
-    pre_migration_validation({V, queue_synchronization}, VHost);
-handle_check_leader_balance(_V, {error, {imbalanced, _}}, _VHost) ->
+handle_check_leader_balance({ok, balanced}, Opts) ->
+    pre_migration_validation(queue_synchronization, Opts);
+handle_check_leader_balance({error, {imbalanced, _}}, _Opts) ->
     ?LOG_ERROR(
         "rqm: stopping migration due to imbalanced queue leaders. "
         "Re-balance queue leaders before migration."
     ),
     {error, queue_leaders_imbalanced}.
 
-handle_check_queue_synchronization(V, ok, VHost) ->
-    pre_migration_validation({V, queue_suitability}, VHost);
-handle_check_queue_synchronization(_V, {error, {unsynchronized_queues, QueueNames}}, _VHost) ->
+handle_check_queue_synchronization(ok, Opts) ->
+    pre_migration_validation(queue_suitability, Opts);
+handle_check_queue_synchronization({error, {unsynchronized_queues, QueueNames}}, _Opts) ->
     ?LOG_ERROR(
         "rqm: stopping migration due to unsynchronized queues: ~p. "
         "Wait for all mirrors to synchronize before migration.",
@@ -149,9 +158,9 @@ handle_check_queue_synchronization(_V, {error, {unsynchronized_queues, QueueName
     ),
     {error, {unsynchronized_queues, QueueNames}}.
 
-handle_check_queue_suitability(V, ok, VHost) ->
-    pre_migration_validation({V, queue_message_count}, VHost);
-handle_check_queue_suitability(_V, {error, {unsuitable_queues, Details}}, _VHost) ->
+handle_check_queue_suitability(ok, Opts) ->
+    pre_migration_validation(queue_message_count, Opts);
+handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
         "rqm: stopping migration due to unsuitable queues. "
@@ -159,20 +168,20 @@ handle_check_queue_suitability(_V, {error, {unsuitable_queues, Details}}, _VHost
         [length(ProblematicQueues)]
     ),
     {error, {unsuitable_queues, Details}};
-handle_check_queue_suitability(_V, {error, _} = Error, _VHost) ->
+handle_check_queue_suitability({error, _} = Error, _Opts) ->
     Error.
 
-handle_check_queue_message_count(V, ok, VHost) ->
-    pre_migration_validation({V, disk_space}, VHost);
-handle_check_queue_message_count(_V, {error, queues_too_deep}, _VHost) ->
+handle_check_queue_message_count(ok, Opts) ->
+    pre_migration_validation(disk_space, Opts);
+handle_check_queue_message_count({error, queues_too_deep}, _Opts) ->
     ?LOG_ERROR("rqm: stopping migration due to queue(s) that have too many messages."),
     {error, queues_too_deep};
-handle_check_queue_message_count(_V, {error, _} = Error, _VHost) ->
+handle_check_queue_message_count({error, _} = Error, _Opts) ->
     Error.
 
-handle_check_disk_space(V, {ok, sufficient}, VHost) ->
-    pre_migration_validation({V, active_alarms}, VHost);
-handle_check_disk_space(_V, {error, {insufficient_disk_space, Details}}, _VHost) ->
+handle_check_disk_space({ok, sufficient}, Opts) ->
+    pre_migration_validation(active_alarms, Opts);
+handle_check_disk_space({error, {insufficient_disk_space, Details}}, _Opts) ->
     RequiredMB = maps:get(required_free_mb, Details, 0),
     AvailableMB = maps:get(available_for_migration_mb, Details, 0),
     ?LOG_ERROR(
@@ -181,18 +190,18 @@ handle_check_disk_space(_V, {error, {insufficient_disk_space, Details}}, _VHost)
         [RequiredMB, AvailableMB]
     ),
     {error, {insufficient_disk_space, Details}};
-handle_check_disk_space(_V, {error, _} = Error, _VHost) ->
+handle_check_disk_space({error, _} = Error, _Opts) ->
     Error.
 
-handle_check_active_alarms(V, ok, VHost) ->
-    pre_migration_validation({V, memory_usage}, VHost);
-handle_check_active_alarms(_V, {error, alarms_active}, _VHost) ->
+handle_check_active_alarms(ok, Opts) ->
+    pre_migration_validation(memory_usage, Opts);
+handle_check_active_alarms({error, alarms_active}, _Opts) ->
     ?LOG_ERROR("rqm: active alarms detected. Clear all alarms before migration."),
     {error, alarms_active}.
 
-handle_check_memory_usage(V, {ok, sufficient}, VHost) ->
-    pre_migration_validation({V, snapshot_not_in_progress}, VHost);
-handle_check_memory_usage(_V, {error, {memory_usage_too_high, Details}}, _VHost) ->
+handle_check_memory_usage({ok, sufficient}, Opts) ->
+    pre_migration_validation(snapshot_not_in_progress, Opts);
+handle_check_memory_usage({error, {memory_usage_too_high, Details}}, _Opts) ->
     MaxPercent = maps:get(max_allowed_percent, Details),
     ProblematicNodes = maps:get(problematic_nodes, Details),
     NodeCount = length(ProblematicNodes),
@@ -203,9 +212,9 @@ handle_check_memory_usage(_V, {error, {memory_usage_too_high, Details}}, _VHost)
     ),
     {error, {memory_usage_too_high, Details}}.
 
-handle_check_snapshot_not_in_progress(V, ok, VHost) ->
-    pre_migration_validation({V, cluster_partitions}, VHost);
-handle_check_snapshot_not_in_progress(_V, {error, {snapshot_in_progress, Details}}, _VHost) ->
+handle_check_snapshot_not_in_progress(ok, Opts) ->
+    pre_migration_validation(cluster_partitions, Opts);
+handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, _Opts) ->
     VolumeId = maps:get(volume_id, Details, "unknown"),
     SnapshotId = maps:get(snapshot_id, Details, "unknown"),
     ?LOG_ERROR(
@@ -215,15 +224,16 @@ handle_check_snapshot_not_in_progress(_V, {error, {snapshot_in_progress, Details
     ),
     {error, {snapshot_in_progress, Details}}.
 
-handle_check_cluster_partitions(validation_only, {ok, _Nodes}, _VHost) ->
+handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only}) ->
     % Validation passed - return ok without starting migration
     ok;
-handle_check_cluster_partitions(migration, {ok, Nodes}, VHost) ->
+handle_check_cluster_partitions({ok, Nodes}, #migration_opts{mode = migration, vhost = VHost}) ->
     MigrationResult = start_with_new_migration_id(Nodes, VHost, generate_migration_id()),
     handle_migration_result(MigrationResult, VHost);
-handle_check_cluster_partitions(_V, {error, nodes_down}, _VHost) ->
-    ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration.");
-handle_check_cluster_partitions(_V, {error, partitions_detected}, _VHost) ->
+handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
+    ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
+    {error, nodes_down};
+handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
     ?LOG_ERROR("rqm: cluster partitions detected. Resolve partitions before migration."),
     {error, partitions_detected}.
 
@@ -1897,3 +1907,6 @@ wait_for_monitored_processes_loop(RefsMap0, Deadline) ->
                 error(wait_for_processes_timeout)
             end
     end.
+
+opts_vhost(#migration_opts{vhost = VHost}) ->
+    VHost.
