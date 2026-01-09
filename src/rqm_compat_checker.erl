@@ -121,11 +121,26 @@ check_queue_internal(Queue, SuitabilityResult) ->
     % Add suitability issues if they apply to this queue
     SuitabilityIssues = extract_queue_suitability_issues(Queue, SuitabilityResult),
 
-    AllIssues = StandardIssues ++ SuitabilityIssues,
+    % Combine and deduplicate issues by type
+    AllIssues = deduplicate_issues(StandardIssues ++ SuitabilityIssues),
 
     case AllIssues of
         [] -> {compatible, []};
         _ -> {incompatible, AllIssues}
+    end.
+
+%% Deduplicate issues by keeping only the first occurrence of each type
+deduplicate_issues(Issues) ->
+    deduplicate_issues(Issues, sets:new(), []).
+
+deduplicate_issues([], _Seen, Acc) ->
+    lists:reverse(Acc);
+deduplicate_issues([{Type, _Reason} = Issue | Rest], Seen, Acc) ->
+    case sets:is_element(Type, Seen) of
+        true ->
+            deduplicate_issues(Rest, Seen, Acc);
+        false ->
+            deduplicate_issues(Rest, sets:add_element(Type, Seen), [Issue | Acc])
     end.
 
 %% Extract suitability issues that apply to a specific queue
