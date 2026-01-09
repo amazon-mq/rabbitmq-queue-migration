@@ -94,18 +94,18 @@ pre_migration_validation(khepri_disabled, Opts) ->
     handle_check_khepri_disabled(rqm_checks:check_khepri_disabled(), Opts);
 pre_migration_validation(relaxed_checks_setting, Opts) ->
     handle_check_relaxed_checks_setting(rqm_checks:check_relaxed_checks_setting(), Opts);
-pre_migration_validation(balanced_queue_leaders, Opts) ->
-    handle_check_leader_balance(rqm_checks:check_leader_balance(opts_vhost(Opts)), Opts);
-pre_migration_validation(queue_synchronization, Opts) ->
+pre_migration_validation(balanced_queue_leaders, #migration_opts{vhost = VHost} = Opts) ->
+    handle_check_leader_balance(rqm_checks:check_leader_balance(VHost), Opts);
+pre_migration_validation(queue_synchronization, #migration_opts{vhost = VHost} = Opts) ->
     handle_check_queue_synchronization(
-        rqm_checks:check_queue_synchronization(opts_vhost(Opts)), Opts
+        rqm_checks:check_queue_synchronization(VHost), Opts
     );
-pre_migration_validation(queue_suitability, Opts) ->
-    handle_check_queue_suitability(rqm_checks:check_queue_suitability(opts_vhost(Opts)), Opts);
-pre_migration_validation(queue_message_count, Opts) ->
-    handle_check_queue_message_count(rqm_checks:check_queue_message_count(opts_vhost(Opts)), Opts);
-pre_migration_validation(disk_space, Opts) ->
-    handle_check_disk_space(rqm_checks:check_disk_space(opts_vhost(Opts)), Opts);
+pre_migration_validation(queue_suitability, #migration_opts{vhost = VHost} = Opts) ->
+    handle_check_queue_suitability(rqm_checks:check_queue_suitability(VHost), Opts);
+pre_migration_validation(queue_message_count, #migration_opts{vhost = VHost} = Opts) ->
+    handle_check_queue_message_count(rqm_checks:check_queue_message_count(VHost), Opts);
+pre_migration_validation(disk_space, #migration_opts{vhost = VHost} = Opts) ->
+    handle_check_disk_space(rqm_checks:check_disk_space(VHost), Opts);
 pre_migration_validation(active_alarms, Opts) ->
     handle_check_active_alarms(rqm_checks:check_active_alarms(), Opts);
 pre_migration_validation(memory_usage, Opts) ->
@@ -255,9 +255,11 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
 handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only}) ->
     % Validation passed - return ok without starting migration
     ok;
-handle_check_cluster_partitions({ok, Nodes}, #migration_opts{mode = migration} = Opts) ->
+handle_check_cluster_partitions(
+    {ok, Nodes}, #migration_opts{mode = migration, vhost = VHost} = Opts
+) ->
     MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
-    handle_migration_result(MigrationResult, opts_vhost(Opts));
+    handle_migration_result(MigrationResult, VHost);
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
@@ -282,8 +284,7 @@ maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
     ?LOG_WARNING("rqm: already in progress."),
     {error, cmq_qq_migration_in_progress}.
 
-start_with_lock(GlobalLockId, Nodes, Opts, MigrationId) ->
-    VHost = opts_vhost(Opts),
+start_with_lock(GlobalLockId, Nodes, #migration_opts{vhost = VHost} = Opts, MigrationId) ->
     try
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Pre-migration Preparation
@@ -585,8 +586,12 @@ cleanup_single_snapshot(SnapshotId) ->
 %% MCQ -> QQ Migration
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-mcq_qq_migration(MigrationId, PreparationState, Nodes, Opts) ->
-    VHost = opts_vhost(Opts),
+mcq_qq_migration(
+    MigrationId,
+    PreparationState,
+    Nodes,
+    #migration_opts{vhost = VHost, skip_unsuitable_queues = SkipUnsuitableQueues} = Opts
+) ->
     ?LOG_INFO(
         "rqm: starting migration ~s for vhost ~tp on nodes ~tp",
         [format_migration_id(MigrationId), VHost, Nodes]
@@ -603,11 +608,14 @@ mcq_qq_migration(MigrationId, PreparationState, Nodes, Opts) ->
         MigrationId,
         VHost,
         os:timestamp(),
-        opts_skip(Opts)
+        SkipUnsuitableQueues
     ),
 
     %% Store snapshot information in migration record
     ok = store_snapshot_information(MigrationId, PreparationState),
+
+    %% Create skipped queue status records for unsuitable queues
+    ok = create_skipped_queue_records(MigrationId, Opts),
 
     ?LOG_DEBUG("rqm: starting rqm_gatherer for migration ~s", [format_migration_id(MigrationId)]),
     {ok, Gatherer} = rqm_gatherer:start_link(),
@@ -1867,6 +1875,26 @@ store_snapshot_information(MigrationId, PreparationState) ->
     end,
     ok.
 
+%% @doc Create skipped queue status records for unsuitable queues
+-spec create_skipped_queue_records(term(), #migration_opts{}) -> ok.
+create_skipped_queue_records(MigrationId, #migration_opts{unsuitable_queues = UnsuitableQueues}) ->
+    case UnsuitableQueues of
+        [] ->
+            ok;
+        _ ->
+            ?LOG_INFO(
+                "rqm: creating ~p skipped queue status records for migration ~s",
+                [length(UnsuitableQueues), format_migration_id(MigrationId)]
+            ),
+            lists:foreach(
+                fun(#unsuitable_queue{resource = Resource, reason = Reason}) ->
+                    {ok, _} = rqm_db:create_skipped_queue_status(Resource, MigrationId, Reason)
+                end,
+                UnsuitableQueues
+            ),
+            ok
+    end.
+
 %% @doc Extract snapshot information from preparation state
 -spec extract_snapshots_from_preparation_state(map()) -> [{atom(), binary(), string()}].
 extract_snapshots_from_preparation_state(PreparationState) ->
@@ -1943,11 +1971,8 @@ wait_for_monitored_processes_loop(RefsMap0, Deadline) ->
             end
     end.
 
-opts_vhost(#migration_opts{vhost = VHost}) ->
-    VHost.
-
-opts_skip(#migration_opts{skip_unsuitable_queues = Skip}) ->
-    Skip.
-
-opts_add_unsuitable_queues(Queues, #migration_opts{unsuitable_queues = Existing} = Opts) ->
-    Opts#migration_opts{unsuitable_queues = Existing ++ Queues}.
+opts_add_unsuitable_queues([], #migration_opts{unsuitable_queues = Existing} = Opts) ->
+    Opts#migration_opts{unsuitable_queues = lists:reverse(Existing)};
+opts_add_unsuitable_queues([Q | Rest], #migration_opts{unsuitable_queues = Existing} = Opts0) ->
+    Opts1 = Opts0#migration_opts{unsuitable_queues = [Q | Existing]},
+    opts_add_unsuitable_queues(Rest, Opts1).
