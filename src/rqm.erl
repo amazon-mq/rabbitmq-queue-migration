@@ -361,7 +361,7 @@ handle_migration_exception(Class, Ex, Stack, VHost, MigrationId) ->
     ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
         format_migration_id(MigrationId)
     ]),
-    {ok, _} = rqm_db:create_migration(MigrationId, VHost, os:timestamp(), false),
+    {ok, _} = rqm_db:create_migration(MigrationId, VHost, os:timestamp(), false, 0),
     {ok, _} = rqm_db:update_migration_status(MigrationId, failed),
     ok.
 
@@ -597,7 +597,11 @@ mcq_qq_migration(
     MigrationId,
     PreparationState,
     Nodes,
-    #migration_opts{vhost = VHost, skip_unsuitable_queues = SkipUnsuitableQueues} = Opts
+    #migration_opts{
+        vhost = VHost,
+        skip_unsuitable_queues = SkipUnsuitableQueues,
+        unsuitable_queues = UnsuitableQueues
+    }
 ) ->
     ?LOG_INFO(
         "rqm: starting migration ~s for vhost ~tp on nodes ~tp",
@@ -611,18 +615,20 @@ mcq_qq_migration(
         "rqm: creating migration record ~s for vhost ~tp",
         [format_migration_id(MigrationId), VHost]
     ),
+    SkippedCount = length(UnsuitableQueues),
     {ok, _} = rqm_db:create_migration(
         MigrationId,
         VHost,
         os:timestamp(),
-        SkipUnsuitableQueues
+        SkipUnsuitableQueues,
+        SkippedCount
     ),
 
     %% Store snapshot information in migration record
     ok = store_snapshot_information(MigrationId, PreparationState),
 
     %% Create skipped queue status records for unsuitable queues
-    ok = create_skipped_queue_records(MigrationId, Opts),
+    ok = create_skipped_queue_records(MigrationId, UnsuitableQueues),
 
     ?LOG_DEBUG("rqm: starting rqm_gatherer for migration ~s", [format_migration_id(MigrationId)]),
     {ok, Gatherer} = rqm_gatherer:start_link(),
@@ -1909,24 +1915,14 @@ store_snapshot_information(MigrationId, PreparationState) ->
     ok.
 
 %% @doc Create skipped queue status records for unsuitable queues
--spec create_skipped_queue_records(term(), #migration_opts{}) -> ok.
-create_skipped_queue_records(MigrationId, #migration_opts{unsuitable_queues = UnsuitableQueues}) ->
-    case UnsuitableQueues of
-        [] ->
-            ok;
-        _ ->
-            ?LOG_INFO(
-                "rqm: creating ~p skipped queue status records for migration ~s",
-                [length(UnsuitableQueues), format_migration_id(MigrationId)]
-            ),
-            lists:foreach(
-                fun(#unsuitable_queue{resource = Resource, reason = Reason}) ->
-                    {ok, _} = rqm_db:create_skipped_queue_status(Resource, MigrationId, Reason)
-                end,
-                UnsuitableQueues
-            ),
-            ok
-    end.
+-spec create_skipped_queue_records(term(), list()) -> ok.
+create_skipped_queue_records(_MigrationId, []) ->
+    ok;
+create_skipped_queue_records(MigrationId, [
+    #unsuitable_queue{resource = Resource, reason = Reason} | Rest
+]) ->
+    {ok, _} = rqm_db:create_skipped_queue_status(Resource, MigrationId, Reason),
+    create_skipped_queue_records(MigrationId, Rest).
 
 %% @doc Extract snapshot information from preparation state
 -spec extract_snapshots_from_preparation_state(map()) -> [{atom(), binary(), string()}].

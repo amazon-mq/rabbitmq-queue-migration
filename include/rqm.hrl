@@ -81,6 +81,8 @@
     total_queues,
     % Number of queues completed
     completed_queues,
+    % Number of queues skipped
+    skipped_queues = 0,
     % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
     status :: migration_status(),
     % Timestamp when rollback started

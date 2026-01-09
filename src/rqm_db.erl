@@ -16,7 +16,7 @@
 
 %% Migration record operations
 -export([
-    create_migration/4,
+    create_migration/5,
     update_migration_status/2,
     update_migration_completed/2,
     update_migration_completed_count/1,
@@ -80,8 +80,9 @@ get_message_count(Resource) when is_record(Resource, resource) ->
 %% Migration record operations
 
 %% @doc Create a new migration record
--spec create_migration(term(), binary(), erlang:timestamp(), boolean()) -> {ok, #queue_migration{}}.
-create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues) ->
+-spec create_migration(term(), binary(), erlang:timestamp(), boolean(), non_neg_integer()) ->
+    {ok, #queue_migration{}}.
+create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount) ->
     MigrationRecord = #queue_migration{
         id = MigrationId,
         vhost = VHost,
@@ -89,6 +90,7 @@ create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues) ->
         completed_at = undefined,
         total_queues = 0,
         completed_queues = 0,
+        skipped_queues = SkippedCount,
         status = in_progress,
         snapshots = [],
         skip_unsuitable_queues = SkipUnsuitableQueues
