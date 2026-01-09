@@ -7,7 +7,7 @@
 
 -behaviour(rabbit_mgmt_extension).
 
--export([dispatcher/0, web_ui/0, to_json/2]).
+-export([dispatcher/0, web_ui/0, accept_content/2]).
 -export([
     init/2,
     content_types_accepted/2,
@@ -30,7 +30,7 @@ init(Req, _State) ->
     {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
 
 content_types_accepted(ReqData, Context) ->
-    {[{'*', to_json}], ReqData, Context}.
+    {[{'*', accept_content}], ReqData, Context}.
 
 content_types_provided(ReqData, Context) ->
     {[{<<"application/json">>, to_json}], ReqData, Context}.
@@ -44,7 +44,7 @@ resource_exists(ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
 
-to_json(ReqData, Context) ->
+accept_content(ReqData, Context) ->
     VHost =
         case cowboy_req:binding(vhost, ReqData) of
             <<"all">> -> all_vhosts;
@@ -52,7 +52,7 @@ to_json(ReqData, Context) ->
             _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
         end,
 
-    % Parse options from request body (for POST) or use defaults (for GET)
+    % Parse options from request body
     OptsMap = parse_compatibility_options(ReqData),
 
     case VHost of
@@ -71,7 +71,7 @@ to_json(ReqData, Context) ->
                 vhost => <<"all">>,
                 vhost_results => Results
             }),
-            {Json, ReqData, Context};
+            {true, cowboy_req:set_resp_body(Json, ReqData), Context};
         _ ->
             % Single vhost - run complete migration readiness check
             Result = rqm_compat_checker:check_migration_readiness(VHost, OptsMap),
@@ -79,7 +79,7 @@ to_json(ReqData, Context) ->
             % Format for JSON response
             FormattedResult = format_migration_readiness_response(Result),
             Json = rabbit_json:encode(FormattedResult),
-            {Json, ReqData, Context}
+            {true, cowboy_req:set_resp_body(Json, ReqData), Context}
     end.
 
 %% Helper functions
