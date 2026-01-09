@@ -79,9 +79,11 @@ The plugin performs comprehensive checks before starting migration:
 3. **Queue Balance**: Ensures queue leaders are balanced across nodes
 4. **Queue Synchronization**: Verifies all queue mirrors are synchronized
 5. **Queue Eligibility**: Confirms queues are mirrored classic queues with HA policies
-6. **Message Limits**: Validates queue message counts are within limits
+6. **Message Limits**: Validates queue message counts and bytes are within limits
 7. **Disk Space**: Estimates required disk space and verifies availability
 8. **System Health**: Checks for active alarms and memory pressure
+9. **Snapshot Availability**: Verifies no concurrent EBS snapshots in progress
+10. **Cluster Health**: Validates no partitions and all nodes are up
 
 ### Two-Phase Migration
 
@@ -131,17 +133,17 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Range: 1-4096, Default: 10
     {progress_update_frequency, 10},
 
-    %% Worker pool size
-    %% Range: 1-1, Default: 1
-    {worker_pool_max, 1},
-
-    %% Maximum messages per queue (for validation)
-    %% Default: 15000
-    {max_messages_in_queue, 15000},
+    %% Worker pool size (capped at scheduler count for stability)
+    %% Range: 1-32, Default: 32
+    {worker_pool_max, 32},
 
     %% Maximum queues per migration
     %% Default: 500
     {max_queues_for_migration, 500},
+
+    %% Base maximum message bytes per queue (scales with queue count)
+    %% Default: 536870912 (512 MiB)
+    {base_max_message_bytes_in_queue, 536870912},
 
     %% Disk space safety multiplier
     %% Default: 2.5
@@ -154,6 +156,16 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Maximum memory usage percentage
     %% Range: 1-100, Default: 40
     {max_memory_usage_percent, 40},
+
+    %% Message count verification tolerances
+    %% Over-delivery tolerance (extra messages), Default: 5.0%
+    {message_count_over_tolerance_percent, 5.0},
+    %% Under-delivery tolerance (missing messages), Default: 2.0%
+    {message_count_under_tolerance_percent, 2.0},
+
+    %% Shovel prefetch count for message transfer
+    %% Default: 1024
+    {shovel_prefetch_count, 1024},
 
     %% Snapshot mode: tar (testing) or ebs (production)
     %% Default: tar
@@ -170,7 +182,7 @@ The plugin supports the following configuration options via `advanced.config`:
 ].
 ```
 
-**Note:** Most users should not need to change these defaults. They are tuned for typical production workloads.
+**Note:** Most users should not need to change these defaults. They are tuned for typical production workloads based on extensive testing with 500-1000 queues on m7g.large instances.
 
 ## Snapshot Support
 

@@ -169,10 +169,14 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 
 ### Worker Pool Architecture
 
-- **Pool Name**: `rqm`
-- **Dynamic Sizing**: Configurable via `worker_pool_max` (default: 1, max: 1)
+- **Pool Name**: `rqm_worker_pool`
+- **Dynamic Sizing**: Formula `min(schedulers, worker_pool_max())` caps pool at CPU core count
+- **Default Maximum**: 32 workers (allows large instances to fully utilize cores)
+- **Performance**: Testing shows optimal performance at scheduler count (2 workers on 2 vCPU = 2x speedup vs 1 worker)
+- **Stability**: Exceeding scheduler count causes network saturation, timeouts, and cluster partitions
 - **Async Processing**: Each queue migration runs in separate worker
 - **Resource Management**: Proper cleanup and error handling
+- **Shovel Retry**: Shovel creation retries up to 10 times on exceptions (handles transient `noproc` errors)
 
 ### Distributed Coordination
 
@@ -224,7 +228,13 @@ This allows applications to redeclare queues with classic arguments without erro
 - `mcq_qq_migration/3` - Core two-phase migration execution
 - `post_migration_restore/3` - Restore normal operations after migration
 - `start_rollback/2` - Initiate rollback process
-- `handle_migration_exception/5` - Exception handling and recovery
+- `handle_migration_exception/5` - Exception handling and recovery with summary logging
+- `create_shovel_with_retry/4` - Retry shovel creation up to 10 times on exceptions
+- `cleanup_migration_shovel/2` - Clean up shovel with exception handling (uses `case catch`)
+- `verify_message_counts/4` - Verify message counts match expectations
+- `check_message_count_tolerance/5` - Check over/under delivery against separate tolerances
+- `check_within_tolerance/7` - Validate mismatch is within configured tolerance
+- `count_errors_and_aborted/1` - Helper to count error and aborted results for logging
 
 ### `rqm_db.erl`
 - `create_migration/3` - Initialize migration record
@@ -249,16 +259,21 @@ This allows applications to redeclare queues with classic arguments without erro
 - `out/1` - Retrieve result from gatherer queue (blocks if empty and producers active)
 
 ### `rqm_config.erl`
-- `calculate_worker_pool_size/0` - Dynamic worker pool sizing
+- `calculate_worker_pool_size/0` - Dynamic worker pool sizing (min of schedulers and worker_pool_max)
 - `calculate_max_messages_per_queue/1` - Queue size limits based on total count
 - `calculate_max_message_bytes_per_queue/1` - Byte limits for queues
 - `max_queues_for_migration/0` - Maximum queue count limits
 - `snapshot_mode/0` - Get snapshot mode configuration (tar or ebs)
 - `ebs_volume_device/0` - Get EBS volume device path configuration
+- `message_count_over_tolerance_percent/0` - Get tolerance for over-delivery (default: 5.0%)
+- `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 2.0%)
+- `shovel_prefetch_count/0` - Get shovel prefetch count (default: 1024)
 
 ### `rqm_snapshot.erl`
 - `create_snapshot/1` - Create snapshot using configured mode (tar or ebs)
 - `create_snapshot/2` - Create snapshot with specific mode
+- `check_no_snapshots_in_progress/0` - Validate no concurrent EBS snapshots (used by validation chain)
+- `check_no_snapshots_in_progress/1` - Pattern match on snapshot mode (tar skips, ebs checks)
 - `find_rabbitmq_volume/1` - Discover EBS volume for RabbitMQ data
 - `create_ebs_snapshot/1` - Create EBS snapshot for discovered volume
 - `cleanup_snapshot/1` - Clean up snapshot using configured mode
@@ -291,11 +306,18 @@ This allows applications to redeclare queues with classic arguments without erro
 - `format_iso8601_utc/0` - Format current time as ISO8601 UTC string
 
 ### `rqm_checks.erl`
+- `check_shovel_plugin/0` - Validate rabbitmq_shovel plugin is enabled
+- `check_khepri_disabled/0` - Validate Khepri database is disabled
 - `check_relaxed_checks_setting/0` - Validate quorum queue configuration
 - `check_leader_balance/1` - Ensure balanced queue distribution
 - `check_queue_synchronization/1` - Verify all mirrors are synchronized
 - `check_queue_suitability/1` - Comprehensive queue eligibility
+- `check_queue_message_count/1` - Validate message counts within limits
 - `check_disk_space/1` - Disk space estimation and validation
+- `check_active_alarms/0` - Check for active RabbitMQ alarms
+- `check_memory_usage/0` - Validate memory usage is within limits
+- `check_snapshot_not_in_progress/0` - Verify no concurrent EBS snapshots (delegates to `rqm_snapshot`)
+- `check_cluster_partitions/0` - Verify no cluster partitions and all nodes up
 - `check_system_migration_readiness/1` - Overall system readiness
 
 ### `rqm_compat_checker.erl`
@@ -317,22 +339,33 @@ This allows applications to redeclare queues with classic arguments without erro
 
 ### Application Environment
 - `progress_update_frequency` - Messages between progress updates (default: 10)
-- `worker_pool_max` - Maximum worker pool size (default: 1, max: 1)
+- `worker_pool_max` - Maximum worker pool size (default: 32, capped at scheduler count)
 - `rollback_on_error` - Enable automatic rollback on migration failure (default: true)
-- `snapshot_mode` - Snapshot mode: `tar` (fake) or `ebs` (real EBS snapshots) (default: tar)
+- `snapshot_mode` - Snapshot mode: `tar` (testing) or `ebs` (production EBS snapshots) (default: tar)
 - `ebs_volume_device` - EBS device path for RabbitMQ data (default: "/dev/sdh")
+- `max_queues_for_migration` - Maximum queues per migration (default: 500)
+- `base_max_message_bytes_in_queue` - Base maximum bytes per queue (default: 512 MiB)
+- `message_count_over_tolerance_percent` - Tolerance for extra messages (default: 5.0%)
+- `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 2.0%)
+- `shovel_prefetch_count` - Shovel prefetch count for message transfer (default: 1024)
+- `cleanup_snapshots_on_success` - Delete snapshots after successful migration (default: true)
 
 ### Constants (in header file)
 - `QUEUE_MIGRATION_TIMEOUT_MS` - 120,000ms (2 minutes)
 - `QUEUE_MIGRATION_TIMEOUT_RETRIES` - 15 retries (30 minutes total)
 - `DEFAULT_PROGRESS_UPDATE_FREQUENCY` - 10 messages
-- `DEFAULT_WORKER_POOL_MAX` - 8 worker (configurable)
+- `DEFAULT_WORKER_POOL_MAX` - 32 workers (capped at scheduler count)
 - `DEFAULT_ROLLBACK_ON_ERROR` - true (configurable)
 - `MAX_QUEUES_FOR_MIGRATION` - 500 queues maximum
-- `MAX_MESSAGES_IN_QUEUE` - 15,000 messages per queue
+- `BASE_MAX_MESSAGES_IN_QUEUE` - 20,000 messages per queue
+- `BASE_MAX_MESSAGE_BYTES_IN_QUEUE` - 512 MiB per queue
 - `DISK_SPACE_SAFETY_MULTIPLIER` - 2.5x safety buffer
 - `MIN_DISK_SPACE_BUFFER` - 500MB minimum free space
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
+- `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
+- `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 2.0% tolerance for under-delivery
+- `DEFAULT_SHOVEL_PREFETCH_COUNT` - 1024 messages
+- `DEFAULT_CLEANUP_SNAPSHOTS_ON_SUCCESS` - true
 
 ## Rollback Functionality
 
@@ -362,11 +395,24 @@ This allows applications to redeclare queues with classic arguments without erro
 - **Error Storage**: Failed queue details stored in `queue_migration_status`
 - **Logging**: Comprehensive error logging with stack traces
 - **Status Tracking**: Migration status reflects partial failures
+- **Summary Logging**: Exception handler logs error/aborted counts instead of full error lists
 
 ### Timeout Management
 - **Per-Queue Timeout**: 2 minutes with 15 retries (30 minutes total)
 - **Message Handling**: Waits for RA event confirmations
 - **Graceful Degradation**: Continues with remaining queues on timeout
+
+### Shovel Exception Handling
+- **Creation Retry**: Shovel creation retries up to 10 times on exceptions (handles `noproc` errors)
+- **Cleanup Exceptions**: Shovel cleanup uses `case catch` to handle badmatch and other exceptions gracefully
+- **Benign Failures**: Cleanup failures are logged as warnings but don't fail the migration
+
+### Message Count Verification
+- **Configurable Tolerance**: Separate tolerances for over-delivery (5%) and under-delivery (2%)
+- **Over-Delivery**: Extra messages logged as warning if within tolerance (may indicate timing or duplicates)
+- **Under-Delivery**: Missing messages logged as warning if within tolerance (may indicate expiration)
+- **Exceeds Tolerance**: Mismatches exceeding tolerance fail the migration
+- **Strict Mode**: Set both tolerances to 0.0 for strict verification
 
 ## Testing Considerations
 
@@ -406,16 +452,30 @@ This allows applications to redeclare queues with classic arguments without erro
 ## Performance Characteristics
 
 ### Typical Migration Rates
-- **Small queues**: 3-4 queues per minute
-- **Message processing**: Depends on message size and queue depth
-- **Parallel processing**: Multiple queues migrate simultaneously
+- **Small queues** (empty or few messages): 3-4 queues per minute
+- **Large queues** (thousands of messages): Depends on message size and queue depth
+- **Parallel processing**: Multiple queues migrate simultaneously via worker pool
 - **Resource usage**: Moderate memory increase during migration
 
+### Tested Performance (m7g.large, 2 vCPUs)
+- **500 queues, 100 messages each**:
+  - 1 worker: 29 minutes
+  - 2 workers: 14-15 minutes (2x speedup)
+  - 4 workers: Failed (network saturation, timeouts, partitions)
+- **Optimal configuration**: Worker count = scheduler count
+
 ### Scalability Features
-- **Worker pool scaling**: Adapts to system scheduler count
+- **Worker pool scaling**: Capped at scheduler count for stability
 - **Progress batching**: Reduces database write frequency
 - **Distributed processing**: Leverages all cluster nodes
 - **Configurable timeouts**: Adjustable for different environments
+- **Configurable prefetch**: Shovel prefetch count tunable for different message sizes
+
+### Resource Limits
+- **Worker pool**: Never exceeds scheduler count (prevents cluster instability)
+- **Message count**: Configurable per-queue limits with scaling based on total queue count
+- **Message bytes**: Configurable per-queue byte limits with scaling
+- **Disk space**: 2.5x safety multiplier plus 500MB minimum buffer
 
 ## Critical Behavioral Changes
 
@@ -492,22 +552,46 @@ This allows applications to redeclare queues with classic arguments without erro
 3. **Snapshot Creation**: Creates snapshots for all discovered RabbitMQ data volumes
 4. **Metadata Storage**: Stores snapshot IDs and metadata for potential rollback use
 5. **Error Handling**: Comprehensive error handling with fallback to tar mode if EBS fails
+6. **Concurrent Snapshot Detection**: Validates no snapshots in progress before starting migration
 
 ### AWS Configuration Requirements
 - **Credentials**: AWS credentials via environment variables, config files, or EC2 instance roles
 - **Region**: AWS region configuration (defaults to us-east-1, should match peer discovery)
-- **Permissions**: EC2 permissions for `CreateSnapshot`, `DescribeVolumes`, and `DescribeInstances`
+- **Permissions**: EC2 permissions for `CreateSnapshot`, `DescribeVolumes`, `DescribeSnapshots`, and `DescribeInstances`
 - **Volume Setup**: RabbitMQ data directory must be on EBS volume at configured device path
 
 ### Snapshot Timing
 - **When**: Created during pre-migration preparation phase, after quiescing nodes
 - **Purpose**: Provides point-in-time backup before migration starts
 - **Usage**: Can be used for manual rollback if migration fails catastrophically
+- **Validation**: Pre-migration check ensures no concurrent snapshots in progress
 
 ### Testing and Recovery Tools
 - **Snapshot Restore Script**: `priv/tools/restore_snapshot_test.sh` - Bash script for testing snapshot recovery
 - **Script Features**: Validates arguments, confirms destructive operations, supports force mode
 - **Usage**: Restores tar-based snapshots to test data directory for migration testing
 - **Safety**: Includes confirmation prompts and comprehensive error handling
+
+## Recent Improvements (January 2026)
+
+### Validation Enhancements
+- **Concurrent Snapshot Check**: Prevents migration when EBS snapshots are in progress (fixes `ConcurrentSnapshotLimitExceeded` errors)
+- **Complete Validation Chain**: All checks properly integrated (shovel plugin, Khepri, snapshots, etc.)
+
+### Error Handling Improvements
+- **Shovel Creation Retry**: Retries up to 10 times on exceptions (handles transient `noproc` errors)
+- **Shovel Cleanup Safety**: Uses `case catch` to handle badmatch and other cleanup exceptions gracefully
+- **Reduced Log Verbosity**: Exception logs show summary counts instead of full error lists
+- **Bad Key Fixes**: Removed dead code and fixed map access errors in validation handlers
+
+### Configuration Flexibility
+- **Message Count Verification**: Separate tolerances for over-delivery (5%) and under-delivery (2%)
+- **Shovel Prefetch**: Configurable prefetch count for different message sizes
+- **Worker Pool Maximum**: Increased to 32 (still capped at scheduler count for stability)
+
+### Performance Validation
+- **Testing Data**: Validated on m7g.large (2 vCPU) with 500-1000 queues
+- **Optimal Workers**: Performance scales linearly up to scheduler count
+- **Stability Limits**: Exceeding scheduler count causes network saturation and partitions
 
 This codebase represents a production-ready, enterprise-grade solution for RabbitMQ queue migration with comprehensive safety features, detailed progress tracking, robust error handling, automatic rollback capabilities, and extensive testing infrastructure.
