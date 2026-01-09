@@ -191,12 +191,17 @@ parse_snapshot_response([{"CreateSnapshotResponse", SnapshotData}]) ->
         description => proplists:get_value("description", SnapshotData, "")
     },
     {ok, SnapshotId, Metadata};
+parse_snapshot_response([{"Response", ErrorData}]) ->
+    % AWS error response format
+    {error, {snapshot_creation_failed, ErrorData}};
 parse_snapshot_response({error, ErrorType, ErrorDetails}) ->
     {error, {snapshot_creation_failed, ErrorType, ErrorDetails}}.
 
--spec parse_delete_response(term(), string()) -> {ok, string()}.
+-spec parse_delete_response(term(), string()) -> {ok, string()} | {error, term()}.
 parse_delete_response([{"DeleteSnapshotResponse", _ResponseData}], SnapshotId) ->
-    {ok, SnapshotId}.
+    {ok, SnapshotId};
+parse_delete_response([{"Response", ErrorData}], _SnapshotId) ->
+    {error, {snapshot_deletion_failed, ErrorData}}.
 
 -spec categorize_error(string(), term()) -> {error, term()}.
 categorize_error(VolumeId, Reason) ->
