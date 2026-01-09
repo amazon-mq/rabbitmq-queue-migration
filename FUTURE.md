@@ -1,7 +1,96 @@
 # Future Work - RabbitMQ Queue Migration Plugin
 
-**Last Updated:** January 8, 2026
+**Last Updated:** January 9, 2026
 **Status:** Planning for next development session
+
+## 1.0.0 Readiness
+
+Tasks required before releasing version 1.0.0 of the plugin:
+
+### Log Message Review and Cleanup
+
+**Status:** Not Started
+
+**Problem:**
+The plugin is currently overly verbose with log messages. Many informational details are logged at INFO level that should be DEBUG, making it difficult to identify truly important events in production logs.
+
+**Tasks:**
+1. **Audit all log messages** across all modules
+2. **Reclassify log levels** according to these guidelines:
+   - **DEBUG**: Internal state, detailed flow, progress updates for individual queues
+   - **INFO**: Major milestones only (migration started, migration completed, phase transitions, final statistics)
+   - **WARNING**: Unusual but handled conditions (retries, fallbacks, non-critical issues)
+   - **ERROR**: Actual problems requiring attention (validation failures, queue migration failures)
+   - **CRITICAL**: Major issues requiring immediate action (cluster-wide failures, data loss risks)
+
+3. **Review each module systematically:**
+   - `rqm.erl` - Core migration engine
+   - `rqm_checks.erl` - Validation checks
+   - `rqm_db.erl` - Database operations
+   - `rqm_snapshot.erl` - Snapshot management
+   - `rqm_util.erl` - Utilities
+   - `rqm_mgmt.erl` - HTTP API
+   - Other supporting modules
+
+4. **Specific areas to review:**
+   - Per-queue progress messages (likely should be DEBUG)
+   - Shovel creation/cleanup messages (likely should be DEBUG)
+   - Database update confirmations (likely should be DEBUG)
+   - Validation check details (some should be DEBUG)
+   - Keep only high-level progress at INFO
+
+**Goal:**
+Production logs should show clear, actionable information without overwhelming operators with implementation details.
+
+### Testing and Validation
+
+**Status:** In Progress
+
+**Tasks:**
+- [ ] Test skip unsuitable queues feature in production-like environment
+- [ ] Verify all queue skip reasons work correctly
+- [ ] Test with various unsuitable queue scenarios
+- [ ] Validate Web UI displays skipped queues correctly
+- [ ] Verify compatibility API with skip mode
+- [ ] Test with large queue counts (1000+ queues)
+- [ ] Verify message count tolerances work correctly
+- [ ] Test rollback scenarios
+
+### Documentation Completeness
+
+**Status:** In Progress
+
+**Tasks:**
+- [ ] Update FUTURE.md to mark completed features
+- [ ] Ensure all configuration parameters are documented
+- [ ] Verify all HTTP API endpoints are documented correctly
+- [ ] Add troubleshooting guide for common issues
+- [ ] Document skip unsuitable queues feature thoroughly
+- [ ] Add examples for all API parameters
+
+### Performance and Scalability
+
+**Status:** Not Started
+
+**Tasks:**
+- [ ] Benchmark with 5000+ queues
+- [ ] Test with various message sizes and volumes
+- [ ] Verify worker pool scaling on different instance sizes
+- [ ] Test memory usage patterns under load
+- [ ] Validate timeout configurations for large migrations
+
+### Error Handling and Recovery
+
+**Status:** Needs Review
+
+**Tasks:**
+- [ ] Review all exception handlers for completeness
+- [ ] Verify rollback mechanisms work correctly
+- [ ] Test failure scenarios (node failures, network issues, disk full)
+- [ ] Ensure all error messages are actionable
+- [ ] Verify cleanup happens in all error paths
+
+---
 
 ## Immediate Tasks
 
@@ -71,20 +160,18 @@ Content-Type: application/json
 
 ### 3. Skip Unsuitable Queues Instead of Blocking Migration
 
+**Status:** ✅ IMPLEMENTED (January 9, 2026)
+
 **Feature:** Allow migrations to proceed by skipping queues that fail validation
 
-**Current Behavior:**
-- Any unsuitable queue blocks the entire migration
-- All queues must pass validation or none migrate
-- User must fix all issues before any migration can proceed
-
-**Proposed Behavior:**
+**Implementation Complete:**
 - System-level checks still block (shovel plugin, Khepri, disk space, alarms, memory, snapshots, partitions, leader balance)
 - Queue-level checks identify queues to skip (unsynchronized, too many messages/bytes, incompatible arguments)
 - Migration proceeds with suitable queues, skips unsuitable ones
-- Skipped queues tracked in migration record with skip reasons
+- Skipped queues tracked with `queue_migration_status` records with `status = skipped`
+- Skip reasons stored in `error` field: `unsynchronized`, `too_many_messages`, `too_many_bytes`, `too_many_queues`, `incompatible_overflow`
 
-**API Design:**
+**API Implementation:**
 ```bash
 PUT /api/queue-migration/start
 Content-Type: application/json
@@ -95,25 +182,21 @@ Content-Type: application/json
 GET /api/queue-migration/compatibility?skip_unsuitable_queues=true
 ```
 
-**Implementation Changes:**
+**Completed Implementation:**
 
-1. **Migration Record**: Add `skipped_queues` field to track skipped queues with reasons
-2. **Validation Chain**: 
-   - `check_queue_synchronization` returns list of unsynchronized queues instead of error
-   - `check_queue_suitability` returns list of unsuitable queues instead of error
-3. **Migration Logic**: Filter out skipped queues before processing
-4. **Status API**: Include skipped queues in response with skip reasons
-5. **Compatibility API**: When `skip_unsuitable_queues=true`, show unsuitable queues as "will be skipped" instead of errors
-6. **Web UI**: Display skipped queues separately from migrated/failed queues
+1. ✅ **Data Model**: Added `unsuitable_queue` record and `skipped` status type
+2. ✅ **Migration Record**: Added `skip_unsuitable_queues` and `skipped_queues` fields
+3. ✅ **Validation Chain**: Handlers accumulate unsuitable queues when skip mode enabled
+4. ✅ **Database Operations**: `create_skipped_queue_status/3` creates skipped queue records
+5. ✅ **Migration Logic**: Nodes filter out queues with existing status records
+6. ✅ **HTTP APIs**: Both migration and compatibility APIs accept `skip_unsuitable_queues` parameter
+7. ✅ **Status Reporting**: JSON output includes `skipped_queues` count and individual queue skip reasons
+8. ✅ **Web UI**: Checkboxes in both migration and compatibility forms, skipped status display
 
-**Skip Reasons:**
-- `unsynchronized` - Queue mirrors not synchronized
-- `too_many_messages` - Message count exceeds limit
-- `too_many_bytes` - Byte count exceeds limit
-- `incompatible_overflow` - Has `reject-publish-dlx` argument
-- `too_many_queues` - Part of batch exceeding queue count limit
+**Testing Status:**
+- Awaiting production-like testing with various unsuitable queue scenarios
 
-**Benefits:**
+**Benefits Achieved:**
 - Migrate what's possible without fixing every issue first
 - Incremental approach - fix problematic queues and migrate them later
 - Reduces migration friction for large deployments
