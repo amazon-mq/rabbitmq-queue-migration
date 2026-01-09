@@ -264,20 +264,33 @@ Check if queues are eligible for migration and validate system readiness.
 
 **Endpoints:**
 ```
-GET /api/queue-migration/compatibility
-GET /api/queue-migration/compatibility/:vhost
+POST /api/queue-compatibility/check/:vhost
 ```
 
 **Parameters:**
-- `:vhost` (optional) - Virtual host name (URL-encoded). Defaults to `/` if not specified.
+- `:vhost` - Virtual host name (URL-encoded). Use `all` to check all vhosts.
+
+**Request Body (optional):**
+```json
+{
+  "skip_unsuitable_queues": true
+}
+```
+
+**Request Body Fields:**
+- `skip_unsuitable_queues` (optional, boolean) - When `true`, unsuitable queues are shown as informational and don't affect overall readiness. Defaults to `false`.
 
 **Request:**
 ```bash
-# Default vhost (/)
-curl -u guest:guest http://localhost:15672/api/queue-migration/compatibility
+# Default behavior
+curl -u guest:guest -X POST \
+  http://localhost:15672/api/queue-compatibility/check/%2F
 
-# Specific vhost
-curl -u guest:guest http://localhost:15672/api/queue-migration/compatibility/my-vhost
+# With skip mode enabled
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"skip_unsuitable_queues": true}' \
+  http://localhost:15672/api/queue-compatibility/check/%2F
 ```
 
 **Response (200 OK):**
@@ -555,7 +568,7 @@ The API does not implement rate limiting, but be considerate:
 
 # 1. Check compatibility
 echo "Checking compatibility..."
-curl -s -u guest:guest http://localhost:15672/api/queue-migration/compatibility | jq
+curl -s -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2F | jq
 
 # 2. Start migration
 echo "Starting migration..."

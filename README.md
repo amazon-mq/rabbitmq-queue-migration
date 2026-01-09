@@ -47,7 +47,7 @@ Enable on all cluster nodes for consistent behavior.
 Check if your cluster is ready for migration:
 
 ```bash
-curl -u guest:guest http://localhost:15672/api/queue-migration/compatibility
+curl -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2F
 ```
 
 ### 2. Start Migration
@@ -291,7 +291,7 @@ See [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) for detailed testing docume
 
 **Check validation errors:**
 ```bash
-curl -u guest:guest http://localhost:15672/api/queue-migration/compatibility
+curl -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2F
 ```
 
 Common issues:
