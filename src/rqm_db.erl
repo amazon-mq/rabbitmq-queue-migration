@@ -16,7 +16,7 @@
 
 %% Migration record operations
 -export([
-    create_migration/3,
+    create_migration/4,
     update_migration_status/2,
     update_migration_completed/2,
     update_migration_completed_count/1,
@@ -29,6 +29,7 @@
 %% Queue status record operations
 -export([
     create_queue_status/2,
+    create_skipped_queue_status/3,
     update_queue_status_started/3,
     update_queue_status_progress/2,
     update_queue_status_completed/5,
@@ -79,8 +80,8 @@ get_message_count(Resource) when is_record(Resource, resource) ->
 %% Migration record operations
 
 %% @doc Create a new migration record
--spec create_migration(term(), binary(), erlang:timestamp()) -> {ok, #queue_migration{}}.
-create_migration(MigrationId, VHost, StartTime) ->
+-spec create_migration(term(), binary(), erlang:timestamp(), boolean()) -> {ok, #queue_migration{}}.
+create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues) ->
     MigrationRecord = #queue_migration{
         id = MigrationId,
         vhost = VHost,
@@ -89,7 +90,8 @@ create_migration(MigrationId, VHost, StartTime) ->
         total_queues = 0,
         completed_queues = 0,
         status = in_progress,
-        snapshots = []
+        snapshots = [],
+        skip_unsuitable_queues = SkipUnsuitableQueues
     },
     mnesia:dirty_write(MigrationRecord),
     {ok, MigrationRecord}.
@@ -182,6 +184,22 @@ create_queue_status(Resource, MigrationId) ->
         migrated_messages = 0,
         status = pending,
         error = undefined
+    },
+    mnesia:dirty_write(QueueStatus),
+    {ok, QueueStatus}.
+
+%% @doc Create a skipped queue status record
+-spec create_skipped_queue_status(#resource{}, term(), term()) -> {ok, #queue_migration_status{}}.
+create_skipped_queue_status(Resource, MigrationId, SkipReason) ->
+    QueueStatus = #queue_migration_status{
+        queue_resource = Resource,
+        migration_id = MigrationId,
+        started_at = os:timestamp(),
+        completed_at = os:timestamp(),
+        total_messages = 0,
+        migrated_messages = 0,
+        status = skipped,
+        error = SkipReason
     },
     mnesia:dirty_write(QueueStatus),
     {ok, QueueStatus}.

@@ -83,7 +83,9 @@
     % List of rollback errors per queue
     rollback_errors,
     % List of snapshot info: [{Node, SnapshotId, VolumeId}, ...]
-    snapshots
+    snapshots,
+    % Whether to skip unsuitable queues instead of blocking migration
+    skip_unsuitable_queues = false :: boolean()
 }).
 
 %% Record to track individual queue migration status
@@ -120,4 +122,10 @@
 -type snapshot_id() :: binary().
 
 -type migration_status() ::
-    'pending' | 'in_progress' | 'completed' | 'failed' | 'rollback_pending' | 'rollback_completed'.
+    'pending'
+    | 'in_progress'
+    | 'completed'
+    | 'failed'
+    | 'skipped'
+    | 'rollback_pending'
+    | 'rollback_completed'.

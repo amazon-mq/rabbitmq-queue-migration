@@ -96,7 +96,9 @@ pre_migration_validation(relaxed_checks_setting, Opts) ->
 pre_migration_validation(balanced_queue_leaders, Opts) ->
     handle_check_leader_balance(rqm_checks:check_leader_balance(opts_vhost(Opts)), Opts);
 pre_migration_validation(queue_synchronization, Opts) ->
-    handle_check_queue_synchronization(rqm_checks:check_queue_synchronization(opts_vhost(Opts)), Opts);
+    handle_check_queue_synchronization(
+        rqm_checks:check_queue_synchronization(opts_vhost(Opts)), Opts
+    );
 pre_migration_validation(queue_suitability, Opts) ->
     handle_check_queue_suitability(rqm_checks:check_queue_suitability(opts_vhost(Opts)), Opts);
 pre_migration_validation(queue_message_count, Opts) ->
@@ -227,9 +229,9 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
 handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only}) ->
     % Validation passed - return ok without starting migration
     ok;
-handle_check_cluster_partitions({ok, Nodes}, #migration_opts{mode = migration, vhost = VHost}) ->
-    MigrationResult = start_with_new_migration_id(Nodes, VHost, generate_migration_id()),
-    handle_migration_result(MigrationResult, VHost);
+handle_check_cluster_partitions({ok, Nodes}, #migration_opts{mode = migration} = Opts) ->
+    MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
+    handle_migration_result(MigrationResult, opts_vhost(Opts));
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
@@ -245,16 +247,17 @@ handle_migration_result({error, MigrationError}, _VHost) ->
     % Do not attempt to restore normal operations as cluster state may be inconsistent
     {error, {migration_failed, MigrationError}}.
 
-start_with_new_migration_id(Nodes, VHost, MigrationId) ->
-    maybe_start_with_lock(get_queue_migrate_lock(Nodes), Nodes, VHost, MigrationId).
+start_with_new_migration_id(Nodes, Opts, MigrationId) ->
+    maybe_start_with_lock(get_queue_migrate_lock(Nodes), Nodes, Opts, MigrationId).
 
-maybe_start_with_lock({true, GlobalLockId}, Nodes, VHost, MigrationId) ->
-    ok = start_with_lock(GlobalLockId, Nodes, VHost, MigrationId);
-maybe_start_with_lock(false, _Nodes, _VHost, _MigrationId) ->
+maybe_start_with_lock({true, GlobalLockId}, Nodes, Opts, MigrationId) ->
+    ok = start_with_lock(GlobalLockId, Nodes, Opts, MigrationId);
+maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
     ?LOG_WARNING("rqm: already in progress."),
     {error, cmq_qq_migration_in_progress}.
 
-start_with_lock(GlobalLockId, Nodes, VHost, MigrationId) ->
+start_with_lock(GlobalLockId, Nodes, Opts, MigrationId) ->
+    VHost = opts_vhost(Opts),
     try
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Pre-migration Preparation
@@ -266,7 +269,7 @@ start_with_lock(GlobalLockId, Nodes, VHost, MigrationId) ->
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% MCQ -> QQ Migration
         %%
-        {ok, MigrationDuration} = mcq_qq_migration(MigrationId, PreparationState, Nodes, VHost),
+        {ok, MigrationDuration} = mcq_qq_migration(MigrationId, PreparationState, Nodes, Opts),
         %% TODO IMPORTANT - RESTORE CONNECTIONS ON ANY FAILURE!
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -324,7 +327,7 @@ handle_migration_exception(Class, Ex, Stack, VHost, MigrationId) ->
     ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
         format_migration_id(MigrationId)
     ]),
-    {ok, _} = rqm_db:create_migration(MigrationId, VHost, os:timestamp()),
+    {ok, _} = rqm_db:create_migration(MigrationId, VHost, os:timestamp(), false),
     {ok, _} = rqm_db:update_migration_status(MigrationId, failed),
     ok.
 
@@ -556,7 +559,8 @@ cleanup_single_snapshot(SnapshotId) ->
 %% MCQ -> QQ Migration
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-mcq_qq_migration(MigrationId, PreparationState, Nodes, VHost) ->
+mcq_qq_migration(MigrationId, PreparationState, Nodes, Opts) ->
+    VHost = opts_vhost(Opts),
     ?LOG_INFO(
         "rqm: starting migration ~s for vhost ~tp on nodes ~tp",
         [format_migration_id(MigrationId), VHost, Nodes]
@@ -569,7 +573,12 @@ mcq_qq_migration(MigrationId, PreparationState, Nodes, VHost) ->
         "rqm: creating migration record ~s for vhost ~tp",
         [format_migration_id(MigrationId), VHost]
     ),
-    {ok, _} = rqm_db:create_migration(MigrationId, VHost, os:timestamp()),
+    {ok, _} = rqm_db:create_migration(
+        MigrationId,
+        VHost,
+        os:timestamp(),
+        opts_skip(Opts)
+    ),
 
     %% Store snapshot information in migration record
     ok = store_snapshot_information(MigrationId, PreparationState),
@@ -1910,3 +1919,6 @@ wait_for_monitored_processes_loop(RefsMap0, Deadline) ->
 
 opts_vhost(#migration_opts{vhost = VHost}) ->
     VHost.
+
+opts_skip(#migration_opts{skip_unsuitable_queues = Skip}) ->
+    Skip.
