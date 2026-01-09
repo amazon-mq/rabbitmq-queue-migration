@@ -152,6 +152,15 @@ handle_check_leader_balance({error, {imbalanced, _}}, _Opts) ->
 
 handle_check_queue_synchronization(ok, Opts) ->
     pre_migration_validation(queue_suitability, Opts);
+handle_check_queue_synchronization(
+    {error, {unsynchronized_queues, QueueNames}},
+    #migration_opts{skip_unsuitable_queues = true} = Opts
+) ->
+    ?LOG_INFO(
+        "rqm: found ~p unsynchronized queue(s), will skip during migration: ~p",
+        [length(QueueNames), QueueNames]
+    ),
+    pre_migration_validation(queue_suitability, Opts);
 handle_check_queue_synchronization({error, {unsynchronized_queues, QueueNames}}, _Opts) ->
     ?LOG_ERROR(
         "rqm: stopping migration due to unsynchronized queues: ~p. "
@@ -161,6 +170,16 @@ handle_check_queue_synchronization({error, {unsynchronized_queues, QueueNames}},
     {error, {unsynchronized_queues, QueueNames}}.
 
 handle_check_queue_suitability(ok, Opts) ->
+    pre_migration_validation(queue_message_count, Opts);
+handle_check_queue_suitability(
+    {error, {unsuitable_queues, Details}},
+    #migration_opts{skip_unsuitable_queues = true} = Opts
+) ->
+    ProblematicQueues = maps:get(problematic_queues, Details, []),
+    ?LOG_INFO(
+        "rqm: found ~p unsuitable queue(s), will skip during migration",
+        [length(ProblematicQueues)]
+    ),
     pre_migration_validation(queue_message_count, Opts);
 handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
