@@ -732,10 +732,36 @@ start_migration_on_node(QueueCountGatherer, Gatherer, VHost, MigrationId) ->
     ),
 
     % Filter eligible queues
-    EligibleQueues = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
-    QueueCount = length(EligibleQueues),
+    EligibleQueues0 = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
     ?LOG_INFO(
         "rqm: ~w queues eligible for migration on node ~tp (migration ~s)",
+        [length(EligibleQueues0), node(), format_migration_id(MigrationId)]
+    ),
+
+    % Filter out queues that already have status records (e.g., skipped queues)
+    EligibleQueues1 = lists:filter(
+        fun(Q) ->
+            Resource = amqqueue:get_name(Q),
+            case rqm_db:get_queue_status(Resource) of
+                {ok, _Status} -> false;
+                {error, not_found} -> true
+            end
+        end,
+        EligibleQueues0
+    ),
+    QueueCount = length(EligibleQueues1),
+    SkippedCount = length(EligibleQueues0) - QueueCount,
+    case SkippedCount of
+        0 ->
+            ok;
+        _ ->
+            ?LOG_INFO(
+                "rqm: ~w queues already have status records (skipped), will not process on node ~tp",
+                [SkippedCount, node()]
+            )
+    end,
+    ?LOG_INFO(
+        "rqm: ~w queues to migrate on node ~tp (migration ~s)",
         [QueueCount, node(), format_migration_id(MigrationId)]
     ),
 
@@ -744,7 +770,7 @@ start_migration_on_node(QueueCountGatherer, Gatherer, VHost, MigrationId) ->
         case QueueCount > 0 of
             true ->
                 % Update total queue count in the migration record and create queue status records
-                case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues, VHost) of
+                case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues1, VHost) of
                     {atomic, {ok, UpdatedQueueCount}} ->
                         ?LOG_INFO("rqm: updated migration record with ~w queues", [
                             UpdatedQueueCount
@@ -755,7 +781,7 @@ start_migration_on_node(QueueCountGatherer, Gatherer, VHost, MigrationId) ->
                         ])
                 end,
                 % Process the eligible queues
-                process_queues_for_migration(EligibleQueues, Gatherer, MigrationId),
+                process_queues_for_migration(EligibleQueues1, Gatherer, MigrationId),
                 {ok, {node_queue_count, QueueCount}};
             false ->
                 {ok, {node_queue_count, 0}}
