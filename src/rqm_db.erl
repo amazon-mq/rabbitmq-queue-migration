@@ -359,6 +359,7 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
         % Create queue status records
         [
             mnesia:write(#queue_migration_status{
+                key = {amqqueue:get_name(Q), MigrationId},
                 queue_resource = amqqueue:get_name(Q),
                 migration_id = MigrationId,
                 started_at = undefined,
