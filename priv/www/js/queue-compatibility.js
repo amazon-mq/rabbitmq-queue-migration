@@ -18,9 +18,11 @@ dispatcher_add(function(sammy) {
         }
 
         with_req('POST', '/queue-compatibility/check/' + encodeURIComponent(vhost), requestBody, function(resp) {
-            // Render results directly instead of navigating
-            render({compatibility_results: resp},
-                   'queue-compatibility-results', '#/queue-compatibility');
+            // Parse response and render template directly
+            var data = JSON.parse(resp.responseText);
+            var html = format('queue-compatibility-results', {compatibility_results: data});
+            replace_content('main', html);
+            postprocess();
         });
 
         return false;
