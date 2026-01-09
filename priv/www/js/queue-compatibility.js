@@ -9,10 +9,21 @@ dispatcher_add(function(sammy) {
                'queue-compatibility', '#/queue-compatibility');
     });
 
-    sammy.get('#/queue-compatibility/:vhost', function() {
-        var vhost = esc(this.params['vhost']);
-        render({compatibility_results: '/queue-compatibility/check/' + vhost},
-               'queue-compatibility-results', '#/queue-compatibility');
+    sammy.post('#/queue-compatibility/check', function() {
+        var self = this;
+        var vhost = self.params.vhost || '/';
+        var requestBody = {};
+        if (self.params.skip_unsuitable_queues === 'on') {
+            requestBody.skip_unsuitable_queues = true;
+        }
+
+        with_req('POST', '/queue-compatibility/check/' + encodeURIComponent(vhost), requestBody, function(resp) {
+            // Render results directly instead of navigating
+            render({compatibility_results: resp},
+                   'queue-compatibility-results', '#/queue-compatibility');
+        });
+
+        return false;
     });
 });
 

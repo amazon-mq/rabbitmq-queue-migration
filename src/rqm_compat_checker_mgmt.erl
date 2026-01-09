@@ -36,7 +36,7 @@ content_types_provided(ReqData, Context) ->
     {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 allowed_methods(ReqData, Context) ->
-    {[<<"GET">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, Context}.
+    {[<<"POST">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
     {true, ReqData, Context}.
@@ -52,13 +52,16 @@ to_json(ReqData, Context) ->
             _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
         end,
 
+    % Parse options from request body (for POST) or use defaults (for GET)
+    OptsMap = parse_compatibility_options(ReqData),
+
     case VHost of
         all_vhosts ->
             % Handle all vhosts case - run migration readiness for each
             AllVhosts = [VH || VH <- rabbit_vhost:list()],
             Results = lists:map(
                 fun(VH) ->
-                    RawResult = rqm_compat_checker:check_migration_readiness(VH),
+                    RawResult = rqm_compat_checker:check_migration_readiness(VH, OptsMap),
                     format_migration_readiness_response(RawResult)
                 end,
                 AllVhosts
@@ -71,7 +74,7 @@ to_json(ReqData, Context) ->
             {Json, ReqData, Context};
         _ ->
             % Single vhost - run complete migration readiness check
-            Result = rqm_compat_checker:check_migration_readiness(VHost),
+            Result = rqm_compat_checker:check_migration_readiness(VHost, OptsMap),
 
             % Format for JSON response
             FormattedResult = format_migration_readiness_response(Result),
@@ -213,4 +216,27 @@ format_queue_checks_for_ui(#{summary := Summary, results := Results}) ->
                 summary => Summary,
                 results => FormattedResults
             }
+    end.
+
+parse_compatibility_options(ReqData) ->
+    case cowboy_req:has_body(ReqData) of
+        true ->
+            {ok, Body, _} = cowboy_req:read_body(ReqData),
+            case Body of
+                <<>> ->
+                    #{};
+                _ ->
+                    case rabbit_json:try_decode(Body) of
+                        {ok, Json} when is_map(Json) ->
+                            case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
+                                true -> #{skip_unsuitable_queues => true};
+                                false -> #{skip_unsuitable_queues => false};
+                                _ -> #{}
+                            end;
+                        _ ->
+                            #{}
+                    end
+            end;
+        false ->
+            #{}
     end.

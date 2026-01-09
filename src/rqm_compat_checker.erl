@@ -14,7 +14,8 @@
     check_all_vhosts/0, check_all_vhosts/1,
     check_vhost/1, check_vhost/2,
     check_queue/1,
-    check_migration_readiness/1
+    check_migration_readiness/1,
+    check_migration_readiness/2
 ]).
 
 %% Check all queues in all vhosts
@@ -284,6 +285,12 @@ check_critical_message_ttl(Args) ->
 %% @doc Run complete migration readiness check (system + queues)
 -spec check_migration_readiness(rabbit_types:vhost()) -> map().
 check_migration_readiness(VHost) ->
+    check_migration_readiness(VHost, #{}).
+
+-spec check_migration_readiness(rabbit_types:vhost(), map()) -> map().
+check_migration_readiness(VHost, OptsMap) ->
+    SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
+
     % Run all system checks (never stops early)
     SystemChecks = rqm_checks:check_system_migration_readiness(VHost),
 
@@ -293,12 +300,17 @@ check_migration_readiness(VHost) ->
     % Determine overall readiness
     SystemReady = lists:all(fun(#{status := Status}) -> Status =:= passed end, SystemChecks),
     QueueReady = maps:get(incompatible_queues, QueueSummary) =:= 0,
-    OverallReady = SystemReady andalso QueueReady,
+    OverallReady =
+        case SkipUnsuitableQueues of
+            true -> SystemReady;
+            false -> SystemReady andalso QueueReady
+        end,
 
     % Format combined results
     #{
         vhost => VHost,
         overall_ready => OverallReady,
+        skip_unsuitable_queues => SkipUnsuitableQueues,
         system_checks => #{
             all_passed => SystemReady,
             checks => SystemChecks

@@ -10,9 +10,21 @@ SPDX-License-Identifier: Apache-2.0
   <p>
     This tool checks classic queues for compatibility with quorum queues in the current virtual host.
   </p>
-  
-  <form action="#/queue-compatibility" method="get" class="queue-compatibility-form">
-    <input type="button" id="check-compatibility-btn" value="Check Compatibility" />
+
+  <form action="#/queue-compatibility/check" method="post" class="queue-compatibility-form">
+    <input type="hidden" name="vhost" id="compat-vhost" value="/" />
+    <table class="form">
+      <tr>
+        <th>Skip Unsuitable Queues:</th>
+        <td>
+          <input type="checkbox" name="skip_unsuitable_queues" id="compat_skip_unsuitable_queues" />
+          <label for="compat_skip_unsuitable_queues">
+            Show unsuitable queues as informational (will be skipped during migration)
+          </label>
+        </td>
+      </tr>
+    </table>
+    <input type="submit" value="Check Compatibility" />
   </form>
 </div>
 
@@ -37,15 +49,12 @@ SPDX-License-Identifier: Apache-2.0
 
 <script>
 $(document).ready(function() {
-  $('#check-compatibility-btn').click(function() {
-    var vhost = current_vhost;
-    if (vhost === "") {
-      // "All" vhosts is selected in the global dropdown
-      go_to('#/queue-compatibility/all');
-    } else {
-      go_to('#/queue-compatibility/' + esc(vhost));
-    }
-  });
+  // Set the current vhost in the hidden field
+  var vhost = current_vhost || '/';
+  if (vhost === "") {
+    vhost = "all";
+  }
+  $('#compat-vhost').val(vhost);
 });
 </script>
 

@@ -57,7 +57,11 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     <% if (data.overall_ready) { %>
       <div class="alert alert-success">
         <h3><span class="status-green">✓ Ready for Migration</span></h3>
-        <p>All system requirements are met and all queues are compatible.</p>
+        <% if (data.skip_unsuitable_queues && data.queue_checks.summary.incompatible_queues > 0) { %>
+          <p>All system requirements are met. <%= data.queue_checks.summary.incompatible_queues %> unsuitable queue(s) will be skipped during migration.</p>
+        <% } else { %>
+          <p>All system requirements are met and all queues are compatible.</p>
+        <% } %>
       </div>
     <% } else { %>
       <div class="alert alert-danger">
