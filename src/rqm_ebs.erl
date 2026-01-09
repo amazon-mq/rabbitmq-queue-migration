@@ -81,6 +81,7 @@ create_volume_snapshot(VolumeId, Options) ->
     Headers = [{"content-type", "application/x-www-form-urlencoded"}],
     case rabbitmq_aws:post("ec2", "/", Body, Headers) of
         {ok, {_Headers, Response}} -> parse_snapshot_response(Response);
+        {error, _Message, {_Headers, Response}} -> parse_snapshot_response(Response);
         {error, Reason} -> categorize_error(VolumeId, Reason)
     end.
 
@@ -100,6 +101,7 @@ delete_volume_snapshot(SnapshotId, Options) ->
     Headers = [{"content-type", "application/x-www-form-urlencoded"}],
     case rabbitmq_aws:post("ec2", "/", Body, Headers) of
         {ok, {_Headers, Response}} -> parse_delete_response(Response, SnapshotId);
+        {error, _Message, {_Headers, Response}} -> parse_delete_response(Response, SnapshotId);
         {error, Reason} -> categorize_delete_error(SnapshotId, Reason)
     end.
 
