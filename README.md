@@ -83,16 +83,21 @@ See [HTTP_API.md](HTTP_API.md) for complete API reference.
 
 The plugin performs comprehensive checks before starting migration:
 
+**System-Level Checks** (always block migration):
 1. **Plugin Requirements**: Validates `rabbitmq_shovel` is enabled and Khepri is disabled
 2. **Configuration**: Checks `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
 3. **Queue Balance**: Ensures queue leaders are balanced across nodes
-4. **Queue Synchronization**: Verifies all queue mirrors are synchronized
-5. **Queue Eligibility**: Confirms queues are mirrored classic queues with HA policies
-6. **Message Limits**: Validates queue message counts and bytes are within limits
-7. **Disk Space**: Estimates required disk space and verifies availability
-8. **System Health**: Checks for active alarms and memory pressure
-9. **Snapshot Availability**: Verifies no concurrent EBS snapshots in progress
-10. **Cluster Health**: Validates no partitions and all nodes are up
+4. **Disk Space**: Estimates required disk space and verifies availability
+5. **System Health**: Checks for active alarms and memory pressure
+6. **Snapshot Availability**: Verifies no concurrent EBS snapshots in progress
+7. **Cluster Health**: Validates no partitions and all nodes are up
+
+**Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
+1. **Queue Synchronization**: Verifies all queue mirrors are synchronized
+2. **Queue Suitability**: Confirms queues don't have incompatible arguments (e.g., `reject-publish-dlx`)
+3. **Message Limits**: Validates queue message counts and bytes are within limits
+
+When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
 
 ### Two-Phase Migration
 

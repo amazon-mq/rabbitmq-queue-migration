@@ -292,28 +292,40 @@ check_migration_readiness(VHost, OptsMap) ->
     SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
 
     % Run all system checks (never stops early)
-    SystemChecks = rqm_checks:check_system_migration_readiness(VHost),
+    AllChecks = rqm_checks:check_system_migration_readiness(VHost),
+
+    % Separate true system checks from queue-level checks
+    QueueLevelCheckTypes = [queue_synchronization, queue_suitability, message_count],
+    {SystemChecks, QueueLevelChecks} = lists:partition(
+        fun(#{check_type := CheckType}) ->
+            not lists:member(CheckType, QueueLevelCheckTypes)
+        end,
+        AllChecks
+    ),
 
     % Run queue compatibility checks
     {VHost, QueueResults, QueueSummary} = check_vhost(VHost, incompatible_only),
 
     % Determine overall readiness
-    SystemReady = lists:all(fun(#{status := Status}) -> Status =:= passed end, SystemChecks),
+    TrueSystemReady = lists:all(fun(#{status := Status}) -> Status =:= passed end, SystemChecks),
+    QueueChecksReady = lists:all(
+        fun(#{status := Status}) -> Status =:= passed end, QueueLevelChecks
+    ),
     QueueReady = maps:get(incompatible_queues, QueueSummary) =:= 0,
     OverallReady =
         case SkipUnsuitableQueues of
-            true -> SystemReady;
-            false -> SystemReady andalso QueueReady
+            true -> TrueSystemReady;
+            false -> TrueSystemReady andalso QueueChecksReady andalso QueueReady
         end,
 
-    % Format combined results
+    % Format combined results (include all checks for display)
     #{
         vhost => VHost,
         overall_ready => OverallReady,
         skip_unsuitable_queues => SkipUnsuitableQueues,
         system_checks => #{
-            all_passed => SystemReady,
-            checks => SystemChecks
+            all_passed => lists:all(fun(#{status := Status}) -> Status =:= passed end, AllChecks),
+            checks => AllChecks
         },
         queue_checks => #{
             summary => QueueSummary,
