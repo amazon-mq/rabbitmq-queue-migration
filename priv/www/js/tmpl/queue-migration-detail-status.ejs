@@ -34,6 +34,9 @@ SPDX-License-Identifier: Apache-2.0
         <td class="updatable">
           <%= queue_migration_detail_status.migration.completed_queues %> of <%= queue_migration_detail_status.migration.total_queues %> queues
           (<%= Math.round((queue_migration_detail_status.migration.completed_queues / queue_migration_detail_status.migration.total_queues) * 100) || 0 %>%)
+          <% if (queue_migration_detail_status.migration.skipped_queues > 0) { %>
+            <br/><span class="status-yellow"><%= queue_migration_detail_status.migration.skipped_queues %> queues skipped</span>
+          <% } %>
         </td>
       </tr>
     </table>

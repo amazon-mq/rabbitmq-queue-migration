@@ -17,8 +17,14 @@ dispatcher_add(function(sammy) {
     sammy.put('#/queue-migration/start', function() {
         var self = this;
 
+        // Build request body with options
+        var requestBody = {};
+        if (self.params.skip_unsuitable_queues === 'on') {
+            requestBody.skip_unsuitable_queues = true;
+        }
+
         // Use the existing with_req function for async requests with proper error handling
-        with_req('PUT', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), null, function(resp) {
+        with_req('PUT', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), requestBody, function(resp) {
             // Success callback - migration started successfully
             $('#start-migration-section').hide();
             $('#migration-started-message').show();
@@ -64,6 +70,8 @@ function fmt_queue_status(status) {
         return '<span class="status-green">Completed</span>';
     } else if (status === 'failed') {
         return '<span class="status-red">Failed</span>';
+    } else if (status === 'skipped') {
+        return '<span class="status-yellow">Skipped</span>';
     } else {
         return '<span>' + status + '</span>';
     }

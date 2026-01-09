@@ -83,6 +83,15 @@ SPDX-License-Identifier: Apache-2.0
             </select>
           </td>
         </tr>
+        <tr>
+          <th>Skip Unsuitable Queues:</th>
+          <td>
+            <input type="checkbox" name="skip_unsuitable_queues" id="skip_unsuitable_queues" />
+            <label for="skip_unsuitable_queues">
+              Skip queues that fail validation checks instead of blocking migration
+            </label>
+          </td>
+        </tr>
       </table>
       <input type="submit" value="Start Migration"/>
     </form>
