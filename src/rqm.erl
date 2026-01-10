@@ -111,8 +111,10 @@ pre_migration_validation(queue_suitability, #migration_opts{vhost = VHost} = Opt
     handle_check_queue_suitability(rqm_checks:check_queue_suitability(VHost), Opts);
 pre_migration_validation(queue_message_count, #migration_opts{vhost = VHost} = Opts) ->
     handle_check_queue_message_count(rqm_checks:check_queue_message_count(VHost), Opts);
-pre_migration_validation(disk_space, #migration_opts{vhost = VHost} = Opts) ->
-    handle_check_disk_space(rqm_checks:check_disk_space(VHost), Opts);
+pre_migration_validation(
+    disk_space, #migration_opts{vhost = VHost, unsuitable_queues = UnsuitableQueues} = Opts
+) ->
+    handle_check_disk_space(rqm_checks:check_disk_space(VHost, UnsuitableQueues), Opts);
 pre_migration_validation(active_alarms, Opts) ->
     handle_check_active_alarms(rqm_checks:check_active_alarms(), Opts);
 pre_migration_validation(memory_usage, Opts) ->

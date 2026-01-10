@@ -14,7 +14,6 @@
     check_queue_synchronization/1,
     check_queue_message_count/1,
     check_queue_suitability/1,
-    check_disk_space/1,
     check_disk_space/2,
     check_system_migration_readiness/1,
     check_snapshot_not_in_progress/0,
@@ -268,10 +267,11 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
 %% for the default virtual host.
 %% Returns {ok, sufficient} if there is enough disk space,
 %% {error, {insufficient_disk_space, Details}} if not enough space available.
--spec check_disk_space(rabbit_types:vhost()) ->
+-spec check_disk_space(rabbit_types:vhost(), list()) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
-check_disk_space(VHost) ->
-    check_disk_space(VHost, rqm_config:disk_space_safety_multiplier()).
+check_disk_space(VHost, UnsuitableQueues) ->
+    SafetyMultiplier = rqm_config:disk_space_safety_multiplier(),
+    check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier).
 
 %% @doc Check disk space availability with custom safety multiplier.
 %% The safety multiplier accounts for:
@@ -279,9 +279,9 @@ check_disk_space(VHost) ->
 %% - Message duplication during transfer (1x current usage)
 %% - Safety buffer for other operations (0.5x current usage)
 %% Default multiplier of 2.5 provides reasonable safety margin.
--spec check_disk_space(rabbit_types:vhost(), float()) ->
+-spec check_disk_space(rabbit_types:vhost(), list(), float()) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
-check_disk_space(VHost, SafetyMultiplier) ->
+check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier) ->
     % Get current disk space information
     CurrentFree = rabbit_disk_monitor:get_disk_free(),
     DiskFreeLimit = rabbit_disk_monitor:get_disk_free_limit(),
@@ -296,7 +296,9 @@ check_disk_space(VHost, SafetyMultiplier) ->
                 }}};
         _ when is_integer(CurrentFree) ->
             % Estimate disk space needed for migration
-            EstimatedUsage = estimate_migration_disk_usage(VHost, SafetyMultiplier),
+            EstimatedUsage = estimate_migration_disk_usage(
+                VHost, UnsuitableQueues, SafetyMultiplier
+            ),
             RequiredFree = EstimatedUsage + rqm_config:min_disk_space_buffer(),
 
             % Check if we have sufficient space
@@ -315,9 +317,20 @@ check_disk_space(VHost, SafetyMultiplier) ->
 %%----------------------------------------------------------------------------
 
 %% @doc Estimate the disk space required for migration
--spec estimate_migration_disk_usage(rabbit_types:vhost(), float()) -> non_neg_integer().
-estimate_migration_disk_usage(VHost, SafetyMultiplier) ->
-    MigratableQueues = get_mirrored_classic_queues(VHost),
+-spec estimate_migration_disk_usage(rabbit_types:vhost(), list(), float()) -> non_neg_integer().
+estimate_migration_disk_usage(VHost, UnsuitableQueues, SafetyMultiplier) ->
+    AllMigratableQueues = get_mirrored_classic_queues(VHost),
+
+    % Filter out unsuitable queues that will be skipped
+    UnsuitableResources = [R#unsuitable_queue.resource || R <- UnsuitableQueues],
+    MigratableQueues = lists:filter(
+        fun(Queue) ->
+            QueueResource = amqqueue:get_name(Queue),
+            not lists:member(QueueResource, UnsuitableResources)
+        end,
+        AllMigratableQueues
+    ),
+
     QueueCount = length(MigratableQueues),
 
     case QueueCount of
@@ -810,7 +823,7 @@ check_message_count_result(VHost) ->
     end.
 
 check_disk_space_result(VHost) ->
-    case check_disk_space(VHost) of
+    case check_disk_space(VHost, []) of
         {ok, sufficient} ->
             #{
                 check_type => disk_space,
