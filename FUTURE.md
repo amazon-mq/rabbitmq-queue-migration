@@ -37,7 +37,18 @@ The plugin is currently overly verbose with log messages. Many informational det
    - Shovel creation/cleanup messages (likely should be DEBUG)
    - Database update confirmations (likely should be DEBUG)
    - Validation check details (some should be DEBUG)
+   - **Timeout retry messages** - Currently ERROR: "do_migration timeout, retrying. Retries remaining: N"
+     - Should be DEBUG or WARNING at most (retries are normal, not errors)
+     - Only log at ERROR if all retries exhausted
    - Keep only high-level progress at INFO
+
+5. **Consider custom `?RQM_LOG_TRACE` macro:**
+   - Erlang's logger doesn't provide a TRACE level below DEBUG
+   - Many internal flow messages are too verbose even for DEBUG in production
+   - Implement custom macro that can be enabled/disabled via configuration
+   - Use for: shovel state checks, message count updates, gatherer operations, worker pool details
+   - Example: `?RQM_LOG_TRACE("shovel in progress - src: ~w, dest: ~w", [SrcCount, DestCount])`
+   - Configuration: `{rabbitmq_queue_migration, [{enable_trace_logging, false}]}`
 
 **Goal:**
 Production logs should show clear, actionable information without overwhelming operators with implementation details.

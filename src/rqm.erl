@@ -325,7 +325,7 @@ start_with_lock(GlobalLockId, Nodes, #migration_opts{vhost = VHost} = Opts, Migr
         ok = post_migration_stats(Nodes, MigrationId, MigrationDuration)
     catch
         Class:Reason:Stack ->
-            ok = handle_migration_exception(Class, Reason, Stack, VHost, MigrationId, Opts)
+            ok = handle_migration_exception(Class, Reason, Stack, MigrationId)
     after
         global:del_lock(GlobalLockId)
     end,
@@ -335,16 +335,7 @@ start_with_lock(GlobalLockId, Nodes, #migration_opts{vhost = VHost} = Opts, Migr
 %% Migration exception handler
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_migration_exception(
-    Class,
-    Ex,
-    Stack,
-    VHost,
-    MigrationId,
-    #migration_opts{
-        skip_unsuitable_queues = SkipUnsuitableQueues, unsuitable_queues = UnsuitableQueues
-    }
-) ->
+handle_migration_exception(Class, Ex, Stack, MigrationId) ->
     % Log exception class without the full error details
     ?LOG_ERROR(
         "rqm: CRITICAL EXCEPTION in migration ~s: ~tp",
@@ -378,10 +369,6 @@ handle_migration_exception(
     ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
         format_migration_id(MigrationId)
     ]),
-    SkippedCount = length(UnsuitableQueues),
-    {ok, _} = rqm_db:create_migration(
-        MigrationId, VHost, os:timestamp(), SkipUnsuitableQueues, SkippedCount
-    ),
     {ok, _} = rqm_db:update_migration_status(MigrationId, failed),
     ok.
 
