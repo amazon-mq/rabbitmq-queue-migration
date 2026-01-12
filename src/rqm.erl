@@ -1266,7 +1266,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     },
 
     %% Create shovel definition for high-performance message transfer
-    ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessagesToMigrate),
+    ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessagesToMigrate, VHost),
 
     try
         %% Create and verify shovel with retry logic

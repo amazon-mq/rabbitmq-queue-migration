@@ -83,7 +83,7 @@ Uses RabbitMQ's shovel plugin to transfer messages via AMQP:
 ```erlang
 migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
     % Build shovel definition
-    ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessageCount),
+    ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessageCount, VHost),
     
     % Create and verify shovel
     ok = rqm_shovel:create_with_retry(VHost, ShovelName, ShovelDef, 10),

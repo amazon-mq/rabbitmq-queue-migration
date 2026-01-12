@@ -14,7 +14,7 @@
 -export([
     create_and_verify/3,
     verify_started/2,
-    build_definition/3,
+    build_definition/4,
     cleanup/2
 ]).
 
@@ -78,12 +78,14 @@ create_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
     end.
 
 %% @doc Build shovel definition for message migration
--spec build_definition(binary(), binary(), non_neg_integer()) -> list().
-build_definition(SourceQueueName, DestQueueName, MessageCount) ->
+-spec build_definition(binary(), binary(), non_neg_integer(), binary()) -> list().
+build_definition(SourceQueueName, DestQueueName, MessageCount, VHost) ->
+    EncodedVHost = rabbit_http_util:quote_plus(VHost),
+    SrcDestUri = <<"amqp:///", EncodedVHost/binary>>,
     Prefetch = calculate_prefetch(MessageCount),
     [
-        {<<"src-uri">>, <<"amqp://">>},
-        {<<"dest-uri">>, <<"amqp://">>},
+        {<<"src-uri">>, SrcDestUri},
+        {<<"dest-uri">>, SrcDestUri},
         {<<"src-queue">>, SourceQueueName},
         {<<"dest-queue">>, DestQueueName},
         {<<"ack-mode">>, <<"on-confirm">>},
