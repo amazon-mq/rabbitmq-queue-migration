@@ -1279,7 +1279,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     try
         %% Start the shovel with retries
         ?LOG_DEBUG("rqm: creating shovel ~ts", [ShovelName]),
-        ok = create_shovel_with_retry(VHost, ShovelName, ShovelDef, 10),
+        ok = rqm_shovel:create_shovel_with_retry(VHost, ShovelName, ShovelDef, 10),
 
         %% Wait for shovel to complete migration
         ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
@@ -1295,7 +1295,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
             erlang:raise(Class, Reason, Stack)
     after
         %% Always clean up shovel parameter
-        cleanup_migration_shovel(ShovelName, VHost)
+        rqm_shovel:cleanup_migration_shovel(ShovelName, VHost)
     end.
 
 %% NB:
@@ -1617,67 +1617,6 @@ check_within_tolerance(
         [Direction, TolerancePercent, ExpectedTotal, ActualTotal, LostMessages]
     ),
     error({message_count_mismatch, ExpectedTotal, ActualTotal, LostMessages}).
-
-%% Clean up migration shovel
-create_shovel_with_retry(_VHost, ShovelName, _ShovelDef, 0) ->
-    ?LOG_ERROR("rqm: failed to create shovel ~ts after all retries", [ShovelName]),
-    error({shovel_creation_failed, ShovelName});
-create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
-    case catch rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, ShovelDef, none) of
-        ok ->
-            ok;
-        {'EXIT', Reason} ->
-            ?LOG_WARNING(
-                "rqm: exception creating shovel ~ts: ~tp, retrying (~p attempts left)",
-                [ShovelName, Reason, Retries - 1]
-            ),
-            timer:sleep(1000),
-            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1);
-        Other ->
-            ?LOG_WARNING(
-                "rqm: unexpected result creating shovel ~ts: ~tp, retrying (~p attempts left)",
-                [ShovelName, Other, Retries - 1]
-            ),
-            timer:sleep(1000),
-            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1)
-    end.
-
-cleanup_migration_shovel(ShovelName, VHost) ->
-    case rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName) of
-        not_found ->
-            %% With "never" mode, not_found is an error condition
-            ?LOG_ERROR(
-                "rqm: shovel ~ts not found during cleanup - this indicates a problem",
-                [ShovelName]
-            ),
-            error({shovel_not_found_during_cleanup, ShovelName});
-        _ShovelDef ->
-            %% Delete the shovel parameter
-            case
-                catch rabbit_runtime_parameters:clear(
-                    VHost, <<"shovel">>, ShovelName, <<"migration-system">>
-                )
-            of
-                ok ->
-                    ?LOG_DEBUG("rqm: cleaned up shovel parameter ~ts", [ShovelName]);
-                {error_string, ClearReason} ->
-                    ?LOG_WARNING(
-                        "rqm: failed to clean up shovel parameter ~ts: ~tp",
-                        [ShovelName, ClearReason]
-                    );
-                {'EXIT', Reason} ->
-                    ?LOG_WARNING(
-                        "rqm: exception during shovel cleanup for ~ts (shovel likely already removed): ~tp",
-                        [ShovelName, Reason]
-                    );
-                Other ->
-                    ?LOG_WARNING(
-                        "rqm: unexpected result when cleaning up shovel parameter ~ts: ~tp",
-                        [ShovelName, Other]
-                    )
-            end
-    end.
-
 is_queue_to_migrate(Q) ->
     is_queue_to_migrate(check_local_node, Q).
 
