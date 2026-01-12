@@ -12,7 +12,7 @@
 -define(DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT, 2.0).
 
 %% Shovel configuration
--define(DEFAULT_SHOVEL_PREFETCH_COUNT, 1024).
+-define(DEFAULT_SHOVEL_PREFETCH_COUNT, 128).
 
 %% Timeout configuration
 

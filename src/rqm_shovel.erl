@@ -14,7 +14,7 @@
 -export([
     create_with_retry/4,
     verify_started/2,
-    build_definition/2,
+    build_definition/3,
     cleanup/2
 ]).
 
@@ -44,8 +44,9 @@ create_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
     end.
 
 %% @doc Build shovel definition for message migration
--spec build_definition(binary(), binary()) -> list().
-build_definition(SourceQueueName, DestQueueName) ->
+-spec build_definition(binary(), binary(), non_neg_integer()) -> list().
+build_definition(SourceQueueName, DestQueueName, MessageCount) ->
+    Prefetch = calculate_prefetch(MessageCount),
     [
         {<<"src-uri">>, <<"amqp://">>},
         {<<"dest-uri">>, <<"amqp://">>},
@@ -53,8 +54,21 @@ build_definition(SourceQueueName, DestQueueName) ->
         {<<"dest-queue">>, DestQueueName},
         {<<"ack-mode">>, <<"on-confirm">>},
         {<<"src-delete-after">>, <<"never">>},
-        {<<"prefetch-count">>, rqm_config:shovel_prefetch_count()}
+        {<<"prefetch-count">>, Prefetch}
     ].
+
+%% @doc Calculate prefetch count based on message count
+-spec calculate_prefetch(non_neg_integer()) -> pos_integer().
+calculate_prefetch(MessageCount) ->
+    MaxPrefetch = rqm_config:shovel_prefetch_count(),
+    if
+        MessageCount =< 128 ->
+            max(1, MessageCount div 4);
+        MessageCount =< 500 ->
+            MaxPrefetch div 2;
+        true ->
+            MaxPrefetch
+    end.
 
 %% @doc Verify that a shovel actually started and is running
 -spec verify_started(binary(), binary()) -> ok.
