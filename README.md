@@ -113,6 +113,25 @@ When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks ar
 3. Migrate messages from temporary to final queue
 4. Delete temporary queue
 
+### Connection Handling During Migration
+
+**Pre-Migration Preparation:**
+- Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended broker-wide
+- All existing client connections are closed
+- HTTP API remains available for monitoring migration progress
+
+**During Migration:**
+- Clients cannot connect to the broker (non-HTTP protocols)
+- HTTP API remains accessible for monitoring
+- Migration progress can be monitored via HTTP API
+
+**Post-Migration:**
+- All listeners are restored automatically
+- Clients can reconnect to the broker
+- Migrated queues are now quorum queues with preserved bindings and messages
+
+**Important:** The connection suspension affects the entire broker, not just the vhost being migrated. Plan migration windows accordingly.
+
 ### Queue Eligibility
 
 A queue is eligible for migration if:

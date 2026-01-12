@@ -102,24 +102,6 @@ SPDX-License-Identifier: Apache-2.0
 </div>
 <% } %>
 
-<div class="section-hidden">
-  <h2>About Queue Migration</h2>
-  <div class="hider">
-    <p>
-      This tool migrates classic mirrored queues to quorum queues. The migration process:
-    </p>
-    <ol>
-      <li>Identifies all classic mirrored queues in the selected virtual host</li>
-      <li>Creates temporary quorum queues for each classic queue</li>
-      <li>Transfers all messages from classic queues to quorum queues</li>
-      <li>Renames the quorum queues to the original queue names</li>
-    </ol>
-    <p>
-      <b>Note:</b> Migration requires that no clients are connected to the broker.
-    </p>
-  </div>
-</div>
-
 <style type="text/css">
 .progress-bar {
   width: 100px;
