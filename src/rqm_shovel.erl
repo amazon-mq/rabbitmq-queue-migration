@@ -12,11 +12,45 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
-    create_with_retry/4,
+    create_and_verify/3,
     verify_started/2,
     build_definition/3,
     cleanup/2
 ]).
+
+%% @doc Create shovel and verify it starts, with retry logic
+-spec create_and_verify(binary(), binary(), list()) -> ok.
+create_and_verify(VHost, ShovelName, ShovelDef) ->
+    ok = create_with_retry(VHost, ShovelName, ShovelDef, 10),
+    verify_first_attempt(VHost, ShovelName, ShovelDef).
+
+verify_first_attempt(VHost, ShovelName, ShovelDef) ->
+    handle_verify_result(
+        verify_started(VHost, ShovelName, 10, 500),
+        VHost,
+        ShovelName,
+        ShovelDef,
+        first_attempt
+    ).
+
+handle_verify_result(ok, _VHost, _ShovelName, _ShovelDef, _Attempt) ->
+    ok;
+handle_verify_result(
+    {error, shovel_not_started}, VHost, ShovelName, ShovelDef, first_attempt
+) ->
+    ?LOG_WARNING("rqm: shovel ~ts failed to start, retrying with longer timeout", [ShovelName]),
+    cleanup(ShovelName, VHost),
+    ok = create_with_retry(VHost, ShovelName, ShovelDef, 10),
+    handle_verify_result(
+        verify_started(VHost, ShovelName, 20, 500),
+        VHost,
+        ShovelName,
+        ShovelDef,
+        second_attempt
+    );
+handle_verify_result({error, shovel_not_started}, _VHost, ShovelName, _ShovelDef, second_attempt) ->
+    ?LOG_ERROR("rqm: shovel ~ts failed to start after retry", [ShovelName]),
+    error({shovel_not_started, ShovelName}).
 
 %% @doc Create a shovel with retry logic for transient failures
 -spec create_with_retry(binary(), binary(), list(), non_neg_integer()) -> ok.
@@ -71,23 +105,24 @@ calculate_prefetch(MessageCount) ->
     end.
 
 %% @doc Verify that a shovel actually started and is running
--spec verify_started(binary(), binary()) -> ok.
+-spec verify_started(binary(), binary()) -> ok | {error, shovel_not_started}.
 verify_started(VHost, ShovelName) ->
-    verify_shovel_started(VHost, ShovelName, 10).
+    verify_started(VHost, ShovelName, 10, 500).
 
--spec verify_shovel_started(binary(), binary(), non_neg_integer()) -> ok.
-verify_shovel_started(_VHost, ShovelName, 0) ->
+-spec verify_started(binary(), binary(), non_neg_integer(), non_neg_integer()) ->
+    ok | {error, shovel_not_started}.
+verify_started(_VHost, ShovelName, 0, _Delay) ->
     ?LOG_ERROR("rqm: shovel ~ts never started after all attempts", [ShovelName]),
-    error({shovel_not_started, ShovelName});
-verify_shovel_started(VHost, ShovelName, Attempts) ->
+    {error, shovel_not_started};
+verify_started(VHost, ShovelName, Attempts, Delay) ->
     ShovelFullName = {VHost, ShovelName},
     case rabbit_shovel_status:lookup(ShovelFullName) of
         not_found ->
             ?LOG_DEBUG("rqm: shovel ~ts not found in status, retrying (~p attempts left)", [
                 ShovelName, Attempts - 1
             ]),
-            timer:sleep(500),
-            verify_shovel_started(VHost, ShovelName, Attempts - 1);
+            timer:sleep(Delay),
+            verify_started(VHost, ShovelName, Attempts - 1, Delay);
         StatusProplist ->
             Info = proplists:get_value(info, StatusProplist),
             case Info of
@@ -96,15 +131,15 @@ verify_shovel_started(VHost, ShovelName, Attempts) ->
                     ok;
                 {State, _Opts} ->
                     ?LOG_ERROR("rqm: shovel ~ts in unexpected state ~p", [ShovelName, State]),
-                    error({shovel_bad_state, ShovelName, State});
+                    {error, shovel_not_started};
                 _ ->
                     ?LOG_DEBUG(
                         "rqm: shovel ~ts status format unexpected, retrying (~p attempts left)", [
                             ShovelName, Attempts - 1
                         ]
                     ),
-                    timer:sleep(500),
-                    verify_shovel_started(VHost, ShovelName, Attempts - 1)
+                    timer:sleep(Delay),
+                    verify_started(VHost, ShovelName, Attempts - 1, Delay)
             end
     end.
 

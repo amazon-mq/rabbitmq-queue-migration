@@ -1269,13 +1269,9 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessagesToMigrate),
 
     try
-        %% Start the shovel with retries
-        ?LOG_DEBUG("rqm: creating shovel ~ts", [ShovelName]),
-        ok = rqm_shovel:create_with_retry(VHost, ShovelName, ShovelDef, 10),
-
-        %% Verify shovel actually started
-        ?LOG_DEBUG("rqm: verifying shovel ~ts started", [ShovelName]),
-        ok = rqm_shovel:verify_started(VHost, ShovelName),
+        %% Create and verify shovel with retry logic
+        ?LOG_DEBUG("rqm: creating and verifying shovel ~ts", [ShovelName]),
+        ok = rqm_shovel:create_and_verify(VHost, ShovelName, ShovelDef),
 
         %% Wait for shovel to complete migration
         ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
