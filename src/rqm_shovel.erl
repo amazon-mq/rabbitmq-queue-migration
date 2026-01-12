@@ -12,17 +12,18 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
-    create_shovel_with_retry/4,
-    verify_shovel_started/2,
-    cleanup_migration_shovel/2
+    create_with_retry/4,
+    verify_started/2,
+    build_definition/2,
+    cleanup/2
 ]).
 
 %% @doc Create a shovel with retry logic for transient failures
--spec create_shovel_with_retry(binary(), binary(), list(), non_neg_integer()) -> ok.
-create_shovel_with_retry(_VHost, ShovelName, _ShovelDef, 0) ->
+-spec create_with_retry(binary(), binary(), list(), non_neg_integer()) -> ok.
+create_with_retry(_VHost, ShovelName, _ShovelDef, 0) ->
     ?LOG_ERROR("rqm: failed to create shovel ~ts after all retries", [ShovelName]),
     error({shovel_creation_failed, ShovelName});
-create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
+create_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
     case catch rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, ShovelDef, none) of
         ok ->
             ok;
@@ -32,19 +33,32 @@ create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
                 [ShovelName, Reason, Retries - 1]
             ),
             timer:sleep(1000),
-            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1);
+            create_with_retry(VHost, ShovelName, ShovelDef, Retries - 1);
         Other ->
             ?LOG_WARNING(
                 "rqm: unexpected result creating shovel ~ts: ~tp, retrying (~p attempts left)",
                 [ShovelName, Other, Retries - 1]
             ),
             timer:sleep(1000),
-            create_shovel_with_retry(VHost, ShovelName, ShovelDef, Retries - 1)
+            create_with_retry(VHost, ShovelName, ShovelDef, Retries - 1)
     end.
 
+%% @doc Build shovel definition for message migration
+-spec build_definition(binary(), binary()) -> list().
+build_definition(SourceQueueName, DestQueueName) ->
+    [
+        {<<"src-uri">>, <<"amqp://">>},
+        {<<"dest-uri">>, <<"amqp://">>},
+        {<<"src-queue">>, SourceQueueName},
+        {<<"dest-queue">>, DestQueueName},
+        {<<"ack-mode">>, <<"on-confirm">>},
+        {<<"src-delete-after">>, <<"never">>},
+        {<<"prefetch-count">>, rqm_config:shovel_prefetch_count()}
+    ].
+
 %% @doc Verify that a shovel actually started and is running
--spec verify_shovel_started(binary(), binary()) -> ok.
-verify_shovel_started(VHost, ShovelName) ->
+-spec verify_started(binary(), binary()) -> ok.
+verify_started(VHost, ShovelName) ->
     verify_shovel_started(VHost, ShovelName, 10).
 
 -spec verify_shovel_started(binary(), binary(), non_neg_integer()) -> ok.
@@ -81,8 +95,8 @@ verify_shovel_started(VHost, ShovelName, Attempts) ->
     end.
 
 %% @doc Clean up a migration shovel
--spec cleanup_migration_shovel(binary(), binary()) -> ok.
-cleanup_migration_shovel(ShovelName, VHost) ->
+-spec cleanup(binary(), binary()) -> ok.
+cleanup(ShovelName, VHost) ->
     case rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName) of
         not_found ->
             %% With "never" mode, not_found is an error condition

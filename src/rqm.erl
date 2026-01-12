@@ -1266,24 +1266,16 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     },
 
     %% Create shovel definition for high-performance message transfer
-    ShovelDef = [
-        {<<"src-uri">>, <<"amqp://">>},
-        {<<"dest-uri">>, <<"amqp://">>},
-        {<<"src-queue">>, OldQName},
-        {<<"dest-queue">>, NewQName},
-        {<<"ack-mode">>, <<"on-confirm">>},
-        {<<"src-delete-after">>, <<"never">>},
-        {<<"prefetch-count">>, rqm_config:shovel_prefetch_count()}
-    ],
+    ShovelDef = rqm_shovel:build_definition(OldQName, NewQName),
 
     try
         %% Start the shovel with retries
         ?LOG_DEBUG("rqm: creating shovel ~ts", [ShovelName]),
-        ok = rqm_shovel:create_shovel_with_retry(VHost, ShovelName, ShovelDef, 10),
+        ok = rqm_shovel:create_with_retry(VHost, ShovelName, ShovelDef, 10),
 
         %% Verify shovel actually started
         ?LOG_DEBUG("rqm: verifying shovel ~ts started", [ShovelName]),
-        ok = rqm_shovel:verify_shovel_started(VHost, ShovelName),
+        ok = rqm_shovel:verify_started(VHost, ShovelName),
 
         %% Wait for shovel to complete migration
         ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
@@ -1299,7 +1291,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
             erlang:raise(Class, Reason, Stack)
     after
         %% Always clean up shovel parameter
-        rqm_shovel:cleanup_migration_shovel(ShovelName, VHost)
+        rqm_shovel:cleanup(ShovelName, VHost)
     end.
 
 %% NB:
