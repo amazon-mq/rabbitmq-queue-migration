@@ -129,7 +129,7 @@ pre_migration_validation(
         vhost = VHost, unsuitable_queues = UnsuitableQueues, skip_unsuitable_queues = Skipped
     } = Opts
 ) ->
-    AllQueues = rqm_checks:get_classic_queues(VHost),
+    AllQueues = rqm_checks:get_mirrored_classic_queues(VHost),
     EligibleCount = length(AllQueues) - length(UnsuitableQueues),
     case EligibleCount > 0 of
         true ->
