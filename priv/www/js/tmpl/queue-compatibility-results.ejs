@@ -57,8 +57,8 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     <% if (data.overall_ready) { %>
       <div class="alert alert-success">
         <h3><span class="status-green">✓ Ready for Migration</span></h3>
-        <% if (data.skip_unsuitable_queues && data.queue_checks.summary.incompatible_queues > 0) { %>
-          <p>All system requirements are met. <%= data.queue_checks.summary.incompatible_queues %> unsuitable queue(s) will be skipped during migration.</p>
+        <% if (data.skip_unsuitable_queues && data.queue_checks.summary.unsuitable_queues > 0) { %>
+          <p>All system requirements are met. <%= data.queue_checks.summary.unsuitable_queues %> unsuitable queue(s) will be skipped during migration.</p>
         <% } else { %>
           <p>All system requirements are met and all queues are compatible.</p>
         <% } %>
@@ -117,7 +117,7 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     <h2>Queue Compatibility</h2>
     <div class="updater">
       <% if (data.queue_checks && data.queue_checks.summary) { %>
-      <% if (data.queue_checks.summary.incompatible_queues === 0) { %>
+      <% if (data.queue_checks.summary.unsuitable_queues === 0) { %>
         <div class="alert alert-success">
           <h4>✓ All Queues Compatible</h4>
         </div>
@@ -155,11 +155,11 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
             <% } %>
           </td>
         </tr>
-        <tr class="<%= data.queue_checks.summary.incompatible_queues === 0 ? 'check-passed' : 'check-failed' %>">
-          <td>Incompatible Queues</td>
-          <td><%= data.queue_checks.summary.incompatible_queues %></td>
+        <tr class="<%= data.queue_checks.summary.unsuitable_queues === 0 ? 'check-passed' : 'check-failed' %>">
+          <td>Unsuitable Queues</td>
+          <td><%= data.queue_checks.summary.unsuitable_queues %></td>
           <td>
-            <% if (data.queue_checks.summary.incompatible_queues === 0) { %>
+            <% if (data.queue_checks.summary.unsuitable_queues === 0) { %>
               <span class="status-green">✓ None Found</span>
             <% } else { %>
               <span class="status-red">✗ Issues Found</span>
@@ -184,10 +184,10 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     </table>
     <% } %>
 
-    <!-- Incompatible Queues Details -->
-    <% if (data.queue_checks && data.queue_checks.summary && data.queue_checks.summary.incompatible_queues > 0) { %>
-    <div class="incompatible-queues">
-      <h3>Incompatible Queues</h3>
+    <!-- Unsuitable Queues Details -->
+    <% if (data.queue_checks && data.queue_checks.summary && data.queue_checks.summary.unsuitable_queues > 0) { %>
+    <div class="unsuitable-queues">
+      <h3>Unsuitable Queues</h3>
       <table class="list">
         <thead>
           <tr>
@@ -203,7 +203,7 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
           <tr>
             <td><%= fmt_queue_resource({name: queue.name, vhost: queue.vhost}) %></td>
             <td><%= fmt_string(queue.vhost) %></td>
-            <td><%= queue.compatible ? 'Compatible' : 'Incompatible' %></td>
+            <td><%= queue.compatible ? 'Compatible' : 'Unsuitable' %></td>
             <td>
               <% if (queue.issues) { %>
               <% queue.issues.forEach(function(issue, index) { %>

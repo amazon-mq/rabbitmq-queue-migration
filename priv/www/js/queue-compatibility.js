@@ -47,7 +47,7 @@ function fmt_compatibility_status(compatible) {
     if (compatible) {
         return '<span class="status-green">Compatible</span>';
     } else {
-        return '<span class="status-red">Incompatible</span>';
+        return '<span class="status-red">Unsuitable</span>';
     }
 }
 
@@ -71,7 +71,7 @@ function fmt_issue_type(type) {
         'max_priority': 'Priority Queue',
         'lazy_mode': 'Lazy Mode',
         'overflow_behavior': 'Overflow Behavior',
-        'incompatible_overflow': 'Incompatible Overflow',
+        'unsuitable_overflow': 'Unsuitable Overflow',
         'message_count_limit': 'Too Many Messages',
         'data_size_limit': 'Too Much Data',
         'too_many_queues': 'Too Many Queues'

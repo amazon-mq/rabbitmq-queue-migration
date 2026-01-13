@@ -21,7 +21,7 @@ public class TestConfiguration {
     private int migrationTimeout = 300; // 5 minutes default
     private boolean skipCleanup = false; // Skip cleanup in end-to-end mode
     private boolean skipSetup = false; // Skip setup in end-to-end mode
-    private int incompatibleQueueCount = 0; // Number of incompatible queues to create for testing
+    private int unsuitableQueueCount = 0; // Number of unsuitable queues to create for testing
 
     // Message size configuration (in bytes)
     private int smallMessageSize = 1024;      // 1KiB
@@ -179,8 +179,8 @@ public class TestConfiguration {
     public boolean isSkipSetup() { return skipSetup; }
     public void setSkipSetup(boolean skipSetup) { this.skipSetup = skipSetup; }
 
-    public int getIncompatibleQueueCount() { return incompatibleQueueCount; }
-    public void setIncompatibleQueueCount(int incompatibleQueueCount) {
-        this.incompatibleQueueCount = Math.max(0, incompatibleQueueCount);
+    public int getUnsuitableQueueCount() { return unsuitableQueueCount; }
+    public void setUnsuitableQueueCount(int unsuitableQueueCount) {
+        this.unsuitableQueueCount = Math.max(0, unsuitableQueueCount);
     }
 }

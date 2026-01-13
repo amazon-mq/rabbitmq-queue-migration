@@ -140,8 +140,8 @@ public class RabbitMQSetup {
         // 3. Create queues (without HA policy initially)
         createQueues();
 
-        // 3.1. Create incompatible queues for testing (if requested)
-        createIncompatibleQueues();
+        // 3.1. Create unsuitable queues for testing (if requested)
+        createUnsuitableQueues();
 
         // 4. Create bindings
         createBindings();
@@ -225,73 +225,73 @@ public class RabbitMQSetup {
         logger.info("Created {} queues with various configurations", queueCount);
     }
 
-    private void createIncompatibleQueues() throws IOException {
-        int incompatibleQueueCount = config.getIncompatibleQueueCount();
+    private void createUnsuitableQueues() throws IOException {
+        int unsuitableQueueCount = config.getUnsuitableQueueCount();
 
-        if (incompatibleQueueCount <= 0) {
-            return; // No incompatible queues to create
+        if (unsuitableQueueCount <= 0) {
+            return; // No unsuitable queues to create
         }
 
-        logger.info("Creating {} incompatible queues for migration testing", incompatibleQueueCount);
+        logger.info("Creating {} unsuitable queues for migration testing", unsuitableQueueCount);
 
-        // Define incompatible queue types
-        String[] incompatibleTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
+        // Define unsuitable queue types
+        String[] unsuitableTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
 
         // Migration limits (should match the values used in migration compatibility checker)
         // These are rough estimates - you may need to adjust based on actual migration limits
         int maxMessagesPerQueue = 50000;  // Adjust based on migration checker limits
         int maxBytesPerQueue = 100 * 1024 * 1024; // 100MB - adjust based on migration checker limits
 
-        for (int i = 0; i < incompatibleQueueCount; i++) {
-            String queueName = String.format("test.incompatible.queue.%d", i);
+        for (int i = 0; i < unsuitableQueueCount; i++) {
+            String queueName = String.format("test.unsuitable.queue.%d", i);
 
             // Round-robin across available channels for node distribution
             int nodeIndex = i % channels.length;
             Channel nodeChannel = channels[nodeIndex];
 
-            // Determine incompatible type (distribute evenly)
-            String incompatibleType = incompatibleTypes[i % incompatibleTypes.length];
+            // Determine unsuitable type (distribute evenly)
+            String unsuitableType = unsuitableTypes[i % unsuitableTypes.length];
 
             Map<String, Object> arguments = new HashMap<>();
             arguments.put("x-queue-type", "classic");
 
-            switch (incompatibleType) {
+            switch (unsuitableType) {
                 case "reject-publish-dlx":
                     arguments.put("x-overflow", "reject-publish-dlx");
                     arguments.put("x-max-length", 1000); // Set a limit to trigger overflow
-                    logger.debug("Creating incompatible queue: {} with x-overflow=reject-publish-dlx", queueName);
+                    logger.debug("Creating unsuitable queue: {} with x-overflow=reject-publish-dlx", queueName);
                     break;
 
                 case "too-many-messages":
                     // We'll create this queue and then fill it with too many messages
                     arguments.put("x-max-length", maxMessagesPerQueue + 10000); // Allow more than the migration limit
-                    logger.debug("Creating incompatible queue: {} that will have too many messages", queueName);
+                    logger.debug("Creating unsuitable queue: {} that will have too many messages", queueName);
                     break;
 
                 case "too-many-bytes":
                     // We'll create this queue and then fill it with too many bytes
                     arguments.put("x-max-length-bytes", maxBytesPerQueue + (50 * 1024 * 1024)); // Allow more than the migration limit
-                    logger.debug("Creating incompatible queue: {} that will have too many bytes", queueName);
+                    logger.debug("Creating unsuitable queue: {} that will have too many bytes", queueName);
                     break;
             }
 
             // Create the queue
             nodeChannel.queueDeclare(queueName, true, false, false, arguments);
-            logger.debug("Created incompatible queue: {} on node {} with type: {}", queueName, nodeIndex + 1, incompatibleType);
+            logger.debug("Created unsuitable queue: {} on node {} with type: {}", queueName, nodeIndex + 1, unsuitableType);
         }
 
-        logger.info("Created {} incompatible queues for testing migration compatibility checks", incompatibleQueueCount);
+        logger.info("Created {} unsuitable queues for testing migration compatibility checks", unsuitableQueueCount);
 
-        // Fill incompatible queues using MultiThreadedPublisher
-        fillIncompatibleQueuesWithPublisher(incompatibleQueueCount, maxMessagesPerQueue, maxBytesPerQueue);
+        // Fill unsuitable queues using MultiThreadedPublisher
+        fillUnsuitableQueuesWithPublisher(unsuitableQueueCount, maxMessagesPerQueue, maxBytesPerQueue);
     }
 
-    private void fillIncompatibleQueuesWithPublisher(int incompatibleQueueCount, int maxMessages, int maxBytes) {
-        if (incompatibleQueueCount <= 0) {
+    private void fillUnsuitableQueuesWithPublisher(int unsuitableQueueCount, int maxMessages, int maxBytes) {
+        if (unsuitableQueueCount <= 0) {
             return;
         }
 
-        logger.info("Filling {} incompatible queues using MultiThreadedPublisher", incompatibleQueueCount);
+        logger.info("Filling {} unsuitable queues using MultiThreadedPublisher", unsuitableQueueCount);
 
         try {
             long startTime = System.currentTimeMillis();
@@ -303,16 +303,16 @@ public class RabbitMQSetup {
             byte[] largeMessageBody = new byte[1024 * 1024]; // 1MB message for "too-many-bytes" queues
             Arrays.fill(largeMessageBody, (byte) 'Y');
 
-            // Generate all tasks for all incompatible queues
-            List<com.amazon.mq.rabbitmq.publishing.PublishingTask> allTasks = generateAllIncompatibleQueueTasks(
-                incompatibleQueueCount, maxMessages, maxBytes, smallMessageBody, largeMessageBody);
+            // Generate all tasks for all unsuitable queues
+            List<com.amazon.mq.rabbitmq.publishing.PublishingTask> allTasks = generateAllUnsuitableQueueTasks(
+                unsuitableQueueCount, maxMessages, maxBytes, smallMessageBody, largeMessageBody);
 
             if (!allTasks.isEmpty()) {
                 // Create publishing configuration
                 PublishingConfiguration publishingConfig = new PublishingConfiguration(
                     config.getClusterTopology(), config.getConfirmationWindow());
 
-                // Use single MultiThreadedPublisher for all incompatible queues
+                // Use single MultiThreadedPublisher for all unsuitable queues
                 MultiThreadedPublisher publisher = new MultiThreadedPublisher(publishingConfig);
                 PublishingResult result = publisher.publishAsync(allTasks);
 
@@ -327,36 +327,36 @@ public class RabbitMQSetup {
                 // Log aggregate statistics
                 long elapsed = System.currentTimeMillis() - startTime;
                 double avgRate = result.getPublishedCount() * 1000.0 / elapsed;
-                logger.info("Successfully filled {} incompatible queues with {} total messages in {} ms ({} msg/sec)",
-                           incompatibleQueueCount, result.getPublishedCount(), elapsed, String.format("%.1f", avgRate));
+                logger.info("Successfully filled {} unsuitable queues with {} total messages in {} ms ({} msg/sec)",
+                           unsuitableQueueCount, result.getPublishedCount(), elapsed, String.format("%.1f", avgRate));
             }
 
         } catch (Exception e) {
-            logger.error("Failed to fill incompatible queues with MultiThreadedPublisher: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to fill incompatible queues", e);
+            logger.error("Failed to fill unsuitable queues with MultiThreadedPublisher: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to fill unsuitable queues", e);
         }
     }
 
-    private List<com.amazon.mq.rabbitmq.publishing.PublishingTask> generateAllIncompatibleQueueTasks(
-            int incompatibleQueueCount, int maxMessages, int maxBytes,
+    private List<com.amazon.mq.rabbitmq.publishing.PublishingTask> generateAllUnsuitableQueueTasks(
+            int unsuitableQueueCount, int maxMessages, int maxBytes,
             byte[] smallMessageBody, byte[] largeMessageBody) {
 
         List<com.amazon.mq.rabbitmq.publishing.PublishingTask> allTasks = new ArrayList<>();
-        String[] incompatibleTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
+        String[] unsuitableTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
 
-        for (int i = 0; i < incompatibleQueueCount; i++) {
-            String queueName = String.format("test.incompatible.queue.%d", i);
-            String incompatibleType = incompatibleTypes[i % incompatibleTypes.length];
+        for (int i = 0; i < unsuitableQueueCount; i++) {
+            String queueName = String.format("test.unsuitable.queue.%d", i);
+            String unsuitableType = unsuitableTypes[i % unsuitableTypes.length];
 
             // Only generate tasks for queues that need messages
-            if ("too-many-messages".equals(incompatibleType)) {
+            if ("too-many-messages".equals(unsuitableType)) {
                 int messagesToPublish = maxMessages + 5000;
                 for (int j = 0; j < messagesToPublish; j++) {
                     allTasks.add(new com.amazon.mq.rabbitmq.publishing.PublishingTask(queueName, smallMessageBody));
                 }
                 logger.debug("Generated {} small message tasks for queue: {}", messagesToPublish, queueName);
 
-            } else if ("too-many-bytes".equals(incompatibleType)) {
+            } else if ("too-many-bytes".equals(unsuitableType)) {
                 int messageSize = 1024 * 1024; // 1MB per message
                 int messagesToPublish = (maxBytes / messageSize) + 100; // Exceed the byte limit
                 for (int j = 0; j < messagesToPublish; j++) {
@@ -367,7 +367,7 @@ public class RabbitMQSetup {
             // "reject-publish-dlx" queues don't need to be filled with messages
         }
 
-        logger.info("Generated {} total publishing tasks for {} incompatible queues", allTasks.size(), incompatibleQueueCount);
+        logger.info("Generated {} total publishing tasks for {} unsuitable queues", allTasks.size(), unsuitableQueueCount);
         return allTasks;
     }
 
@@ -384,7 +384,7 @@ public class RabbitMQSetup {
                 double rate = currentPublished * 1000.0 / elapsed;
                 int progressPercent = (currentPublished * 100) / totalTasks;
 
-                logger.info("Incompatible queues: {}/{} messages ({}%) - {} msg/sec",
+                logger.info("Unsuitable queues: {}/{} messages ({}%) - {} msg/sec",
                            currentPublished, totalTasks, progressPercent, String.format("%.1f", rate));
                 lastReported = currentPublished;
             }

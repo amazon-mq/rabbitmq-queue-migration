@@ -69,16 +69,16 @@ check_vhost_internal(VHost, Queues, FilterMode) ->
     ],
 
     % Calculate summary statistics
-    {Compatible, Incompatible} = count_compatible_queues(AllResults),
+    {Compatible, Unsuitable} = count_compatible_queues(AllResults),
 
     % Filter results if needed
     FilteredResults =
         case FilterMode of
             all ->
                 AllResults;
-            incompatible_only ->
+            unsuitable_only ->
                 lists:filter(
-                    fun({_, {Status, _}}) -> Status =:= incompatible end,
+                    fun({_, {Status, _}}) -> Status =:= unsuitable end,
                     AllResults
                 )
         end,
@@ -95,16 +95,16 @@ check_vhost_internal(VHost, Queues, FilterMode) ->
     {VHost, FilteredResults, #{
         total_queues => TotalQueues,
         compatible_queues => Compatible,
-        incompatible_queues => Incompatible,
+        unsuitable_queues => Unsuitable,
         compatibility_percentage => CompatibilityPercentage
     }}.
 
-%% Helper function to count compatible and incompatible queues
+%% Helper function to count compatible and unsuitable queues
 count_compatible_queues(Results) ->
     lists:foldl(
         fun
             ({_, {compatible, _}}, {C, I}) -> {C + 1, I};
-            ({_, {incompatible, _}}, {C, I}) -> {C, I + 1}
+            ({_, {unsuitable, _}}, {C, I}) -> {C, I + 1}
         end,
         {0, 0},
         Results
@@ -126,7 +126,7 @@ check_queue_internal(Queue, SuitabilityResult) ->
 
     case AllIssues of
         [] -> {compatible, []};
-        _ -> {incompatible, AllIssues}
+        _ -> {unsuitable, AllIssues}
     end.
 
 %% Deduplicate issues by keeping only the first occurrence of each type
@@ -189,9 +189,9 @@ extract_queue_suitability_issues(Queue, SuitabilityResult) ->
                                             "Too many queues for migration (~p found, max ~p)",
                                             [QueueCount, MaxQueues]
                                         )}};
-                            incompatible_overflow ->
+                            unsuitable_overflow ->
                                 {true,
-                                    {incompatible_overflow,
+                                    {unsuitable_overflow,
                                         "reject-publish-dlx overflow behavior not supported in quorum queues"}};
                             _ ->
                                 false
@@ -247,12 +247,12 @@ check_critical_arguments(Queue) ->
     ],
     lists:flatten(CriticalArgChecks).
 
-%% Check overflow behavior - reject-publish-dlx is incompatible with quorum queues
+%% Check overflow behavior - reject-publish-dlx is unsuitable with quorum queues
 check_critical_overflow_behavior(Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-overflow">>) of
         {_, <<"reject-publish-dlx">>} ->
             [
-                {incompatible_overflow,
+                {unsuitable_overflow,
                     "x-overflow=reject-publish-dlx is not supported in quorum queues. Quorum queues support drop-head and reject-publish, but reject-publish does not provide dead lettering like reject-publish-dlx does in classic queues."}
             ];
         _ ->
@@ -319,14 +319,14 @@ check_migration_readiness(VHost, OptsMap) ->
     ),
 
     % Run queue compatibility checks
-    {VHost, QueueResults, QueueSummary} = check_vhost(VHost, incompatible_only),
+    {VHost, QueueResults, QueueSummary} = check_vhost(VHost, unsuitable_only),
 
     % Determine overall readiness
     TrueSystemReady = lists:all(fun(#{status := Status}) -> Status =:= passed end, SystemChecks),
     QueueChecksReady = lists:all(
         fun(#{status := Status}) -> Status =:= passed end, QueueLevelChecks
     ),
-    QueueReady = maps:get(incompatible_queues, QueueSummary) =:= 0,
+    QueueReady = maps:get(unsuitable_queues, QueueSummary) =:= 0,
     OverallReady =
         case SkipUnsuitableQueues of
             true -> TrueSystemReady;

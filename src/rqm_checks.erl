@@ -570,7 +570,7 @@ determine_insufficient_space_reason(
     ok | {error, map()}.
 check_queue_suitability(VHost) ->
     % Get ALL classic queues in the vhost (not just mirrored ones)
-    % because any classic queue could have incompatible arguments
+    % because any classic queue could have unsuitable arguments
     AllClassicQueues = rqm_db_queue:get_all_by_vhost_and_type(VHost, rabbit_classic_queue),
     QueueCount = length(AllClassicQueues),
 
@@ -655,7 +655,7 @@ collect_reject_publish_dlx_issues(Queues) ->
                 {_, <<"reject-publish-dlx">>} ->
                     {true, #unsuitable_queue{
                         resource = amqqueue:get_name(Queue),
-                        reason = incompatible_overflow,
+                        reason = unsuitable_overflow,
                         details = #{overflow => <<"reject-publish-dlx">>}
                     }};
                 _ ->
@@ -889,9 +889,9 @@ format_disk_space_error({insufficient_disk_space, Details}) ->
     end.
 
 %% Enhanced queue suitability error formatting
-format_queue_suitability_error({incompatible_overflow_behavior, _Details}) ->
+format_queue_suitability_error({unsuitable_overflow_behavior, _Details}) ->
     rqm_util:unicode_format(
-        "✗ Some queues are incompatible, see below",
+        "✗ Some queues are unsuitable, see below",
         []
     );
 format_queue_suitability_error({unsuitable_queues, Details}) ->
@@ -914,7 +914,7 @@ format_queue_suitability_error({unsuitable_queues, Details}) ->
                 ) ->
                     Max = maps:get(max_bytes, IssueDetails),
                     {M, B + 1, MaxMsg, max(MaxBytes, Max)};
-                (#unsuitable_queue{reason = incompatible_overflow}, {M, B, MaxMsg, MaxBytes}) ->
+                (#unsuitable_queue{reason = unsuitable_overflow}, {M, B, MaxMsg, MaxBytes}) ->
                     {M, B, MaxMsg, MaxBytes};
                 (_, {M, B, MaxMsg, MaxBytes}) ->
                     {M, B, MaxMsg, MaxBytes}
@@ -942,9 +942,9 @@ format_queue_suitability_error({unsuitable_queues, Details}) ->
                 [QueueCount, M, MaxMessagesPerQueue, B, MaxBytesMiB]
             );
         _ ->
-            % Handle incompatible overflow or other issues
+            % Handle unsuitable overflow or other issues
             rqm_util:unicode_format(
-                "✗ Some queues are incompatible, see below",
+                "✗ Some queues are unsuitable, see below",
                 []
             )
     end.

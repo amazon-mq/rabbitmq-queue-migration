@@ -107,7 +107,7 @@ format_queue_result(QueueResource, {compatible, _}) ->
         compatible => true,
         issues => []
     };
-format_queue_result(QueueResource, {incompatible, Issues}) ->
+format_queue_result(QueueResource, {unsuitable, Issues}) ->
     #{
         name => QueueResource#resource.name,
         vhost => QueueResource#resource.virtual_host,
@@ -159,9 +159,9 @@ format_issue({too_many_queues, Reason}) ->
         type => <<"too_many_queues">>,
         reason => list_to_binary(Reason)
     };
-format_issue({incompatible_overflow, Reason}) ->
+format_issue({unsuitable_overflow, Reason}) ->
     #{
-        type => <<"incompatible_overflow">>,
+        type => <<"unsuitable_overflow">>,
         reason => list_to_binary(Reason)
     };
 format_issue({Type, Reason}) ->
@@ -201,7 +201,7 @@ format_system_check(#{check_type := CheckType, status := Status, message := Mess
 format_queue_checks_for_ui(#{summary := Summary, results := Results}) ->
     case Results of
         [] ->
-            % No incompatible queues - return empty results
+            % No unsuitable queues - return empty results
             #{
                 summary => Summary,
                 results => []

@@ -94,7 +94,7 @@ The plugin performs comprehensive checks before starting migration:
 
 **Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
 1. **Queue Synchronization**: Verifies all queue mirrors are synchronized
-2. **Queue Suitability**: Confirms queues don't have incompatible arguments (e.g., `reject-publish-dlx`)
+2. **Queue Suitability**: Confirms queues don't have unsuitable arguments (e.g., `reject-publish-dlx`)
 3. **Message Limits**: Validates queue message counts and bytes are within limits
 
 When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
@@ -151,7 +151,7 @@ The plugin automatically converts or removes queue arguments during migration:
 | `x-queue-master-locator` | *removed* | Classic queue specific |
 | `x-queue-version` | *removed* | Classic queue specific |
 
-**Important:** Queues with `x-overflow: reject-publish-dlx` are **not eligible** for migration. This argument is incompatible with quorum queues and will cause the compatibility check to fail. Quorum queues support `drop-head` and `reject-publish`, but `reject-publish` does not provide dead lettering like `reject-publish-dlx` does in classic queues.
+**Important:** Queues with `x-overflow: reject-publish-dlx` are **not eligible** for migration. This argument is unsuitable with quorum queues and will cause the compatibility check to fail. Quorum queues support `drop-head` and `reject-publish`, but `reject-publish` does not provide dead lettering like `reject-publish-dlx` does in classic queues.
 
 ## Configuration
 

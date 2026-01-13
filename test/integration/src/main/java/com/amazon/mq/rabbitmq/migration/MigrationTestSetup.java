@@ -36,7 +36,7 @@ public class MigrationTestSetup {
             }
 
             logger.info("Queue Count: {}", config.getQueueCount());
-            logger.info("Incompatible Queue Count: {}", config.getIncompatibleQueueCount());
+            logger.info("Unsuitable Queue Count: {}", config.getUnsuitableQueueCount());
             logger.info("Total Messages: {}", config.getTotalMessages());
             logger.info("Target Message Count: {}", config.getTotalMessages());
 
@@ -168,12 +168,12 @@ public class MigrationTestSetup {
                     printUsage();
                     System.exit(1);
                 }
-            } else if (arg.startsWith("--incompatible-queue-count=")) {
+            } else if (arg.startsWith("--unsuitable-queue-count=")) {
                 try {
-                    int incompatibleQueueCount = Integer.parseInt(arg.substring(27));
-                    config.setIncompatibleQueueCount(incompatibleQueueCount);
+                    int unsuitableQueueCount = Integer.parseInt(arg.substring(27));
+                    config.setUnsuitableQueueCount(unsuitableQueueCount);
                 } catch (NumberFormatException e) {
-                    logger.error("Invalid incompatible queue count: {}", arg);
+                    logger.error("Invalid unsuitable queue count: {}", arg);
                     printUsage();
                     System.exit(1);
                 }
@@ -250,7 +250,7 @@ public class MigrationTestSetup {
         System.out.println("  --bindings-per-queue=N     Number of bindings per queue (default: 6)");
         System.out.println("  --confirmation-window=N    Confirmations per publishing thread (min: 4, max: 256, default: 4)");
         System.out.println("  --migration-timeout=N      Migration timeout in seconds (default: 300, for end-to-end mode)");
-        System.out.println("  --incompatible-queue-count=N  Number of incompatible queues to create for testing (default: 0)");
+        System.out.println("  --unsuitable-queue-count=N  Number of unsuitable queues to create for testing (default: 0)");
         System.out.println("                                Creates queues with reject-publish-dlx, too many messages, etc.");
         System.out.println();
         System.out.println("Message Configuration:");
@@ -299,7 +299,7 @@ public class MigrationTestSetup {
         System.out.println();
         System.out.println("=== MIGRATION TEST SETUP SUMMARY ===");
         System.out.println("Queue Count:       " + config.getQueueCount());
-        System.out.println("Incompatible Queue Count: " + config.getIncompatibleQueueCount());
+        System.out.println("Unsuitable Queue Count: " + config.getUnsuitableQueueCount());
         System.out.println("Setup Time:        " + setupTimeMs + " ms");
         System.out.println();
         System.out.println("Resources Created:");

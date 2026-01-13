@@ -201,7 +201,7 @@ handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
         "rqm: stopping migration due to unsuitable queues. "
-        "Found ~p queue(s) with issues (too many messages, too many bytes, or incompatible arguments).",
+        "Found ~p queue(s) with issues (too many messages, too many bytes, or unsuitable arguments).",
         [length(ProblematicQueues)]
     ),
     {error, {unsuitable_queues, Details}};

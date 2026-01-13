@@ -151,7 +151,7 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
         {error, {unsuitable_queues, Details}} ->
             ProblematicQueues = maps:get(problematic_queues, Details, []),
             Message = rqm_util:unicode_format(
-                "Found ~p queue(s) with issues (too many messages, too many bytes, or incompatible arguments)",
+                "Found ~p queue(s) with issues (too many messages, too many bytes, or unsuitable arguments)",
                 [length(ProblematicQueues)]
             ),
             ErrorJson = rabbit_json:encode(#{
@@ -190,12 +190,12 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 available_for_migration_mb => AvailableMB
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
-        {error, {incompatible_overflow_behavior, Details}} ->
+        {error, {unsuitable_overflow_behavior, Details}} ->
             QueueName = maps:get(queue_name, Details),
             OverflowBehavior = maps:get(overflow_behavior, Details),
             QueueNameStr = rabbit_misc:rs(QueueName),
             Message = rqm_util:unicode_format(
-                "Cannot migrate: Queue '~s' uses overflow behavior '~s' which is incompatible with quorum queues. "
+                "Cannot migrate: Queue '~s' uses overflow behavior '~s' which is unsuitable with quorum queues. "
                 "Please change the queue's overflow behavior to 'drop-head' or 'reject-publish' before migration.",
                 [QueueNameStr, OverflowBehavior]
             ),
@@ -203,7 +203,7 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 error => bad_request,
                 reason => Message,
                 queue_name => QueueNameStr,
-                incompatible_setting => <<"x-overflow">>,
+                unsuitable_setting => <<"x-overflow">>,
                 current_value => OverflowBehavior,
                 suggested_values => [<<"drop-head">>, <<"reject-publish">>]
             }),

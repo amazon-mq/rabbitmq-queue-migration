@@ -188,10 +188,10 @@ Content-Type: application/json
 
 **Implementation Complete:**
 - System-level checks still block (shovel plugin, Khepri, disk space, alarms, memory, snapshots, partitions, leader balance)
-- Queue-level checks identify queues to skip (unsynchronized, too many messages/bytes, incompatible arguments)
+- Queue-level checks identify queues to skip (unsynchronized, too many messages/bytes, unsuitable arguments)
 - Migration proceeds with suitable queues, skips unsuitable ones
 - Skipped queues tracked with `queue_migration_status` records with `status = skipped`
-- Skip reasons stored in `error` field: `unsynchronized`, `too_many_messages`, `too_many_bytes`, `too_many_queues`, `incompatible_overflow`
+- Skip reasons stored in `error` field: `unsynchronized`, `too_many_messages`, `too_many_bytes`, `too_many_queues`, `unsuitable_overflow`
 
 **API Implementation:**
 ```bash
