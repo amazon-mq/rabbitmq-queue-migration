@@ -41,7 +41,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/start/%2Ftest%26f
 curl -u guest:guest http://localhost:15672/api/queue-migration/start/%2Ftest%2F%C3%BCber%26co
 
 # Vhost "/test/日本語&queue" (with CJK characters)
-curl -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2Ftest%2F%E6%97%A5%E6%9C%AC%E8%AA%9E%26queue
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2Ftest%2F%E6%97%A5%E6%9C%AC%E8%AA%9E%26queue
 ```
 
 ---
@@ -294,7 +294,7 @@ Check if queues are eligible for migration and validate system readiness.
 
 **Endpoints:**
 ```
-POST /api/queue-compatibility/check/:vhost
+POST /api/queue-migration/check/:vhost
 ```
 
 **Parameters:**
@@ -314,13 +314,13 @@ POST /api/queue-compatibility/check/:vhost
 ```bash
 # Default behavior
 curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-compatibility/check/%2F
+  http://localhost:15672/api/queue-migration/check/%2F
 
 # With skip mode enabled
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
-  http://localhost:15672/api/queue-compatibility/check/%2F
+  http://localhost:15672/api/queue-migration/check/%2F
 ```
 
 **Response (200 OK):**
@@ -613,7 +613,7 @@ The API does not implement rate limiting, but be considerate:
 
 # 1. Check compatibility
 echo "Checking compatibility..."
-curl -s -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2F | jq
+curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F | jq
 
 # 2. Start migration
 echo "Starting migration..."
