@@ -29,6 +29,12 @@ SPDX-License-Identifier: Apache-2.0
         <th>Status:</th>
         <td><%= fmt_migration_status(queue_migration_detail_status.migration.status) %></td>
       </tr>
+      <% if (queue_migration_detail_status.migration.error) { %>
+      <tr>
+        <th>Error:</th>
+        <td class="status-red"><%= fmt_string(queue_migration_detail_status.migration.error) %></td>
+      </tr>
+      <% } %>
       <tr>
         <th>Progress:</th>
         <td class="updatable">

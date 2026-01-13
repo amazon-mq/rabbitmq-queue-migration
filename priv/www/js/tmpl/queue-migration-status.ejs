@@ -95,7 +95,12 @@ SPDX-License-Identifier: Apache-2.0
               <td><%= fmt_string(queue_migration_status.migrations[i].display_id) %></td>
               <td><%= fmt_string(queue_migration_status.migrations[i].started_at) %></td>
               <td><%= fmt_string(queue_migration_status.migrations[i].completed_at) %></td>
-              <td><%= fmt_migration_status(queue_migration_status.migrations[i].status) %></td>
+              <td>
+                <%= fmt_migration_status(queue_migration_status.migrations[i].status) %>
+                <% if (queue_migration_status.migrations[i].error) { %>
+                  <br/><span class="status-red" style="font-size: 0.9em;"><%= fmt_string(queue_migration_status.migrations[i].error) %></span>
+                <% } %>
+              </td>
               <td>
                 <%= fmt_progress_bar(
                   queue_migration_status.migrations[i].completed_queues,
