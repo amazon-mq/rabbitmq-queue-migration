@@ -5,7 +5,7 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/queue-compatibility', function() {
-        render({},
+        render({'vhosts': '/vhosts'},
                'queue-compatibility', '#/queue-compatibility');
     });
 

@@ -8,12 +8,25 @@ SPDX-License-Identifier: Apache-2.0
 <div class="section">
   <h2>Check Queue Compatibility</h2>
   <p>
-    This tool checks classic queues for compatibility with quorum queues in the current virtual host.
+    This tool checks classic queues for compatibility with quorum queues in the selected virtual host.
   </p>
 
   <form action="#/queue-compatibility/check" method="post" class="queue-compatibility-form">
-    <input type="hidden" name="vhost" id="compat-vhost" value="/" />
     <table class="form">
+<% if (display.vhosts) { %>
+      <tr>
+        <th><label>Virtual host:</label></th>
+        <td>
+          <select name="vhost">
+            <% for (var i = 0; i < vhosts.length; i++) { %>
+            <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+            <% } %>
+          </select>
+        </td>
+      </tr>
+<% } else { %>
+      <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
       <tr>
         <th>Skip Unsuitable Queues:</th>
         <td>
@@ -25,17 +38,6 @@ SPDX-License-Identifier: Apache-2.0
     <input type="submit" value="Check Compatibility" />
   </form>
 </div>
-
-<script>
-$(document).ready(function() {
-  // Set the current vhost in the hidden field
-  var vhost = current_vhost || '/';
-  if (vhost === "") {
-    vhost = "all";
-  }
-  $('#compat-vhost').val(vhost);
-});
-</script>
 
 <style type="text/css">
 .queue-compatibility-form {
