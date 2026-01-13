@@ -421,9 +421,6 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
     end,
 
     % Update migration record as failed with error reason
-    ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
-        format_migration_id(MigrationId)
-    ]),
     ErrorReason = format_migration_error(Class, Ex),
     case rqm_db:update_migration_failed(MigrationId, ErrorReason) of
         {ok, _} ->
