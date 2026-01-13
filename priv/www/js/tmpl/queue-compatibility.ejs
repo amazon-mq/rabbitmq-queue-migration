@@ -26,25 +26,6 @@ SPDX-License-Identifier: Apache-2.0
   </form>
 </div>
 
-<div class="section-hidden">
-  <h2>About Queue Compatibility</h2>
-  <div class="hider">
-    <p>
-      Quorum queues are a replicated queue type that provides higher availability and data safety guarantees compared to classic mirrored queues.
-    </p>
-    <p>
-      However, not all classic queue features are supported by quorum queues. This tool helps you identify which classic queues in your RabbitMQ cluster can be migrated to quorum queues and which ones have compatibility issues.
-    </p>
-    <h3>Key Compatibility Considerations:</h3>
-    <ul>
-      <li><strong>Exclusive Queues:</strong> Quorum queues do not support exclusive queues.</li>
-      <li><strong>Priority Queues:</strong> Quorum queues don't support the x-max-priority argument, but they do support high and low priorities that can be set when publishing messages.</li>
-      <li><strong>Lazy Mode:</strong> Quorum queues handle lazy mode differently.</li>
-      <li><strong>Overflow Behavior:</strong> Quorum queues only support drop-head and reject-publish overflow behaviors.</li>
-    </ul>
-  </div>
-</div>
-
 <script>
 $(document).ready(function() {
   // Set the current vhost in the hidden field
