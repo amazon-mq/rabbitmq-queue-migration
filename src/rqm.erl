@@ -405,8 +405,14 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
     ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
         format_migration_id(MigrationId)
     ]),
-    {ok, _} = rqm_db:update_migration_status(MigrationId, failed),
-    ok.
+    case rqm_db:update_migration_status(MigrationId, failed) of
+        {ok, _} -> ok;
+        {error, not_found} ->
+            ?LOG_DEBUG("rqm: migration ~s not found in database (failed before creation)", [
+                format_migration_id(MigrationId)
+            ]),
+            ok
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Post-migration Stats
