@@ -50,6 +50,20 @@ content_types_provided(ReqData, {EndpointType, Context}) ->
 allowed_methods(ReqData, {EndpointType, Context}) ->
     {[<<"GET">>, <<"HEAD">>, <<"PUT">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
 
+resource_exists(ReqData, {status_detail, Context}) ->
+    MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
+    case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
+        {ok, MigrationId} ->
+            case rqm:get_queue_migration_status(MigrationId) of
+                {ok, _} ->
+                    State = {migration_id, MigrationId},
+                    {true, ReqData, {status_detail, Context#context{impl = State}}};
+                {error, _} ->
+                    {false, ReqData, {status_detail, Context}}
+            end;
+        error ->
+            {false, ReqData, {status_detail, Context}}
+    end;
 resource_exists(ReqData, {EndpointType, Context}) ->
     {true, ReqData, {EndpointType, Context}}.
 
@@ -76,23 +90,13 @@ to_json(ReqData, {status_list, Context}) ->
         migrations => MigrationData
     }),
     {Json, ReqData, {status_list, Context}};
-to_json(ReqData, {status_detail, Context}) ->
-    MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
-    case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
-        {ok, MigrationId} ->
-            case rqm:get_queue_migration_status(MigrationId) of
-                {ok, {Migration, QueueDetails}} ->
-                    Json = rabbit_json:encode(#{
-                        migration => migration_to_json_detail(Migration),
-                        queues => [queue_status_to_json(Q) || Q <- QueueDetails]
-                    }),
-                    {Json, ReqData, {status_detail, Context}};
-                {error, _} ->
-                    not_found_json(ReqData, {status_detail, Context})
-            end;
-        error ->
-            not_found_json(ReqData, {status_detail, Context})
-    end.
+to_json(ReqData, {status_detail, #context{impl = {migration_id, MigrationId}}} = Context) ->
+    {ok, {Migration, QueueDetails}} = rqm:get_queue_migration_status(MigrationId),
+    Json = rabbit_json:encode(#{
+        migration => migration_to_json_detail(Migration),
+        queues => [queue_status_to_json(Q) || Q <- QueueDetails]
+    }),
+    {Json, ReqData, {status_detail, Context}}.
 
 is_authorized(ReqData, {EndpointType, Context}) ->
     {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
@@ -375,10 +379,6 @@ parse_skip_unsuitable_queues(Json) ->
         false -> #{skip_unsuitable_queues => false};
         _ -> #{}
     end.
-
-not_found_json(ReqData, State) ->
-    Json = rabbit_json:encode(#{error => <<"Migration not found">>}),
-    {Json, ReqData, State}.
 
 not_found_reply(ReqData, State) ->
     ErrorJson = rabbit_json:encode(#{error => <<"Migration not found">>}),
