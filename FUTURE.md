@@ -361,6 +361,28 @@ GET /api/queue-migration/compatibility?skip_unsuitable_queues=true
 3. **Performance optimization** - Can we improve migration speed further?
 4. **Rollback testing** - How to test rollback scenarios safely?
 
+## Upstream RabbitMQ Changes
+
+### Admin Navigation Menu Sorting
+
+**Issue:** The Admin submenu items appear in JavaScript object insertion order, not alphabetically. Plugin-added items like "Queue Migration" and "Queue Compatibility" appear wherever they were inserted based on script load order, rather than grouped alphabetically with other items.
+
+**Location:** `rabbitmq_management/priv/www/js/main.js` - `obj_to_ul()` function
+
+**Fix:** Sort object keys before iterating in `obj_to_ul()`:
+```javascript
+function obj_to_ul(val) {
+    var res = '<ul>';
+    var keys = Object.keys(val).sort();
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        // ... rest of function
+    }
+}
+```
+
+**Status:** Not submitted - requires PR to main RabbitMQ repository
+
 ## Reference Documents
 
 - **AGENTS.md** - Complete technical architecture and implementation details
