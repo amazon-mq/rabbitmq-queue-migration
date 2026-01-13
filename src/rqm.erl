@@ -525,10 +525,7 @@ start_migration_preparation_on_node(PrepGatherer, VHost) ->
                     },
                     Result = {ok, #{node() => MigrationPreparationState}},
                     ok = rqm_gatherer:in(PrepGatherer, Result);
-                {error, SnapshotError} = Error ->
-                    ?LOG_ERROR("rqm: snapshot creation failed on node ~tp: ~tp", [
-                        node(), SnapshotError
-                    ]),
+                {error, _SnapshotError} = Error ->
                     ok = rqm_gatherer:in(PrepGatherer, Error)
             end
         catch
