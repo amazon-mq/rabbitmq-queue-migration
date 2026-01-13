@@ -19,7 +19,8 @@
     check_snapshot_not_in_progress/0,
     check_cluster_partitions/0,
     check_active_alarms/0,
-    check_memory_usage/0
+    check_memory_usage/0,
+    get_mirrored_classic_queues/1
 ]).
 
 %% Exported for testing

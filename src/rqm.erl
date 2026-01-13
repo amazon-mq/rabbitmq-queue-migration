@@ -122,7 +122,26 @@ pre_migration_validation(memory_usage, Opts) ->
 pre_migration_validation(snapshot_not_in_progress, Opts) ->
     handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
-    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
+    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts);
+pre_migration_validation(
+    eligible_queue_count,
+    #migration_opts{
+        vhost = VHost, unsuitable_queues = UnsuitableQueues, skip_unsuitable_queues = Skipped
+    } = Opts
+) ->
+    AllQueues = rqm_checks:get_mirrored_classic_queues(VHost),
+    EligibleCount = length(AllQueues) - length(UnsuitableQueues),
+    case EligibleCount > 0 of
+        true ->
+            {ok, Opts};
+        false ->
+            {error,
+                {no_eligible_queues, #{
+                    total => length(AllQueues),
+                    unsuitable => length(UnsuitableQueues),
+                    skipped => Skipped
+                }}}
+    end.
 
 handle_check_shovel_plugin(ok, Opts) ->
     pre_migration_validation(khepri_disabled, Opts);
@@ -267,20 +286,24 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     ),
     {error, {snapshot_in_progress, Details}}.
 
-handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only}) ->
-    % Validation passed - return ok without starting migration
-    ok;
+handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only} = Opts) ->
+    pre_migration_validation(eligible_queue_count, Opts);
 handle_check_cluster_partitions(
-    {ok, Nodes}, #migration_opts{mode = migration, vhost = VHost} = Opts
+    {ok, Nodes}, #migration_opts{mode = migration} = Opts
 ) ->
-    MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
-    handle_migration_result(MigrationResult, VHost);
+    handle_check_eligible_queue_count(pre_migration_validation(eligible_queue_count, Opts), Nodes);
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
 handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
     ?LOG_ERROR("rqm: cluster partitions detected. Resolve partitions before migration."),
     {error, partitions_detected}.
+
+handle_check_eligible_queue_count({ok, #migration_opts{vhost = VHost} = Opts}, Nodes) ->
+    MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
+    handle_migration_result(MigrationResult, VHost);
+handle_check_eligible_queue_count({error, _} = Error, _Nodes) ->
+    Error.
 
 handle_migration_result(ok, VHost) ->
     ?LOG_INFO("rqm: completed successfully for vhost ~ts", [VHost]);

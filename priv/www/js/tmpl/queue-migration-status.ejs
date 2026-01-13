@@ -10,11 +10,60 @@ SPDX-License-Identifier: Apache-2.0
   <p>Migration has been started. The page will refresh automatically to show progress.</p>
 </div>
 
+<% var migrationInProgress = queue_migration_status && queue_migration_status.status === 'cmq_qq_migration_in_progress'; %>
+
+<div id="migration-controls" style="<%= migrationInProgress ? 'display: none;' : '' %>">
+  <div class="section">
+    <h2>Options</h2>
+    <table class="form">
+      <tr>
+        <th><label>Virtual Host:</label></th>
+        <td>
+          <select name="vhost" id="migration-vhost">
+            <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
+            <% } %>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <th>Skip Unsuitable Queues:</th>
+        <td>
+          <input type="checkbox" name="skip_unsuitable_queues" id="skip_unsuitable_queues"
+                 title="Skip queues that fail validation checks instead of blocking migration" />
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Check Compatibility</h2>
+    <p>Check classic queues for compatibility with quorum queues before starting migration.</p>
+    <form action="#/queue-migration/check" method="post" id="check-compatibility-form">
+      <input type="hidden" name="vhost" id="check-vhost" />
+      <input type="hidden" name="skip_unsuitable_queues" id="check-skip" />
+      <input type="submit" value="Check Compatibility" />
+    </form>
+    <div id="compatibility-results"></div>
+  </div>
+
+  <div class="section">
+    <h2>Start Migration</h2>
+    <p>Start migration for the selected virtual host.</p>
+    <button id="start-migration-btn" type="button">Start Migration</button>
+  </div>
+</div>
+
+<div id="migration-in-progress" class="section" style="<%= migrationInProgress ? '' : 'display: none;' %>">
+  <h2>Migration In Progress</h2>
+  <p class="warning">A migration is currently in progress. Starting a new migration is not allowed until the current one completes.</p>
+</div>
+
 <div class="section">
-  <h2>Current Status</h2>
+  <h2>Migration History</h2>
   <% if (queue_migration_status) { %>
     <p>Migration system status: <b><%= fmt_string(queue_migration_status.status) %></b></p>
-    
+
     <% if (queue_migration_status.migrations && queue_migration_status.migrations.length > 0) { %>
       <table class="list updatable">
         <thead>
@@ -54,41 +103,6 @@ SPDX-License-Identifier: Apache-2.0
     <p>Unable to retrieve migration status.</p>
   <% } %>
 </div>
-
-<% if (queue_migration_status && queue_migration_status.status !== 'cmq_qq_migration_in_progress') { %>
-<div class="section updatable" id="start-migration-section">
-  <h2>Start New Migration</h2>
-  <div class="hider">
-    <form action="#/queue-migration/start" method="put">
-      <table class="form">
-        <tr>
-          <th>Virtual Host:</th>
-          <td>
-            <select name="vhost">
-              <% for (var i = 0; i < vhosts.length; i++) { %>
-                <option value="<%= fmt_string(vhosts[i].name) %>"><%= fmt_string(vhosts[i].name) %></option>
-              <% } %>
-            </select>
-          </td>
-        </tr>
-        <tr>
-          <th>Skip Unsuitable Queues:</th>
-          <td>
-            <input type="checkbox" name="skip_unsuitable_queues" id="skip_unsuitable_queues"
-                   title="Skip queues that fail validation checks instead of blocking migration" />
-          </td>
-        </tr>
-      </table>
-      <input type="submit" value="Start Migration"/>
-    </form>
-  </div>
-</div>
-<% } else if (queue_migration_status && queue_migration_status.status === 'cmq_qq_migration_in_progress') { %>
-<div class="section updatable" id="migration-in-progress-section">
-  <h2>Migration In Progress</h2>
-  <p class="warning">A migration is currently in progress. Starting a new migration is not allowed until the current one completes.</p>
-</div>
-<% } %>
 
 <style type="text/css">
 .progress-bar {

@@ -26,6 +26,7 @@
 
 dispatcher() ->
     [
+        {"/queue-migration/check/:vhost", ?MODULE, [check]},
         {"/queue-migration/start", ?MODULE, [start]},
         {"/queue-migration/start/:vhost", ?MODULE, [start_vhost]},
         {"/queue-migration/status", ?MODULE, [status_list]},
@@ -47,6 +48,8 @@ content_types_accepted(ReqData, {EndpointType, Context}) ->
 content_types_provided(ReqData, {EndpointType, Context}) ->
     {[{<<"application/json">>, to_json}], ReqData, {EndpointType, Context}}.
 
+allowed_methods(ReqData, {check, Context}) ->
+    {[<<"POST">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {check, Context}};
 allowed_methods(ReqData, {EndpointType, Context}) ->
     {[<<"GET">>, <<"HEAD">>, <<"PUT">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
 
@@ -107,6 +110,8 @@ bad_request(ErrorJson, ReqData, {EndpointType, Context}) ->
     ReqData3 = cowboy_req:reply(400, #{<<"content-type">> => <<"application/json">>}, ReqData2),
     {stop, ReqData3, {EndpointType, Context}}.
 
+accept_content(ReqData, {check, Context}) ->
+    accept_compatibility_check(ReqData, {check, Context});
 accept_content(ReqData, {start, Context}) ->
     accept_migration_start(ReqData, {start, Context});
 accept_content(ReqData, {start_vhost, Context}) ->
@@ -209,6 +214,23 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 unsuitable_setting => <<"x-overflow">>,
                 current_value => OverflowBehavior,
                 suggested_values => [<<"drop-head">>, <<"reject-publish">>]
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, {no_eligible_queues, Details}} ->
+            TotalQueues = maps:get(total, Details, 0),
+            UnsuitableQueues = maps:get(unsuitable, Details, 0),
+            Message =
+                case TotalQueues of
+                    0 ->
+                        <<"No mirrored classic queues found in this vhost. Only classic queues with an HA policy can be migrated.">>;
+                    _ ->
+                        <<"All mirrored classic queues in this vhost are unsuitable for migration.">>
+                end,
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message,
+                total_queues => TotalQueues,
+                unsuitable_queues => UnsuitableQueues
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, Other} ->
@@ -385,3 +407,94 @@ not_found_reply(ReqData, State) ->
     ReqData2 = cowboy_req:set_resp_body(ErrorJson, ReqData),
     ReqData3 = cowboy_req:reply(404, #{<<"content-type">> => <<"application/json">>}, ReqData2),
     {stop, ReqData3, State}.
+
+%%--------------------------------------------------------------------
+%% Compatibility check handlers
+%%--------------------------------------------------------------------
+
+accept_compatibility_check(ReqData, {EndpointType, Context}) ->
+    VHost =
+        case cowboy_req:binding(vhost, ReqData) of
+            <<"all">> -> all_vhosts;
+            undefined -> <<"/">>;
+            _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
+        end,
+    OptsMap = parse_skip_unsuitable_queues_from_body(ReqData),
+    case VHost of
+        all_vhosts ->
+            AllVhosts = rabbit_vhost:list(),
+            Results = [
+                format_readiness(rqm_compat_checker:check_migration_readiness(VH, OptsMap))
+             || VH <- AllVhosts
+            ],
+            Json = rabbit_json:encode(#{vhost => <<"all">>, vhost_results => Results}),
+            {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}};
+        _ ->
+            Result = rqm_compat_checker:check_migration_readiness(VHost, OptsMap),
+            Json = rabbit_json:encode(format_readiness(Result)),
+            {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}}
+    end.
+
+parse_skip_unsuitable_queues_from_body(ReqData) ->
+    case cowboy_req:has_body(ReqData) of
+        true ->
+            {ok, Body, _} = cowboy_req:read_body(ReqData),
+            case Body of
+                <<>> ->
+                    #{};
+                _ ->
+                    case rabbit_json:try_decode(Body) of
+                        {ok, #{<<"skip_unsuitable_queues">> := true}} ->
+                            #{skip_unsuitable_queues => true};
+                        {ok, _} ->
+                            #{skip_unsuitable_queues => false};
+                        _ ->
+                            #{}
+                    end
+            end;
+        false ->
+            #{}
+    end.
+
+format_readiness(#{
+    vhost := VHost,
+    overall_ready := Ready,
+    skip_unsuitable_queues := Skip,
+    system_checks := SysChecks,
+    queue_checks := QueueChecks
+}) ->
+    #{
+        vhost => VHost,
+        overall_ready => Ready,
+        skip_unsuitable_queues => Skip,
+        system_checks => format_system_checks(SysChecks),
+        queue_checks => format_queue_checks(QueueChecks)
+    }.
+
+format_system_checks(#{all_passed := AllPassed, checks := Checks}) ->
+    #{all_passed => AllPassed, checks => Checks}.
+
+format_queue_checks(#{summary := Summary, results := []}) ->
+    #{summary => Summary, results => []};
+format_queue_checks(#{summary := Summary, results := Results}) ->
+    Sorted = lists:sort(fun({A, _}, {B, _}) -> queue_sort_key(A) =< queue_sort_key(B) end, Results),
+    #{summary => Summary, results => [format_queue_result(R) || R <- Sorted]}.
+
+queue_sort_key(#resource{virtual_host = VHost, name = Name}) -> {VHost, Name}.
+
+format_queue_result({#resource{name = Name, virtual_host = VHost}, {compatible, _}}) ->
+    #{name => Name, vhost => VHost, compatible => true, issues => []};
+format_queue_result({#resource{name = Name, virtual_host = VHost}, {unsuitable, Issues}}) ->
+    #{
+        name => Name,
+        vhost => VHost,
+        compatible => false,
+        issues => [format_issue(I) || I <- Issues]
+    }.
+
+format_issue({exclusive, Reason}) ->
+    #{type => <<"exclusive">>, reason => list_to_binary(Reason)};
+format_issue({Type, Reason}) when is_atom(Type), is_list(Reason) ->
+    #{type => atom_to_binary(Type, utf8), reason => list_to_binary(Reason)};
+format_issue({unsupported_argument, ArgName, Reason}) ->
+    #{type => <<"unsupported_argument">>, argument => ArgName, reason => list_to_binary(Reason)}.

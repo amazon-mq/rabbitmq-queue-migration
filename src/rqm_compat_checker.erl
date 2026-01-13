@@ -327,10 +327,11 @@ check_migration_readiness(VHost, OptsMap) ->
         fun(#{status := Status}) -> Status =:= passed end, QueueLevelChecks
     ),
     QueueReady = maps:get(unsuitable_queues, QueueSummary) =:= 0,
+    HasQueues = maps:get(total_queues, QueueSummary) > 0,
     OverallReady =
         case SkipUnsuitableQueues of
-            true -> TrueSystemReady;
-            false -> TrueSystemReady andalso QueueChecksReady andalso QueueReady
+            true -> TrueSystemReady andalso HasQueues;
+            false -> TrueSystemReady andalso QueueChecksReady andalso QueueReady andalso HasQueues
         end,
 
     % Format combined results (include all checks for display)
