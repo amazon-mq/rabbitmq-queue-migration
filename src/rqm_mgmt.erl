@@ -222,12 +222,9 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
             Message =
                 case TotalQueues of
                     0 ->
-                        <<"No classic queues found in this vhost">>;
+                        <<"No mirrored classic queues found in this vhost. Only classic queues with an HA policy can be migrated.">>;
                     _ ->
-                        rqm_util:unicode_format(
-                            "No eligible queues to migrate. Found ~p classic queue(s), all ~p are unsuitable.",
-                            [TotalQueues, UnsuitableQueues]
-                        )
+                        <<"All mirrored classic queues in this vhost are unsuitable for migration.">>
                 end,
             ErrorJson = rabbit_json:encode(#{
                 error => bad_request,
