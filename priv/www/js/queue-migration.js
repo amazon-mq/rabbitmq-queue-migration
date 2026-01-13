@@ -15,10 +15,9 @@ dispatcher_add(function(sammy) {
     });
 
     sammy.post('#/queue-migration/check', function() {
-        var self = this;
-        var vhost = self.params.vhost || '/';
+        var vhost = $('#migration-vhost').val() || '/';
         var requestBody = {};
-        if (self.params.skip_unsuitable_queues === 'on') {
+        if ($('#skip_unsuitable_queues').is(':checked')) {
             requestBody.skip_unsuitable_queues = true;
         }
 
