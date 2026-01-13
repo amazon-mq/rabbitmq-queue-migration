@@ -297,7 +297,10 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     {error, {snapshot_in_progress, Details}}.
 
 handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only} = Opts) ->
-    pre_migration_validation(eligible_queue_count, Opts);
+    case pre_migration_validation(eligible_queue_count, Opts) of
+        {ok, _} -> ok;
+        {error, _} = Error -> Error
+    end;
 handle_check_cluster_partitions(
     {ok, Nodes}, #migration_opts{mode = migration} = Opts
 ) ->
