@@ -34,10 +34,10 @@ SPDX-License-Identifier: Apache-2.0
         </td>
       </tr>
       <tr>
-        <th><label for="batch_size">Batch Size:</label></th>
-        <td style="white-space: nowrap;">
-          <input type="checkbox" id="batch_all" checked title="Migrate all eligible queues" /><label for="batch_all">All</label>
-          &nbsp;or&nbsp;
+        <th><label>Batch Size:</label></th>
+        <td>
+          <span style="display: inline-block;"><input type="checkbox" id="batch_all" checked title="Migrate all eligible queues" /><label for="batch_all">All</label></span>
+          or
           <input type="number" name="batch_size" id="batch_size" min="1" value="10"
                  title="Number of queues to migrate" style="width: 60px;" disabled /> queues
         </td>
