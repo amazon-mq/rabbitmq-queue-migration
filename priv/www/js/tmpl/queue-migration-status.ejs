@@ -16,18 +16,6 @@ SPDX-License-Identifier: Apache-2.0
     <p>Migration system status: <b><%= fmt_string(queue_migration_status.status) %></b></p>
     
     <% if (queue_migration_status.migrations && queue_migration_status.migrations.length > 0) { %>
-      <p>
-        Select migration:
-        <select id="migration-id">
-          <option value="">-- Select a migration --</option>
-          <% for (var i = 0; i < queue_migration_status.migrations.length; i++) { %>
-            <option value="<%= queue_migration_status.migrations[i].id %>">
-              <%= queue_migration_status.migrations[i].display_id %>
-            </option>
-          <% } %>
-        </select>
-      </p>
-      
       <table class="list updatable">
         <thead>
           <tr>

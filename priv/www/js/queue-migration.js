@@ -40,15 +40,6 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
 
-$(document).on('change', 'select#migration-id', function() {
-    var migrationId = $(this).val();
-    if (migrationId) {
-        go_to('#/queue-migration/status/' + migrationId);
-    } else {
-        go_to('#/queue-migration/status');
-    }
-});
-
 function fmt_migration_status(status) {
     if (status === 'in_progress') {
         return '<span class="status-blue">In Progress</span>';
