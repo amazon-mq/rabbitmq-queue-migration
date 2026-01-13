@@ -512,11 +512,11 @@ This allows applications to redeclare queues with classic arguments without erro
 ## Integration Points
 
 ### Web UI Components
-- **JavaScript Assets**: `queue-migration.js` and `queue-compatibility.js`
+- **JavaScript Assets**: `queue-migration.js`
 - **Management Plugin Integration**: Extends RabbitMQ management interface with new navigation items
 - **Template System**: Uses RabbitMQ management plugin template system for UI rendering
 - **Real-time Updates**: Web interface for monitoring migration progress with auto-refresh
-- **Navigation Integration**: Adds "Queue Migration" and "Queue Compatibility" to Admin menu
+- **Navigation Integration**: Adds "Queue Migration" to Admin menu
 - **Status Formatting**: Custom formatters for migration status, progress bars, and queue resources
 
 ### RabbitMQ Core
