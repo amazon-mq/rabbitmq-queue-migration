@@ -335,7 +335,25 @@ maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
     ?LOG_WARNING("rqm: already in progress."),
     {error, cmq_qq_migration_in_progress}.
 
-start_with_lock(GlobalLockId, Nodes, #migration_opts{vhost = VHost} = Opts, MigrationId) ->
+start_with_lock(
+    GlobalLockId,
+    Nodes,
+    #migration_opts{
+        vhost = VHost,
+        skip_unsuitable_queues = SkipUnsuitableQueues,
+        unsuitable_queues = UnsuitableQueues
+    } = Opts,
+    MigrationId
+) ->
+    %% Create migration record FIRST so failures are always tracked
+    SkippedCount = length(UnsuitableQueues),
+    {ok, _} = rqm_db:create_migration(
+        MigrationId,
+        VHost,
+        os:timestamp(),
+        SkipUnsuitableQueues,
+        SkippedCount
+    ),
     try
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Pre-migration Preparation
@@ -406,7 +424,8 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
         format_migration_id(MigrationId)
     ]),
     case rqm_db:update_migration_status(MigrationId, failed) of
-        {ok, _} -> ok;
+        {ok, _} ->
+            ok;
         {error, not_found} ->
             ?LOG_DEBUG("rqm: migration ~s not found in database (failed before creation)", [
                 format_migration_id(MigrationId)
@@ -648,7 +667,6 @@ mcq_qq_migration(
     Nodes,
     #migration_opts{
         vhost = VHost,
-        skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
         batch_size = BatchSize,
         batch_order = BatchOrder
@@ -659,21 +677,6 @@ mcq_qq_migration(
         [format_migration_id(MigrationId), VHost, Nodes]
     ),
     Start = erlang:system_time(second),
-
-    % Create initial migration record with 0 queues
-    % Each node will update this with its own queue count
-    ?LOG_DEBUG(
-        "rqm: creating migration record ~s for vhost ~tp",
-        [format_migration_id(MigrationId), VHost]
-    ),
-    SkippedCount = length(UnsuitableQueues),
-    {ok, _} = rqm_db:create_migration(
-        MigrationId,
-        VHost,
-        os:timestamp(),
-        SkipUnsuitableQueues,
-        SkippedCount
-    ),
 
     %% Store snapshot information in migration record
     ok = store_snapshot_information(MigrationId, PreparationState),
