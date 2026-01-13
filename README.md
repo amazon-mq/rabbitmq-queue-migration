@@ -52,11 +52,20 @@ curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
 
 ### 2. Start Migration
 
-Migrate all mirrored classic queues on the default vhost:
+Migrate all mirrored classic queues on the default vhost (`/`):
 
 ```bash
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
 ```
+
+To migrate a specific vhost, include it in the URL path (URL-encoded):
+
+```bash
+# Migrate vhost "/production"
+curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/%2Fproduction
+```
+
+> **Note:** The vhost must be specified in the URL path, not in the request body.
 
 To skip unsuitable queues instead of blocking migration:
 
@@ -64,7 +73,17 @@ To skip unsuitable queues instead of blocking migration:
 curl -u guest:guest -X PUT \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
-  http://localhost:15672/api/queue-migration/start
+  http://localhost:15672/api/queue-migration/start/%2F
+```
+
+To migrate queues in batches (useful for large vhosts):
+
+```bash
+# Migrate 10 queues at a time, smallest first
+curl -u guest:guest -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 10, "batch_order": "smallest_first"}' \
+  http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
 ```
 
 ### 3. Monitor Progress
