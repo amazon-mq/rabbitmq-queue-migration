@@ -515,17 +515,22 @@ start_migration_preparation_on_node(PrepGatherer, VHost) ->
             {ok, _EbsPreparationState} = quiesce_and_flush_node(VHost),
 
             % Create EBS snapshot after quiescing
-            {ok, EbsSnapshotState} = rqm_snapshot:create_snapshot(VHost),
-
-            MigrationPreparationState = #{
-                vhost => VHost,
-                connection_preparation_state => ConnectionPreparationState,
-                ebs_snapshot_state => EbsSnapshotState,
-                preparation_timestamp => erlang:system_time(millisecond)
-            },
-
-            Result = {ok, #{node() => MigrationPreparationState}},
-            ok = rqm_gatherer:in(PrepGatherer, Result)
+            case rqm_snapshot:create_snapshot(VHost) of
+                {ok, EbsSnapshotState} ->
+                    MigrationPreparationState = #{
+                        vhost => VHost,
+                        connection_preparation_state => ConnectionPreparationState,
+                        ebs_snapshot_state => EbsSnapshotState,
+                        preparation_timestamp => erlang:system_time(millisecond)
+                    },
+                    Result = {ok, #{node() => MigrationPreparationState}},
+                    ok = rqm_gatherer:in(PrepGatherer, Result);
+                {error, SnapshotError} = Error ->
+                    ?LOG_ERROR("rqm: snapshot creation failed on node ~tp: ~tp", [
+                        node(), SnapshotError
+                    ]),
+                    ok = rqm_gatherer:in(PrepGatherer, Error)
+            end
         catch
             Class:Reason:Stack ->
                 ?LOG_ERROR("rqm: preparation: exception: ~tp:~tp", [Class, Reason]),
