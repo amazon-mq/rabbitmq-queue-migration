@@ -18,6 +18,7 @@
 -export([
     create_migration/5,
     update_migration_status/2,
+    update_migration_failed/2,
     update_migration_completed/2,
     update_migration_completed_count/1,
     update_migration_snapshots/2,
@@ -109,6 +110,14 @@ update_migration_status(MigrationId, rollback_completed) ->
 update_migration_status(MigrationId, Status) ->
     F = fun(M) ->
         M#queue_migration{status = Status}
+    end,
+    update_migration(MigrationId, F).
+
+%% @doc Update migration as failed with error reason
+-spec update_migration_failed(term(), term()) -> {ok, #queue_migration{}} | {error, not_found}.
+update_migration_failed(MigrationId, Error) ->
+    F = fun(M) ->
+        M#queue_migration{status = failed, error = Error, completed_at = os:timestamp()}
     end,
     update_migration(MigrationId, F).
 
@@ -388,14 +397,18 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
             erlang:timestamp() | undefined,
             non_neg_integer(),
             non_neg_integer(),
-            atom()
+            non_neg_integer(),
+            atom(),
+            boolean(),
+            binary() | undefined
         }
     ].
 get_migration_status() ->
     Migrations = get_all_migrations(),
     [
         {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-            SkipUnsuitableQueues}
+            SkipUnsuitableQueues,
+            Error}
      || #queue_migration{
             id = Id,
             vhost = VHost,
@@ -405,7 +418,8 @@ get_migration_status() ->
             completed_queues = CompletedQueues,
             skipped_queues = SkippedQueues,
             status = Status,
-            skip_unsuitable_queues = SkipUnsuitableQueues
+            skip_unsuitable_queues = SkipUnsuitableQueues,
+            error = Error
         } <- Migrations
     ].
 

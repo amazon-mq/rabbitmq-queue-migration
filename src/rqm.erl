@@ -419,11 +419,12 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
             ])
     end,
 
-    % Update migration record as failed
+    % Update migration record as failed with error reason
     ?LOG_INFO("rqm: marking migration ~s as failed due to exception", [
         format_migration_id(MigrationId)
     ]),
-    case rqm_db:update_migration_status(MigrationId, failed) of
+    ErrorReason = format_migration_error(Class, Ex),
+    case rqm_db:update_migration_failed(MigrationId, ErrorReason) of
         {ok, _} ->
             ok;
         {error, not_found} ->
@@ -1762,6 +1763,26 @@ get_rollback_pending_migration_json() ->
 %% Extracts timestamp from {Timestamp, Node} tuple and formats as string
 format_migration_id({Timestamp, _Node}) ->
     integer_to_list(Timestamp).
+
+%% Format error for storage in migration record
+format_migration_error(_Class, {migration_failed_rollback_pending, {errors, Errors}}) ->
+    {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    iolist_to_binary(
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.", [
+            ErrorCount, AbortedCount
+        ])
+    );
+format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}}) ->
+    {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    iolist_to_binary(
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.", [
+            ErrorCount, AbortedCount
+        ])
+    );
+format_migration_error(_Class, {preparation_failed, Reason}) ->
+    iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
+format_migration_error(Class, Ex) ->
+    iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
 
 %% Helper function to compute per-node batch allocations
 %% Returns list of {Node, AllocationCount} tuples

@@ -85,6 +85,8 @@
     skipped_queues = 0,
     % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
     status :: migration_status(),
+    % Error details if failed (null otherwise)
+    error,
     % Timestamp when rollback started
     rollback_started_at,
     % Timestamp when rollback completed
