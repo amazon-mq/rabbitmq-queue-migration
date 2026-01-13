@@ -59,32 +59,55 @@ PUT /api/queue-migration/start/:vhost
 ```
 
 **Parameters:**
-- `:vhost` (optional) - Virtual host name (URL-encoded). Defaults to `/` if not specified.
+- `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.**
+
+> **Important:** The vhost must be specified in the URL, not in the request body. The `/api/queue-migration/start` endpoint (without a vhost path parameter) defaults to the `/` vhost. To migrate a different vhost, you must use `/api/queue-migration/start/:vhost` with the vhost name URL-encoded in the path.
 
 **Request Body (optional):**
 ```json
 {
-  "skip_unsuitable_queues": true
+  "skip_unsuitable_queues": true,
+  "batch_size": 10,
+  "batch_order": "smallest_first"
 }
 ```
 
 **Request Body Fields:**
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, skip queues that fail validation checks instead of blocking the entire migration. Defaults to `false`.
+- `batch_size` (optional, integer or `"all"`) - Number of queues to migrate in this batch. Use `0` or `"all"` to migrate all eligible queues. Defaults to `all`.
+- `batch_order` (optional, string) - Order to select queues for batching: `"smallest_first"` or `"largest_first"`. Defaults to `"smallest_first"`.
 
 **Request:**
 ```bash
-# Default vhost (/) with default behavior
+# Default vhost (/)
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
 
-# Specific vhost
+# Specific vhost - vhost MUST be in the URL path, not the body
 curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/my-vhost
+
+# Vhost with special characters (e.g., /production/app)
+curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/%2Fproduction%2Fapp
 
 # Skip unsuitable queues
 curl -u guest:guest -X PUT \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
-  http://localhost:15672/api/queue-migration/start
+  http://localhost:15672/api/queue-migration/start/%2F
+
+# Migrate only 10 queues, smallest first
+curl -u guest:guest -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 10, "batch_order": "smallest_first"}' \
+  http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
+
+# Migrate all remaining queues (batch_size=0 means "all")
+curl -u guest:guest -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 0}' \
+  http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
 ```
+
+> **Common Mistake:** Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
 
 **Response (200 OK):**
 ```json
@@ -292,13 +315,15 @@ Returned when the migration ID is invalid (cannot be decoded) or the migration d
 
 Check if queues are eligible for migration and validate system readiness.
 
-**Endpoints:**
+**Endpoint:**
 ```
 POST /api/queue-migration/check/:vhost
 ```
 
 **Parameters:**
-- `:vhost` - Virtual host name (URL-encoded). Use `all` to check all vhosts.
+- `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.** Use `all` to check all vhosts.
+
+> **Important:** Unlike the start endpoint, there is no default vhost for the check endpoint. You must always specify the vhost in the URL path.
 
 **Request Body (optional):**
 ```json
@@ -312,9 +337,13 @@ POST /api/queue-migration/check/:vhost
 
 **Request:**
 ```bash
-# Default behavior
+# Check the default vhost (/)
 curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2F
+
+# Check a specific vhost (e.g., /production/app)
+curl -u guest:guest -X POST \
+  http://localhost:15672/api/queue-migration/check/%2Fproduction%2Fapp
 
 # With skip mode enabled
 curl -u guest:guest -X POST \
