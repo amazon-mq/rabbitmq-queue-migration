@@ -330,7 +330,7 @@ start_with_new_migration_id(Nodes, Opts, MigrationId) ->
     maybe_start_with_lock(get_queue_migrate_lock(Nodes), Nodes, Opts, MigrationId).
 
 maybe_start_with_lock({true, GlobalLockId}, Nodes, Opts, MigrationId) ->
-    ok = start_with_lock(GlobalLockId, Nodes, Opts, MigrationId);
+    start_with_lock(GlobalLockId, Nodes, Opts, MigrationId);
 maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
     ?LOG_WARNING("rqm: already in progress."),
     {error, cmq_qq_migration_in_progress}.
@@ -376,14 +376,15 @@ start_with_lock(
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Migration stats
         %% Get the final count of total queues
-        ok = post_migration_stats(Nodes, MigrationId, MigrationDuration)
+        ok = post_migration_stats(Nodes, MigrationId, MigrationDuration),
+        ok
     catch
         Class:Reason:Stack ->
-            ok = handle_migration_exception(Class, Reason, Stack, MigrationId)
+            ok = handle_migration_exception(Class, Reason, Stack, MigrationId),
+            {error, {Class, Reason}}
     after
         global:del_lock(GlobalLockId)
-    end,
-    ok.
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Migration exception handler
