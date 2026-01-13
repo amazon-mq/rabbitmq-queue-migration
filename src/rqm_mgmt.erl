@@ -230,7 +230,7 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                         )
                 end,
             ErrorJson = rabbit_json:encode(#{
-                error => no_eligible_queues,
+                error => bad_request,
                 reason => Message,
                 total_queues => TotalQueues,
                 unsuitable_queues => UnsuitableQueues
