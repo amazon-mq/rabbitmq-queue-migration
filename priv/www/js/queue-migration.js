@@ -65,11 +65,34 @@ $(document).on('click', '#start-migration-btn', function() {
 
     with_req('PUT', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
         $('#migration-started-message').show();
+        $('#migration-controls').hide();
+        $('#migration-in-progress').show();
         setTimeout(function() {
             update();
         }, 3000);
     });
 });
+
+// Poll for migration status changes to toggle UI sections
+setInterval(function() {
+    if ($('#migration-in-progress').length === 0) return;
+
+    $.ajax({
+        url: '/api/queue-migration/status',
+        dataType: 'json',
+        success: function(data) {
+            var inProgress = data.status === 'cmq_qq_migration_in_progress';
+            if (inProgress) {
+                $('#migration-controls').hide();
+                $('#migration-in-progress').show();
+            } else {
+                $('#migration-controls').show();
+                $('#migration-in-progress').hide();
+                $('#migration-started-message').hide();
+            }
+        }
+    });
+}, 5000);
 
 function fmt_migration_status(status) {
     if (status === 'in_progress') {
