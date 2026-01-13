@@ -80,7 +80,7 @@ create_with_retry(VHost, ShovelName, ShovelDef, Retries) ->
 %% @doc Build shovel definition for message migration
 -spec build_definition(binary(), binary(), non_neg_integer(), binary()) -> list().
 build_definition(SourceQueueName, DestQueueName, MessageCount, VHost) ->
-    EncodedVHost = rabbit_http_util:quote_plus(VHost),
+    EncodedVHost = rqm_util:to_unicode(rabbit_http_util:quote_plus(VHost)),
     SrcDestUri = <<"amqp:///", EncodedVHost/binary>>,
     Prefetch = calculate_prefetch(MessageCount),
     [
