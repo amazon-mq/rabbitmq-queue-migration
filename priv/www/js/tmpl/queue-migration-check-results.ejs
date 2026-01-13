@@ -63,6 +63,11 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
           <p>All system requirements are met and all queues are compatible.</p>
         <% } %>
       </div>
+    <% } else if (data.queue_checks && data.queue_checks.summary && data.queue_checks.summary.total_queues === 0) { %>
+      <div class="alert alert-warning">
+        <h3><span class="status-yellow">No Mirrored Classic Queues Found</span></h3>
+        <p>Only classic queues with an HA policy can be migrated to quorum queues.</p>
+      </div>
     <% } else { %>
       <div class="alert alert-danger">
         <h3><span class="status-red">✗ Not Ready for Migration</span></h3>
@@ -71,6 +76,9 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     <% } %>
   </div>
 
+  <% if (data.queue_checks && data.queue_checks.summary && data.queue_checks.summary.total_queues === 0) { %>
+  <!-- No queues - skip detailed sections -->
+  <% } else { %>
   <!-- System Requirements Section -->
   <div class="system-requirements">
     <h2>System Requirements</h2>
@@ -222,5 +230,6 @@ if (compatibility_results.vhost === "all" && compatibility_results.vhost_results
     <% } %>
     </div>
   </div>
+  <% } %>
   </div>
 </div>
