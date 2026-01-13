@@ -216,6 +216,26 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 suggested_values => [<<"drop-head">>, <<"reject-publish">>]
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, {no_eligible_queues, Details}} ->
+            TotalQueues = maps:get(total, Details, 0),
+            UnsuitableQueues = maps:get(unsuitable, Details, 0),
+            Message =
+                case TotalQueues of
+                    0 ->
+                        <<"No classic queues found in this vhost">>;
+                    _ ->
+                        rqm_util:unicode_format(
+                            "No eligible queues to migrate. Found ~p classic queue(s), all ~p are unsuitable.",
+                            [TotalQueues, UnsuitableQueues]
+                        )
+                end,
+            ErrorJson = rabbit_json:encode(#{
+                error => no_eligible_queues,
+                reason => Message,
+                total_queues => TotalQueues,
+                unsuitable_queues => UnsuitableQueues
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, Other} ->
             Message = rqm_util:unicode_format("Migration validation failed: ~p", [Other]),
             ErrorJson = rabbit_json:encode(#{
@@ -406,8 +426,10 @@ accept_compatibility_check(ReqData, {EndpointType, Context}) ->
     case VHost of
         all_vhosts ->
             AllVhosts = rabbit_vhost:list(),
-            Results = [format_readiness(rqm_compat_checker:check_migration_readiness(VH, OptsMap))
-                       || VH <- AllVhosts],
+            Results = [
+                format_readiness(rqm_compat_checker:check_migration_readiness(VH, OptsMap))
+             || VH <- AllVhosts
+            ],
             Json = rabbit_json:encode(#{vhost => <<"all">>, vhost_results => Results}),
             {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}};
         _ ->
@@ -421,23 +443,36 @@ parse_skip_unsuitable_queues_from_body(ReqData) ->
         true ->
             {ok, Body, _} = cowboy_req:read_body(ReqData),
             case Body of
-                <<>> -> #{};
+                <<>> ->
+                    #{};
                 _ ->
                     case rabbit_json:try_decode(Body) of
                         {ok, #{<<"skip_unsuitable_queues">> := true}} ->
                             #{skip_unsuitable_queues => true};
-                        {ok, _} -> #{skip_unsuitable_queues => false};
-                        _ -> #{}
+                        {ok, _} ->
+                            #{skip_unsuitable_queues => false};
+                        _ ->
+                            #{}
                     end
             end;
-        false -> #{}
+        false ->
+            #{}
     end.
 
-format_readiness(#{vhost := VHost, overall_ready := Ready, skip_unsuitable_queues := Skip,
-                   system_checks := SysChecks, queue_checks := QueueChecks}) ->
-    #{vhost => VHost, overall_ready => Ready, skip_unsuitable_queues => Skip,
-      system_checks => format_system_checks(SysChecks),
-      queue_checks => format_queue_checks(QueueChecks)}.
+format_readiness(#{
+    vhost := VHost,
+    overall_ready := Ready,
+    skip_unsuitable_queues := Skip,
+    system_checks := SysChecks,
+    queue_checks := QueueChecks
+}) ->
+    #{
+        vhost => VHost,
+        overall_ready => Ready,
+        skip_unsuitable_queues => Skip,
+        system_checks => format_system_checks(SysChecks),
+        queue_checks => format_queue_checks(QueueChecks)
+    }.
 
 format_system_checks(#{all_passed := AllPassed, checks := Checks}) ->
     #{all_passed => AllPassed, checks => Checks}.
@@ -453,7 +488,12 @@ queue_sort_key(#resource{virtual_host = VHost, name = Name}) -> {VHost, Name}.
 format_queue_result({#resource{name = Name, virtual_host = VHost}, {compatible, _}}) ->
     #{name => Name, vhost => VHost, compatible => true, issues => []};
 format_queue_result({#resource{name = Name, virtual_host = VHost}, {unsuitable, Issues}}) ->
-    #{name => Name, vhost => VHost, compatible => false, issues => [format_issue(I) || I <- Issues]}.
+    #{
+        name => Name,
+        vhost => VHost,
+        compatible => false,
+        issues => [format_issue(I) || I <- Issues]
+    }.
 
 format_issue({exclusive, Reason}) ->
     #{type => <<"exclusive">>, reason => list_to_binary(Reason)};
