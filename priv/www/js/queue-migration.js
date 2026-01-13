@@ -77,19 +77,16 @@ $(document).on('click', '#start-migration-btn', function() {
 setInterval(function() {
     if ($('#migration-in-progress').length === 0) return;
 
-    $.ajax({
-        url: '/api/queue-migration/status',
-        dataType: 'json',
-        success: function(data) {
-            var inProgress = data.status === 'cmq_qq_migration_in_progress';
-            if (inProgress) {
-                $('#migration-controls').hide();
-                $('#migration-in-progress').show();
-            } else {
-                $('#migration-controls').show();
-                $('#migration-in-progress').hide();
-                $('#migration-started-message').hide();
-            }
+    with_req('GET', '/queue-migration/status', null, function(resp) {
+        var data = JSON.parse(resp.responseText);
+        var inProgress = data.status === 'cmq_qq_migration_in_progress';
+        if (inProgress) {
+            $('#migration-controls').hide();
+            $('#migration-in-progress').show();
+        } else {
+            $('#migration-controls').show();
+            $('#migration-in-progress').hide();
+            $('#migration-started-message').hide();
         }
     });
 }, 5000);
