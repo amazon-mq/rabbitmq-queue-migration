@@ -57,6 +57,21 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
 
+$(document).on('click', '#start-migration-btn', function() {
+    var vhost = $('#migration-vhost').val() || '/';
+    var requestBody = {};
+    if ($('#skip_unsuitable_queues').is(':checked')) {
+        requestBody.skip_unsuitable_queues = true;
+    }
+
+    with_req('PUT', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
+        $('#migration-started-message').show();
+        setTimeout(function() {
+            update();
+        }, 3000);
+    });
+});
+
 function fmt_migration_status(status) {
     if (status === 'in_progress') {
         return '<span class="status-blue">In Progress</span>';

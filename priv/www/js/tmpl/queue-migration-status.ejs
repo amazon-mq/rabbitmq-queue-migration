@@ -35,9 +35,14 @@ SPDX-License-Identifier: Apache-2.0
       </tr>
     </table>
     <input type="submit" value="Check Compatibility" />
-    <input type="submit" value="Start Migration" formaction="#/queue-migration/start" formmethod="put" />
   </form>
   <div id="compatibility-results"></div>
+</div>
+
+<div class="section">
+  <h2>Start Migration</h2>
+  <p>Start migration using the virtual host and options selected above.</p>
+  <button id="start-migration-btn" type="button">Start Migration</button>
 </div>
 <% } else if (queue_migration_status && queue_migration_status.status === 'cmq_qq_migration_in_progress') { %>
 <div class="section">
