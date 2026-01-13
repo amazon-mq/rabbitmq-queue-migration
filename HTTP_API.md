@@ -20,6 +20,32 @@ All endpoints require RabbitMQ user authentication. Use HTTP Basic Auth with man
 curl -u guest:guest http://localhost:15672/api/queue-migration/status
 ```
 
+## URL Encoding
+
+Virtual host names and migration IDs must be URL-encoded when used in URL paths. This includes:
+
+- `/` → `%2F`
+- `&` → `%26`
+- `#` → `%23`
+- Unicode characters (e.g., `ü` → `%C3%BC`, `日本語` → `%E6%97%A5%E6%9C%AC%E8%AA%9E`)
+
+**Examples:**
+```bash
+# Vhost "/" (default)
+curl -u guest:guest http://localhost:15672/api/queue-migration/start/%2F
+
+# Vhost "/test&foo"
+curl -u guest:guest http://localhost:15672/api/queue-migration/start/%2Ftest%26foo
+
+# Vhost "/test/über&co" (with unicode)
+curl -u guest:guest http://localhost:15672/api/queue-migration/start/%2Ftest%2F%C3%BCber%26co
+
+# Vhost "/test/日本語&queue" (with CJK characters)
+curl -u guest:guest -X POST http://localhost:15672/api/queue-compatibility/check/%2Ftest%2F%E6%97%A5%E6%9C%AC%E8%AA%9E%26queue
+```
+
+---
+
 ## Endpoints
 
 ### Start Migration
@@ -250,9 +276,13 @@ curl -u guest:guest \
 - `error` - Error details (if status is `failed`) or skip reason (if status is `skipped`)
 
 **Error Response (404 Not Found):**
+
+Returned when the migration ID is invalid (cannot be decoded) or the migration does not exist.
+
 ```json
 {
-  "error": "Migration not found"
+  "error": "Object Not Found",
+  "reason": "Not Found"
 }
 ```
 
@@ -296,44 +326,50 @@ curl -u guest:guest -X POST \
 **Response (200 OK):**
 ```json
 {
-  "ready_for_migration": true,
-  "system_checks": {
-    "shovel_plugin_enabled": {
-      "status": "pass",
-      "message": "rabbitmq_shovel plugin is enabled"
-    },
-    "khepri_disabled": {
-      "status": "pass",
-      "message": "Khepri database is disabled"
-    },
-    "relaxed_checks_enabled": {
-      "status": "pass",
-      "message": "Relaxed argument checks enabled"
-    },
-    "disk_space": {
-      "status": "pass",
-      "message": "Sufficient disk space available",
-      "details": {
-        "required_bytes": 1073741824,
-        "available_bytes": 10737418240
-      }
-    }
-  },
+  "vhost": "/",
+  "skip_unsuitable_queues": false,
+  "overall_ready": true,
   "queue_checks": {
-    "total_queues": 10,
-    "eligible_queues": 10,
-    "ineligible_queues": 0,
-    "queues": [
+    "summary": {
+      "total_queues": 10,
+      "unsuitable_queues": 0,
+      "compatibility_percentage": 100,
+      "compatible_queues": 10
+    },
+    "results": []
+  },
+  "system_checks": {
+    "all_passed": true,
+    "checks": [
       {
-        "name": "my-queue",
-        "vhost": "/",
-        "eligible": true,
-        "checks": {
-          "is_classic_queue": true,
-          "has_ha_policy": true,
-          "is_synchronized": true,
-          "message_count_ok": true
-        }
+        "check_type": "relaxed_checks_setting",
+        "status": "passed",
+        "message": "Relaxed checks setting is enabled"
+      },
+      {
+        "check_type": "leader_balance",
+        "status": "passed",
+        "message": "Queue leaders are balanced across cluster nodes"
+      },
+      {
+        "check_type": "queue_synchronization",
+        "status": "passed",
+        "message": "All mirrored classic queues are fully synchronized"
+      },
+      {
+        "check_type": "queue_suitability",
+        "status": "passed",
+        "message": "All queues are suitable for migration"
+      },
+      {
+        "check_type": "message_count",
+        "status": "passed",
+        "message": "Message counts are within migration limits"
+      },
+      {
+        "check_type": "disk_space",
+        "status": "passed",
+        "message": "Sufficient disk space available for migration"
       }
     ]
   }
@@ -341,14 +377,23 @@ curl -u guest:guest -X POST \
 ```
 
 **Response Fields:**
-- `ready_for_migration` - Boolean indicating if migration can proceed
+- `vhost` - Virtual host being checked
+- `skip_unsuitable_queues` - Whether skip mode was requested
+- `overall_ready` - Boolean indicating if migration can proceed
+- `queue_checks` - Queue-level validation results
+  - `summary` - Aggregate queue statistics
+  - `results` - Array of individual queue issues (empty when all compatible)
 - `system_checks` - System-level validation results
-- `queue_checks` - Per-queue eligibility information
+  - `all_passed` - Boolean indicating all system checks passed
+  - `checks` - Array of individual check results
 
-**System Check Statuses:**
-- `pass` - Check passed
-- `fail` - Check failed (blocks migration)
-- `warn` - Warning (migration may proceed)
+**System Check Types:**
+- `relaxed_checks_setting` - Relaxed argument checks enabled
+- `leader_balance` - Queue leaders balanced across nodes
+- `queue_synchronization` - All mirrored queues synchronized
+- `queue_suitability` - All queues suitable for migration
+- `message_count` - Message counts within limits
+- `disk_space` - Sufficient disk space available
 
 ---
 
