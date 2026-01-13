@@ -288,7 +288,7 @@ migration_to_json(
         progress_percentage => calculate_progress_percentage(CompletedQueues, TotalQueues),
         status => Status,
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        error => Error
+        error => format_error(Error)
     }.
 
 migration_to_json_detail(#queue_migration{
@@ -317,7 +317,7 @@ migration_to_json_detail(#queue_migration{
         status => Status,
         snapshots => format_snapshots(Snapshots),
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        error => Error
+        error => format_error(Error)
     }.
 
 queue_status_to_json({Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs, Status, Error}) ->
@@ -359,6 +359,11 @@ format_timestamp(Timestamp) ->
             [Year, Month, Day, Hour, Minute, Second]
         )
     ).
+
+format_error(undefined) ->
+    null;
+format_error(Error) ->
+    Error.
 
 calculate_progress_percentage(_, 0) ->
     0;
