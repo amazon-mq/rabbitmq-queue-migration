@@ -16,6 +16,7 @@
     base64url_decode/1,
     add_base64_padding/1,
     format_migration_id/1,
+    parse_migration_id/1,
     to_unicode/1,
     unicode_format/2,
     suspend_non_http_listeners/0,
@@ -96,6 +97,18 @@ add_base64_padding(Data) ->
 format_migration_id({Timestamp, Node}) ->
     MigrationId = {Timestamp, Node},
     base64url_encode(term_to_binary(MigrationId)).
+
+%% @doc Parse a URL-encoded migration ID string back to the original tuple
+%% Returns {ok, MigrationId} or error if the input is invalid
+-spec parse_migration_id(binary()) -> {ok, {integer(), atom()}} | error.
+parse_migration_id(UrlEncoded) ->
+    try
+        Decoded = uri_string:percent_decode(UrlEncoded),
+        Bin = base64url_decode(Decoded),
+        {ok, binary_to_term(Bin)}
+    catch
+        _:_ -> error
+    end.
 
 %% @doc Format string using io_lib:format and convert to Unicode binary
 %% This function combines io_lib:format/2 with unicode:characters_to_binary/1

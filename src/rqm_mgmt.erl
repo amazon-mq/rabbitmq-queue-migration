@@ -78,21 +78,20 @@ to_json(ReqData, {status_list, Context}) ->
     {Json, ReqData, {status_list, Context}};
 to_json(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
-    MigrationIdUrlDecoded = uri_string:percent_decode(MigrationIdUrlEncoded),
-    MigrationIdBin = rqm_util:base64url_decode(MigrationIdUrlDecoded),
-    MigrationId = binary_to_term(MigrationIdBin),
-    case rqm:get_queue_migration_status(MigrationId) of
-        {ok, {Migration, QueueDetails}} ->
-            Json = rabbit_json:encode(#{
-                migration => migration_to_json_detail(Migration),
-                queues => [queue_status_to_json(Q) || Q <- QueueDetails]
-            }),
-            {Json, ReqData, {status_detail, Context}};
-        {error, _} ->
-            Json = rabbit_json:encode(#{
-                error => <<"Migration not found">>
-            }),
-            {Json, ReqData, {status_detail, Context}}
+    case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
+        {ok, MigrationId} ->
+            case rqm:get_queue_migration_status(MigrationId) of
+                {ok, {Migration, QueueDetails}} ->
+                    Json = rabbit_json:encode(#{
+                        migration => migration_to_json_detail(Migration),
+                        queues => [queue_status_to_json(Q) || Q <- QueueDetails]
+                    }),
+                    {Json, ReqData, {status_detail, Context}};
+                {error, _} ->
+                    not_found_json(ReqData, {status_detail, Context})
+            end;
+        error ->
+            not_found_json(ReqData, {status_detail, Context})
     end.
 
 is_authorized(ReqData, {EndpointType, Context}) ->
@@ -218,36 +217,33 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
     end.
 
 accept_status_update(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
-    MigrationIdUrlDecoded = uri_string:percent_decode(MigrationIdUrlEncoded),
-    MigrationIdBin = rqm_util:base64url_decode(MigrationIdUrlDecoded),
-    MigrationId = binary_to_term(MigrationIdBin),
-    {ok, Body, ReqData2} = cowboy_req:read_body(ReqData),
-    case rabbit_json:try_decode(Body) of
-        {ok, #{<<"status">> := StatusBin}} ->
-            Status = binary_to_existing_atom(StatusBin, utf8),
-            case rqm_db:update_migration_status(MigrationId, Status) of
-                {ok, _Migration} ->
-                    Json = rabbit_json:encode(#{
-                        updated => true,
-                        migration_id => MigrationIdUrlEncoded,
-                        status => StatusBin
-                    }),
-                    ReqData3 = cowboy_req:set_resp_body(Json, ReqData2),
-                    {true, ReqData3, {EndpointType, Context}};
-                {error, not_found} ->
-                    ErrorJson = rabbit_json:encode(#{error => <<"Migration not found">>}),
-                    ReqData3 = cowboy_req:set_resp_body(ErrorJson, ReqData2),
-                    ReqData4 = cowboy_req:reply(
-                        404, #{<<"content-type">> => <<"application/json">>}, ReqData3
-                    ),
-                    {stop, ReqData4, {EndpointType, Context}}
+    case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
+        {ok, MigrationId} ->
+            {ok, Body, ReqData2} = cowboy_req:read_body(ReqData),
+            case rabbit_json:try_decode(Body) of
+                {ok, #{<<"status">> := StatusBin}} ->
+                    Status = binary_to_existing_atom(StatusBin, utf8),
+                    case rqm_db:update_migration_status(MigrationId, Status) of
+                        {ok, _Migration} ->
+                            Json = rabbit_json:encode(#{
+                                updated => true,
+                                migration_id => MigrationIdUrlEncoded,
+                                status => StatusBin
+                            }),
+                            ReqData3 = cowboy_req:set_resp_body(Json, ReqData2),
+                            {true, ReqData3, {EndpointType, Context}};
+                        {error, not_found} ->
+                            not_found_reply(ReqData2, {EndpointType, Context})
+                    end;
+                {error, _} ->
+                    ErrorJson = rabbit_json:encode(#{error => <<"Invalid JSON">>}),
+                    bad_request(ErrorJson, ReqData2, {EndpointType, Context});
+                {ok, _} ->
+                    ErrorJson = rabbit_json:encode(#{error => <<"Missing 'status' field">>}),
+                    bad_request(ErrorJson, ReqData2, {EndpointType, Context})
             end;
-        {error, _} ->
-            ErrorJson = rabbit_json:encode(#{error => <<"Invalid JSON">>}),
-            bad_request(ErrorJson, ReqData2, {EndpointType, Context});
-        {ok, _} ->
-            ErrorJson = rabbit_json:encode(#{error => <<"Missing 'status' field">>}),
-            bad_request(ErrorJson, ReqData2, {EndpointType, Context})
+        error ->
+            not_found_reply(ReqData, {EndpointType, Context})
     end.
 
 migration_to_json(
@@ -379,3 +375,13 @@ parse_skip_unsuitable_queues(Json) ->
         false -> #{skip_unsuitable_queues => false};
         _ -> #{}
     end.
+
+not_found_json(ReqData, State) ->
+    Json = rabbit_json:encode(#{error => <<"Migration not found">>}),
+    {Json, ReqData, State}.
+
+not_found_reply(ReqData, State) ->
+    ErrorJson = rabbit_json:encode(#{error => <<"Migration not found">>}),
+    ReqData2 = cowboy_req:set_resp_body(ErrorJson, ReqData),
+    ReqData3 = cowboy_req:reply(404, #{<<"content-type">> => <<"application/json">>}, ReqData2),
+    {stop, ReqData3, State}.
