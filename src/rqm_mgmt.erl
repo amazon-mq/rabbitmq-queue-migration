@@ -386,7 +386,7 @@ parse_migration_options(ReqData) ->
                 _ ->
                     case rabbit_json:try_decode(Body) of
                         {ok, Json} when is_map(Json) ->
-                            parse_skip_unsuitable_queues(Json);
+                            parse_all_options(Json);
                         _ ->
                             #{}
                     end
@@ -395,11 +395,32 @@ parse_migration_options(ReqData) ->
             #{}
     end.
 
+parse_all_options(Json) ->
+    Opts0 = parse_skip_unsuitable_queues(Json),
+    Opts1 = parse_batch_size(Json, Opts0),
+    parse_batch_order(Json, Opts1).
+
 parse_skip_unsuitable_queues(Json) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
         true -> #{skip_unsuitable_queues => true};
         false -> #{skip_unsuitable_queues => false};
         _ -> #{}
+    end.
+
+parse_batch_size(Json, Opts) ->
+    case maps:get(<<"batch_size">>, Json, undefined) of
+        undefined -> Opts;
+        <<"all">> -> Opts#{batch_size => all};
+        0 -> Opts#{batch_size => all};
+        N when is_integer(N), N > 0 -> Opts#{batch_size => N};
+        _ -> Opts
+    end.
+
+parse_batch_order(Json, Opts) ->
+    case maps:get(<<"batch_order">>, Json, undefined) of
+        <<"smallest_first">> -> Opts#{batch_order => smallest_first};
+        <<"largest_first">> -> Opts#{batch_order => largest_first};
+        _ -> Opts
     end.
 
 not_found_reply(ReqData, State) ->

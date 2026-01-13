@@ -33,6 +33,26 @@ SPDX-License-Identifier: Apache-2.0
                  title="Skip queues that fail validation checks instead of blocking migration" />
         </td>
       </tr>
+      <tr>
+        <th><label>Batch Size:</label></th>
+        <td>
+          <input type="checkbox" id="batch_all" checked
+                 title="Migrate all eligible queues" />
+          <label for="batch_all">All</label>
+          &nbsp;
+          <input type="number" name="batch_size" id="batch_size" min="1" value="10"
+                 title="Number of queues to migrate" style="width: 80px;" disabled />
+        </td>
+      </tr>
+      <tr>
+        <th><label>Batch Order:</label></th>
+        <td>
+          <select name="batch_order" id="batch_order" title="Order in which to migrate queues when using batch size">
+            <option value="smallest_first">Smallest first</option>
+            <option value="largest_first">Largest first</option>
+          </select>
+        </td>
+      </tr>
     </table>
   </div>
 

@@ -56,11 +56,26 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
 
+// Toggle batch size input based on "All" checkbox
+$(document).on('change', '#batch_all', function() {
+    $('#batch_size').prop('disabled', $(this).is(':checked'));
+});
+
 $(document).on('click', '#start-migration-btn', function() {
     var vhost = $('#migration-vhost').val() || '/';
     var requestBody = {};
     if ($('#skip_unsuitable_queues').is(':checked')) {
         requestBody.skip_unsuitable_queues = true;
+    }
+    if (!$('#batch_all').is(':checked')) {
+        var batchSize = parseInt($('#batch_size').val(), 10);
+        if (!isNaN(batchSize) && batchSize > 0) {
+            requestBody.batch_size = batchSize;
+        }
+    }
+    var batchOrder = $('#batch_order').val();
+    if (batchOrder) {
+        requestBody.batch_order = batchOrder;
     }
 
     with_req('PUT', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
