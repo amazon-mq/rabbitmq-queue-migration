@@ -1779,6 +1779,8 @@ format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}})
             ErrorCount, AbortedCount
         ])
     );
+format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reason) ->
+    <<"Preparation failed: ", Reason/binary>>;
 format_migration_error(_Class, {preparation_failed, Reason}) ->
     iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
 format_migration_error(Class, Ex) ->
