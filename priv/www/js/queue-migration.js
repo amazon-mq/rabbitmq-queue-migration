@@ -94,7 +94,7 @@ setInterval(function() {
 
     with_req('GET', '/queue-migration/status', null, function(resp) {
         var data = JSON.parse(resp.responseText);
-        var inProgress = data.status === 'cmq_qq_migration_in_progress';
+        var inProgress = data.status === 'in_progress';
         if (inProgress) {
             $('#migration-controls').hide();
             $('#migration-in-progress').show();
@@ -115,6 +115,16 @@ function fmt_migration_status(status) {
         return '<span class="status-red">Failed</span>';
     } else {
         return '<span>' + status + '</span>';
+    }
+}
+
+function fmt_system_status(status) {
+    if (status === 'in_progress') {
+        return 'In Progress';
+    } else if (status === 'not_running') {
+        return 'Idle';
+    } else {
+        return status;
     }
 }
 

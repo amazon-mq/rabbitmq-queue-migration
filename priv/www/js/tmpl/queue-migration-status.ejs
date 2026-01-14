@@ -10,7 +10,7 @@ SPDX-License-Identifier: Apache-2.0
   <p>Migration has been started. The page will refresh automatically to show progress.</p>
 </div>
 
-<% var migrationInProgress = queue_migration_status && queue_migration_status.status === 'cmq_qq_migration_in_progress'; %>
+<% var migrationInProgress = queue_migration_status && queue_migration_status.status === 'in_progress'; %>
 
 <div id="migration-controls" style="<%= migrationInProgress ? 'display: none;' : '' %>">
   <div class="section">
@@ -81,7 +81,7 @@ SPDX-License-Identifier: Apache-2.0
 <div class="section">
   <h2>Migration History</h2>
   <% if (queue_migration_status) { %>
-    <p>Migration system status: <b><%= fmt_string(queue_migration_status.status) %></b></p>
+    <p>Migration system status: <b><%= fmt_system_status(queue_migration_status.status) %></b></p>
 
     <% if (queue_migration_status.migrations && queue_migration_status.migrations.length > 0) { %>
       <table class="list updatable">

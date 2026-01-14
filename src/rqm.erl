@@ -95,9 +95,9 @@ status() ->
     try
         case global:set_lock(Id, Nodes, 0) of
             true ->
-                {ok, cmq_qq_migration_not_running};
+                {ok, not_running};
             false ->
-                {ok, cmq_qq_migration_in_progress}
+                {ok, in_progress}
         end
     after
         global:del_lock(Id)
@@ -333,7 +333,7 @@ maybe_start_with_lock({true, GlobalLockId}, Nodes, Opts, MigrationId) ->
     start_with_lock(GlobalLockId, Nodes, Opts, MigrationId);
 maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
     ?LOG_WARNING("rqm: already in progress."),
-    {error, cmq_qq_migration_in_progress}.
+    {error, in_progress}.
 
 start_with_lock(
     GlobalLockId,
