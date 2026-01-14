@@ -1700,10 +1700,12 @@ get_queue_migrate_lock(Nodes) when is_list(Nodes) ->
             false
     end.
 
--spec ensure_no_connections() -> boolean().
-ensure_no_connections() ->
+-spec ensure_no_local_connections() -> boolean().
+ensure_no_local_connections() ->
     case rabbit_networking:local_connections() of
-        Conns when is_list(Conns) ->
+        [] ->
+            true;
+        [_ | _] ->
             false;
         _ ->
             true
@@ -1839,7 +1841,7 @@ prepare_node_connections(VHost) ->
     {ok, NConnections} = rqm_util:close_all_client_connections(),
 
     % Step 3: Ensure no connections
-    case ensure_no_connections() of
+    case ensure_no_local_connections() of
         true ->
             ?LOG_DEBUG("rqm: connection preparation: verified no local connections");
         _ ->
