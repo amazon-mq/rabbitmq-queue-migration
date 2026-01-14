@@ -5,8 +5,22 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/queue-migration/status', function() {
+        // Save form state before render
+        var savedBatchMode = $('input[name="batch_mode"]:checked').val() || 'limited';
+        var savedBatchSize = $('#batch_size').val() || '10';
+
         render({queue_migration_status: '/queue-migration/status', vhosts: '/vhosts'},
                'queue-migration-status', '#/queue-migration/status');
+
+        // Restore form state after render
+        setTimeout(function() {
+            if (savedBatchMode === 'all') {
+                $('#batch_all').prop('checked', true);
+            } else {
+                $('#batch_limited').prop('checked', true);
+            }
+            $('#batch_size').val(savedBatchSize);
+        }, 0);
     });
 
     sammy.get('#/queue-migration/status/:migration_id', function() {
