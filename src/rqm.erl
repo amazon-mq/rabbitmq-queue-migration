@@ -1080,7 +1080,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
             ok = rqm_gatherer:in(Gatherer, {error, QueueResource, ErrorDetails}),
             ok = rqm_gatherer:finish(Gatherer);
         {aborted, QueueResource, Reason} ->
-            ?LOG_INFO("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
+            ?LOG_ERROR("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
             ok = rqm_gatherer:in(Gatherer, {aborted, QueueResource, Reason}),
             ok = rqm_gatherer:finish(Gatherer)
     end,
@@ -1098,7 +1098,7 @@ wait_for_migration(CPid, Ref, Retries0) ->
             ?LOG_ERROR("rqm: failed for ~ts: ~tp", [rabbit_misc:rs(QueueResource), ErrorDetails]),
             {error, QueueResource, ErrorDetails};
         {CPid, Ref, {aborted, QueueResource, Reason}} ->
-            ?LOG_INFO("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
+            ?LOG_ERROR("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
             {aborted, QueueResource, Reason};
         Other ->
             ?LOG_DEBUG("rqm: handled other message: ~tp", [Other]),
@@ -1200,26 +1200,26 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     {ok, NewQ}.
 
 migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts entering phase 1 - creating temporary quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     StartTime = erlang:system_time(millisecond),
     {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, MigrationId, ClassicQ),
     Phase1Time = erlang:system_time(millisecond) - StartTime,
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts phase 1 completed in ~wms",
         [rabbit_misc:rs(Resource), Phase1Time]
     ),
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts entering phase 2 - migrating to final quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     Phase2Start = erlang:system_time(millisecond),
     {ok, QuorumQ1} = tmp_qq_to_qq(Resource, MigrationId, QuorumQ0),
     Phase2Time = erlang:system_time(millisecond) - Phase2Start,
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts phase 2 completed in ~wms",
         [rabbit_misc:rs(Resource), Phase2Time]
     ),
@@ -1237,7 +1237,6 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
     % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
-    ?LOG_INFO("rqm: ~ts migration completed successfully", [rabbit_misc:rs(Resource)]),
     {ok, QuorumQ1}.
 
 migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
@@ -1245,7 +1244,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     QName = Resource#resource.name,
     NewQName = NameFun(QName),
 
-    ?LOG_INFO("rqm: migrating ~tp to ~tp", [QName, NewQName]),
+    ?LOG_DEBUG("rqm: migrating ~tp to ~tp", [QName, NewQName]),
 
     NewResource = Resource#resource{name = NewQName},
 
@@ -1260,7 +1259,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
                 ?LOG_DEBUG("rqm: created new queue ~ts", [rabbit_misc:rs(NewResource)]),
                 Queue;
             {existing, Queue} ->
-                ?LOG_INFO("rqm: using existing queue ~ts", [rabbit_misc:rs(NewResource)]),
+                ?LOG_WARNING("rqm: using existing queue ~ts", [rabbit_misc:rs(NewResource)]),
                 Queue
         end,
 
@@ -1287,7 +1286,6 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     ok = migrate_queue_messages(FinalResource, MigrationId, Q, NewQ, Phase),
 
     %% Delete the source queue after successful message migration
-    ?LOG_INFO("rqm: deleting source ~ts after successful migration", [rabbit_misc:rs(Resource)]),
     try
         case rabbit_amqqueue:delete(Q, false, false, <<"migration_user">>) of
             {ok, _} ->
