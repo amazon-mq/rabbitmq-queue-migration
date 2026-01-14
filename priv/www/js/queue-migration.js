@@ -59,10 +59,12 @@ NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monito
 // Preserve batch size form state across page refreshes
 $(document).ready(function() {
     // Save state on any change
-    $(document).on('change', 'input[name="batch_mode"], #batch_size, #migration-vhost', function() {
+    $(document).on('change', 'input[name="batch_mode"], #batch_size, #migration-vhost, #skip_unsuitable_queues, #batch_order', function() {
         localStorage.setItem('rqm_batch_mode', $('input[name="batch_mode"]:checked').val() || 'limited');
         localStorage.setItem('rqm_batch_size', $('#batch_size').val() || '10');
         localStorage.setItem('rqm_vhost', $('#migration-vhost').val() || '/');
+        localStorage.setItem('rqm_skip_unsuitable', $('#skip_unsuitable_queues').is(':checked'));
+        localStorage.setItem('rqm_batch_order', $('#batch_order').val() || 'smallest_first');
     });
 
     // Restore state after any render (use MutationObserver to detect DOM changes)
@@ -71,6 +73,8 @@ $(document).ready(function() {
             var savedMode = localStorage.getItem('rqm_batch_mode') || 'limited';
             var savedSize = localStorage.getItem('rqm_batch_size') || '10';
             var savedVhost = localStorage.getItem('rqm_vhost') || '/';
+            var savedSkip = localStorage.getItem('rqm_skip_unsuitable') === 'true';
+            var savedOrder = localStorage.getItem('rqm_batch_order') || 'smallest_first';
 
             if (savedMode === 'all') {
                 $('#batch_all').prop('checked', true);
@@ -79,6 +83,8 @@ $(document).ready(function() {
             }
             $('#batch_size').val(savedSize);
             $('#migration-vhost').val(savedVhost);
+            $('#skip_unsuitable_queues').prop('checked', savedSkip);
+            $('#batch_order').val(savedOrder);
         }
     });
 
