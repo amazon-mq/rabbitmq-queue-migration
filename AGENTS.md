@@ -135,8 +135,8 @@ x-queue-mode: <removed>                          % Lazy mode works differently
 
 ### Migration Control
 ```
-PUT  /api/queue-migration/start           # Start migration on default vhost (/)
-PUT  /api/queue-migration/start/:vhost    # Start migration on specific vhost
+POST /api/queue-migration/start           # Start migration on default vhost (/)
+POST /api/queue-migration/start/:vhost    # Start migration on specific vhost
 ```
 
 ### Status Monitoring
@@ -205,7 +205,7 @@ After successful migration, these configurations should be applied:
 
 ### 1. Set Default Queue Type
 ```bash
-curl -X PUT -u guest:guest \
+curl -X POST -u guest:guest \
     -H "Content-Type: application/json" \
     -d '{"default_queue_type":"quorum"}' \
     "http://localhost:15672/api/vhosts/%2F"

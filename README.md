@@ -55,14 +55,14 @@ curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
 Migrate all mirrored classic queues on the default vhost (`/`):
 
 ```bash
-curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start
 ```
 
 To migrate a specific vhost, include it in the URL path (URL-encoded):
 
 ```bash
 # Migrate vhost "/production"
-curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/%2Fproduction
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2Fproduction
 ```
 
 > **Note:** The vhost must be specified in the URL path, not in the request body.
@@ -70,7 +70,7 @@ curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/%2Fp
 To skip unsuitable queues instead of blocking migration:
 
 ```bash
-curl -u guest:guest -X PUT \
+curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start/%2F
@@ -80,7 +80,7 @@ To migrate queues in batches (useful for large vhosts):
 
 ```bash
 # Migrate 10 queues at a time, smallest first
-curl -u guest:guest -X PUT \
+curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"batch_size": 10, "batch_order": "smallest_first"}' \
   http://localhost:15672/api/queue-migration/start/%2Fmy-vhost

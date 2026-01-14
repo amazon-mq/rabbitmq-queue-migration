@@ -58,7 +58,7 @@ This will:
 - Collects baseline metrics (queue counts, message counts, bindings)
 
 **Phase 3: Migration Trigger**
-- Starts migration via `PUT /api/queue-migration/start`
+- Starts migration via `POST /api/queue-migration/start`
 - Waits for migration to start (120s timeout)
 
 **Phase 4: Progress Monitoring**

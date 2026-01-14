@@ -122,7 +122,7 @@ Production logs should show clear, actionable information without overwhelming o
 
 **API Design:**
 ```bash
-PUT /api/queue-migration/start
+POST /api/queue-migration/start
 Content-Type: application/json
 {
   "over_tolerance": 10.0,
@@ -154,7 +154,7 @@ Content-Type: application/json
 
 **API Design:**
 ```bash
-PUT /api/queue-migration/start
+POST /api/queue-migration/start
 Content-Type: application/json
 {
   "max_queues": 50
@@ -195,7 +195,7 @@ Content-Type: application/json
 
 **API Implementation:**
 ```bash
-PUT /api/queue-migration/start
+POST /api/queue-migration/start
 Content-Type: application/json
 {
   "skip_unsuitable_queues": true

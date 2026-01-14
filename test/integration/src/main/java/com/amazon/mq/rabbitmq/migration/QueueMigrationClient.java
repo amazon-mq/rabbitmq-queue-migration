@@ -47,7 +47,7 @@ public class QueueMigrationClient {
             .uri(URI.create(baseUrl + "/queue-migration/start"))
             .header("Authorization", authHeader)
             .header("Content-Type", "application/json")
-            .PUT(HttpRequest.BodyPublishers.noBody())
+            .POST(HttpRequest.BodyPublishers.noBody())
             .timeout(Duration.ofSeconds(30))
             .build();
 

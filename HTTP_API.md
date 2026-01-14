@@ -54,8 +54,8 @@ Start migration for all eligible queues on a vhost.
 
 **Endpoints:**
 ```
-PUT /api/queue-migration/start
-PUT /api/queue-migration/start/:vhost
+POST /api/queue-migration/start
+POST /api/queue-migration/start/:vhost
 ```
 
 **Parameters:**
@@ -80,28 +80,28 @@ PUT /api/queue-migration/start/:vhost
 **Request:**
 ```bash
 # Default vhost (/)
-curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start
 
 # Specific vhost - vhost MUST be in the URL path, not the body
-curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/my-vhost
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/my-vhost
 
 # Vhost with special characters (e.g., /production/app)
-curl -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start/%2Fproduction%2Fapp
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2Fproduction%2Fapp
 
 # Skip unsuitable queues
-curl -u guest:guest -X PUT \
+curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start/%2F
 
 # Migrate only 10 queues, smallest first
-curl -u guest:guest -X PUT \
+curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"batch_size": 10, "batch_order": "smallest_first"}' \
   http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
 
 # Migrate all remaining queues (batch_size=0 means "all")
-curl -u guest:guest -X PUT \
+curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"batch_size": 0}' \
   http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
@@ -646,7 +646,7 @@ curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/
 
 # 2. Start migration
 echo "Starting migration..."
-RESPONSE=$(curl -s -u guest:guest -X PUT http://localhost:15672/api/queue-migration/start)
+RESPONSE=$(curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/start)
 MIGRATION_ID=$(echo "$RESPONSE" | jq -r '.migration_id')
 echo "Migration started: $MIGRATION_ID"
 

@@ -40,7 +40,7 @@ dispatcher_add(function(sammy) {
         }
 
         // Use the existing with_req function for async requests with proper error handling
-        with_req('PUT', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), JSON.stringify(requestBody), function(resp) {
+        with_req('POST', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), JSON.stringify(requestBody), function(resp) {
             // Success callback - migration started successfully
             $('#start-migration-section').hide();
             $('#migration-started-message').show();
@@ -113,7 +113,7 @@ $(document).on('click', '#start-migration-btn', function() {
         requestBody.batch_order = batchOrder;
     }
 
-    with_req('PUT', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
+    with_req('POST', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
         $('#migration-started-message').show();
         $('#migration-controls').hide();
         $('#migration-in-progress').show();

@@ -51,7 +51,7 @@ content_types_provided(ReqData, {EndpointType, Context}) ->
 allowed_methods(ReqData, {check, Context}) ->
     {[<<"POST">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {check, Context}};
 allowed_methods(ReqData, {EndpointType, Context}) ->
-    {[<<"GET">>, <<"HEAD">>, <<"PUT">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
+    {[<<"GET">>, <<"HEAD">>, <<"POST">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
 
 resource_exists(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),

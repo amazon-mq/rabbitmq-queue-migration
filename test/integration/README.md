@@ -122,7 +122,7 @@ Removes previous test artifacts (queues, exchanges, policies)
 Collects baseline metrics (queue counts, message counts, bindings)
 
 ### Phase 3: Migration Trigger
-Starts migration via `PUT /api/queue-migration/start`
+Starts migration via `POST /api/queue-migration/start`
 
 ### Phase 4: Progress Monitoring
 Monitors migration status every 5 seconds until completion
