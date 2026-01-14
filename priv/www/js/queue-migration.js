@@ -128,6 +128,7 @@ setInterval(function() {
             $('#migration-controls').show();
             $('#migration-in-progress').hide();
             $('#migration-started-message').hide();
+            update();
         }
     });
 }, 5000);
