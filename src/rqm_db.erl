@@ -179,7 +179,14 @@ get_migration(MigrationId) ->
 %% @doc Get all migrations
 -spec get_all_migrations() -> [#queue_migration{}].
 get_all_migrations() ->
-    mnesia:dirty_match_object(queue_migration, #queue_migration{_ = '_'}).
+    Migrations = mnesia:dirty_match_object(queue_migration, #queue_migration{_ = '_'}),
+    % Sort by started_at descending (most recent first)
+    lists:sort(
+        fun(#queue_migration{started_at = A}, #queue_migration{started_at = B}) ->
+            A >= B
+        end,
+        Migrations
+    ).
 
 %% Queue status record operations
 
