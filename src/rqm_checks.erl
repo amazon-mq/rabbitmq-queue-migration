@@ -360,8 +360,13 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues) ->
             ?LOG_INFO(
                 "rqm: disk: estimated peak usage for ~p concurrent queues: ~pMB "
                 "(~pMB base × ~.1f multiplier), total queues: ~p",
-                [ConcurrentCount, RequiredSpace div (1024 * 1024),
-                 ConcurrentUsage div (1024 * 1024), PeakMultiplier, QueueCount]
+                [
+                    ConcurrentCount,
+                    RequiredSpace div (1024 * 1024),
+                    ConcurrentUsage div (1024 * 1024),
+                    PeakMultiplier,
+                    QueueCount
+                ]
             ),
 
             RequiredSpace
