@@ -86,7 +86,7 @@ check_leader_balance(VHost, MaxImbalanceRatio) ->
     QueueCount = length(ClassicQueues),
     case QueueCount < rqm_config:min_queues_for_balance_check() of
         true ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "rqm: leader balance check: only ~tp queues found, "
                 "skipping balance check",
                 [QueueCount]
@@ -112,8 +112,8 @@ check_queue_synchronization(VHost) ->
     ),
     case UnsynchronizedQueues of
         [] ->
-            ?LOG_INFO(
-                "rqm: synchronization check: all ~tp mirratable queues are fully synchronized",
+            ?LOG_DEBUG(
+                "rqm: synchronization check: all ~tp migrate-able queues are fully synchronized",
                 [length(MigratableQueues)]
             ),
             ok;
@@ -198,10 +198,10 @@ analyze_leader_distribution(Queues) ->
         Queues
     ),
     % Log current distribution
-    ?LOG_INFO("rqm: leader balance check: current distribution:"),
+    ?LOG_DEBUG("rqm: leader balance check: current distribution:"),
     maps:fold(
         fun(Node, Count, _) ->
-            ?LOG_INFO("  ~tp: ~tp queues", [Node, Count])
+            ?LOG_DEBUG("  ~tp: ~tp queues", [Node, Count])
         end,
         ok,
         Distribution
@@ -217,7 +217,7 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
     case length(NonZeroCounts) < 2 of
         true ->
             % Single node with queues - considered balanced
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "rqm: leader balance check: single node cluster or "
                 "all queues on one node"
             ),
@@ -241,7 +241,7 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
                 max_allowed_ratio => MaxImbalanceRatio,
                 distribution => Distribution
             },
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "rqm: leader balance check: analysis: "
                 "min=~tp, max=~tp, ratio=~.2f, threshold=~.2f, balanced=~tp",
                 [MinCount, MaxCount, ImbalanceRatio, MaxImbalanceRatio, Balanced]
@@ -336,7 +336,7 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues, SafetyMultiplier) ->
 
     case QueueCount of
         0 ->
-            ?LOG_INFO("rqm: disk: no migratable queues found in vhost ~ts", [VHost]),
+            ?LOG_DEBUG("rqm: disk: no migratable queues found in vhost ~ts", [VHost]),
             0;
         _ ->
             % Calculate total disk usage for all queues
@@ -352,7 +352,7 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues, SafetyMultiplier) ->
             % Apply safety multiplier
             RequiredSpace = round(TotalUsage * SafetyMultiplier),
 
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "rqm: disk: ~tp bytes needed for ~tp queues "
                 "(~tp bytes base usage × ~.1f safety multiplier)",
                 [RequiredSpace, QueueCount, TotalUsage, SafetyMultiplier]
@@ -416,7 +416,7 @@ check_disk_space_sufficiency(
         required_free_mb => RequiredFree div (1024 * 1024)
     },
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: disk: current=~tpMB, limit=~tpMB, available=~tpMB, "
         "required=~tpMB, after_migration=~tpMB",
         [
@@ -435,7 +435,7 @@ check_disk_space_sufficiency(
 
     case Sufficient of
         true ->
-            ?LOG_INFO("rqm: disk: sufficient space available for migration"),
+            ?LOG_DEBUG("rqm: disk: sufficient space available for migration"),
             {ok, sufficient};
         false ->
             Reason = determine_insufficient_space_reason(
@@ -578,7 +578,7 @@ check_queue_suitability(VHost) ->
     % Handle empty cluster case
     case QueueCount of
         0 ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "rqm: no classic queues found in vhost ~ts, all queues suitable for migration", [
                     VHost
                 ]

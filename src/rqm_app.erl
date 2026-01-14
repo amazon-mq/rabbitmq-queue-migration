@@ -19,7 +19,7 @@ start(_Type, _StartArgs) ->
     ok = setup_schema(),
     ok = setup_default_config(),
     WorkerPoolSize = rqm_config:calculate_worker_pool_size(),
-    ?LOG_INFO("rqm: starting worker pool with size ~tp on node ~tp", [WorkerPoolSize, node()]),
+    ?LOG_DEBUG("rqm: starting worker pool with size ~tp on node ~tp", [WorkerPoolSize, node()]),
     worker_pool_sup:start_link(WorkerPoolSize, rqm_config:worker_pool_name()).
 
 -spec stop(Application) -> ok | {error, Reason} when Application :: atom(), Reason :: term().
@@ -29,7 +29,7 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 setup_schema() ->
-    ?LOG_INFO("rqm: setting up schema"),
+    ?LOG_DEBUG("rqm: setting up schema"),
     Tables =
         [
             {queue_migration, [

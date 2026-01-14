@@ -21,7 +21,7 @@ create_snapshot(VHost) ->
 %% @doc Create a tar-based fake snapshot
 -spec create_snapshot(tar, rabbit_types:vhost()) -> {ok, snapshot_id()} | {error, term()}.
 create_snapshot(tar, VHost) ->
-    ?LOG_INFO("rqm: creating fake EBS snapshot (tar archive) for vhost ~ts on node ~tp", [
+    ?LOG_DEBUG("rqm: creating fake EBS snapshot (tar archive) for vhost ~ts on node ~tp", [
         VHost, node()
     ]),
 
@@ -47,7 +47,7 @@ create_snapshot(tar, VHost) ->
                 true ->
                     {ok, FileInfo} = file:read_file_info(ArchiveFile),
                     ArchiveSize = FileInfo#file_info.size,
-                    ?LOG_INFO("rqm: fake EBS snapshot created: ~ts (~w bytes)", [
+                    ?LOG_DEBUG("rqm: fake EBS snapshot created: ~ts (~w bytes)", [
                         ArchiveFile, ArchiveSize
                     ]),
                     {ok, rqm_util:to_unicode(ArchiveFile)};
@@ -61,7 +61,7 @@ create_snapshot(tar, VHost) ->
     end;
 %% @doc Create a real EBS snapshot
 create_snapshot(ebs, VHost) ->
-    ?LOG_INFO("rqm: creating real EBS snapshot for vhost ~ts on node ~tp", [VHost, node()]),
+    ?LOG_DEBUG("rqm: creating real EBS snapshot for vhost ~ts on node ~tp", [VHost, node()]),
     {ok, Region} = rabbitmq_aws_config:region(),
     ok = rabbitmq_aws:set_region(Region),
     case rqm_ebs:instance_volumes() of
@@ -233,7 +233,7 @@ create_ebs_snapshot(VolumeId) ->
 
     case rqm_ebs:create_volume_snapshot(VolumeId, #{description => Description}) of
         {ok, SnapshotId, _Metadata} ->
-            ?LOG_INFO("rqm: created snapshot ~s for volume ~s", [SnapshotId, VolumeId]),
+            ?LOG_DEBUG("rqm: created snapshot ~s for volume ~s", [SnapshotId, VolumeId]),
             {ok, {rqm_util:to_unicode(SnapshotId), rqm_util:to_unicode(VolumeId)}};
         {error, Reason} ->
             ?LOG_ERROR("rqm: failed to create snapshot for volume ~s: ~p", [VolumeId, Reason]),
@@ -250,10 +250,10 @@ cleanup_snapshot(SnapshotId) ->
 -spec cleanup_snapshot(tar, snapshot_id()) -> ok | {error, term()}.
 cleanup_snapshot(tar, SnapshotId) when is_binary(SnapshotId) ->
     SnapshotPath = binary_to_list(SnapshotId),
-    ?LOG_INFO("rqm: cleaning up tar snapshot: ~s", [SnapshotPath]),
+    ?LOG_DEBUG("rqm: cleaning up tar snapshot: ~s", [SnapshotPath]),
     case file:delete(SnapshotPath) of
         ok ->
-            ?LOG_INFO("rqm: successfully deleted tar snapshot: ~s", [SnapshotPath]),
+            ?LOG_DEBUG("rqm: successfully deleted tar snapshot: ~s", [SnapshotPath]),
             ok;
         {error, enoent} ->
             ?LOG_WARNING("rqm: tar snapshot file not found (already deleted?): ~s", [SnapshotPath]),
@@ -266,10 +266,10 @@ cleanup_snapshot(tar, SnapshotId) when is_binary(SnapshotId) ->
 %% @doc Clean up an EBS snapshot
 cleanup_snapshot(ebs, SnapshotId) when is_binary(SnapshotId) ->
     SnapshotIdStr = binary_to_list(SnapshotId),
-    ?LOG_INFO("rqm: cleaning up EBS snapshot: ~s", [SnapshotIdStr]),
+    ?LOG_DEBUG("rqm: cleaning up EBS snapshot: ~s", [SnapshotIdStr]),
     case rqm_ebs:delete_volume_snapshot(SnapshotIdStr) of
         {ok, _} ->
-            ?LOG_INFO("rqm: successfully deleted EBS snapshot: ~s", [SnapshotIdStr]),
+            ?LOG_DEBUG("rqm: successfully deleted EBS snapshot: ~s", [SnapshotIdStr]),
             ok;
         {error, {not_found, _}} ->
             ?LOG_WARNING("rqm: EBS snapshot not found (already deleted?): ~s", [SnapshotIdStr]),
