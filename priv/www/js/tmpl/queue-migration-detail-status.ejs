@@ -19,11 +19,11 @@ SPDX-License-Identifier: Apache-2.0
       </tr>
       <tr>
         <th>Started:</th>
-        <td><%= fmt_string(queue_migration_detail_status.migration.started_at) %></td>
+        <td><%= fmt_string(queue_migration_detail_status.migration.started_at) %> (UTC)</td>
       </tr>
       <tr>
         <th>Completed:</th>
-        <td><%= fmt_string(queue_migration_detail_status.migration.completed_at) %></td>
+        <td><%= fmt_string(queue_migration_detail_status.migration.completed_at) %> (UTC)</td>
       </tr>
       <tr>
         <th>Status:</th>
@@ -61,8 +61,8 @@ SPDX-License-Identifier: Apache-2.0
           <tr>
             <th><%= fmt_sort_desc_by_default('Queue', 'queue_name') %></th>
             <th><%= fmt_sort_desc_by_default('Status', 'status') %></th>
-            <th><%= fmt_sort_desc_by_default('Started', 'started_at') %></th>
-            <th><%= fmt_sort_desc_by_default('Completed', 'completed_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Started (UTC)', 'started_at') %></th>
+            <th><%= fmt_sort_desc_by_default('Completed (UTC)', 'completed_at') %></th>
             <th><%= fmt_sort_desc_by_default('Messages', 'total_messages') %></th>
             <th><%= fmt_sort_desc_by_default('Progress', 'progress_percentage') %></th>
             <th>Error</th>
