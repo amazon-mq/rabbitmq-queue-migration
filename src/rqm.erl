@@ -119,8 +119,6 @@ pre_migration_validation(queue_synchronization, #migration_opts{vhost = VHost} =
     );
 pre_migration_validation(queue_suitability, #migration_opts{vhost = VHost} = Opts) ->
     handle_check_queue_suitability(rqm_checks:check_queue_suitability(VHost), Opts);
-pre_migration_validation(queue_message_count, #migration_opts{vhost = VHost} = Opts) ->
-    handle_check_queue_message_count(rqm_checks:check_queue_message_count(VHost), Opts);
 pre_migration_validation(
     disk_space, #migration_opts{vhost = VHost, unsuitable_queues = UnsuitableQueues} = Opts
 ) ->
@@ -235,20 +233,6 @@ handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ),
     {error, {unsuitable_queues, Details}};
 handle_check_queue_suitability({error, _} = Error, _Opts) ->
-    Error.
-
-handle_check_queue_message_count(ok, Opts) ->
-    pre_migration_validation(disk_space, Opts);
-handle_check_queue_message_count(
-    {error, queues_too_deep},
-    #migration_opts{skip_unsuitable_queues = true} = Opts
-) ->
-    ?LOG_INFO("rqm: found queue(s) with too many messages, will skip during migration"),
-    pre_migration_validation(disk_space, Opts);
-handle_check_queue_message_count({error, queues_too_deep}, _Opts) ->
-    ?LOG_ERROR("rqm: stopping migration due to queue(s) that have too many messages."),
-    {error, queues_too_deep};
-handle_check_queue_message_count({error, _} = Error, _Opts) ->
     Error.
 
 handle_check_disk_space({ok, sufficient}, Opts) ->
