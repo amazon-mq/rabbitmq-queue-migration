@@ -85,7 +85,7 @@ SPDX-License-Identifier: Apache-2.0
               <td>
                 <%= fmt_progress_bar(queue.migrated_messages, queue.total_messages) %>
               </td>
-              <td><%= fmt_string(queue.error) %></td>
+              <td><%= queue.error ? fmt_string(queue.error) : '' %></td>
             </tr>
           <% } %>
         </tbody>
