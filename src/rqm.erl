@@ -866,7 +866,7 @@ start_migration_on_node(
                 % Update total queue count in the migration record and create queue status records
                 case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues2, VHost) of
                     {atomic, {ok, UpdatedQueueCount}} ->
-                        ?LOG_INFO("rqm: updated migration record with ~w queues", [
+                        ?LOG_DEBUG("rqm: updated migration record with ~w queues", [
                             UpdatedQueueCount
                         ]);
                     Other ->
@@ -905,14 +905,14 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
             % Also check if rollback is pending
             case rqm_db:is_current_status(MigrationId, rollback_pending) of
                 true ->
-                    ?LOG_INFO("rqm: aborting migration for ~ts - rollback pending", [
+                    ?LOG_ERROR("rqm: aborting migration for ~ts - rollback pending", [
                         rabbit_misc:rs(Resource)
                     ]),
                     ok = rqm_gatherer:in(Gatherer, {aborted, Resource, rollback_pending}),
                     ok = rqm_gatherer:finish(Gatherer),
                     {aborted, rollback_pending};
                 false ->
-                    ?LOG_INFO(
+                    ?LOG_ERROR(
                         "rqm: aborting migration for ~ts - overall migration no longer in progress",
                         [rabbit_misc:rs(Resource)]
                     ),
@@ -926,7 +926,7 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
     end.
 
 do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting work on ~ts (migration ~s, node ~tp)",
         [rabbit_misc:rs(Resource), format_migration_id(MigrationId), node()]
     ),
@@ -962,7 +962,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         % exit:{{{badmatch,[]},[{mirrored_supervisor,child,2,...
         %
         % This is caught in the "catch" clause of this function.
-        ?LOG_INFO(
+        ?LOG_DEBUG(
             "rqm: worker starting for ~ts (migration ~s)",
             [rabbit_misc:rs(Resource), format_migration_id(MigrationId)]
         ),
