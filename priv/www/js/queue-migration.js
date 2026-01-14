@@ -78,15 +78,16 @@ $(document).ready(function() {
 
             if (savedMode === 'all') {
                 $('#batch_all').prop('checked', true);
-                $('#batch_size').prop('disabled', true);
             } else {
                 $('#batch_limited').prop('checked', true);
-                $('#batch_size').prop('disabled', false);
             }
             $('#batch_size').val(savedSize);
             $('#migration-vhost').val(savedVhost);
             $('#skip_unsuitable_queues').prop('checked', savedSkip);
             $('#batch_order').val(savedOrder);
+
+            // Update input disabled state based on radio selection
+            $('#batch_size').prop('disabled', $('#batch_all').is(':checked'));
         }
     });
 
