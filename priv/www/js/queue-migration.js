@@ -59,9 +59,10 @@ NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monito
 // Preserve batch size form state across page refreshes
 $(document).ready(function() {
     // Save state on any change
-    $(document).on('change', 'input[name="batch_mode"], #batch_size', function() {
+    $(document).on('change', 'input[name="batch_mode"], #batch_size, #migration-vhost', function() {
         localStorage.setItem('rqm_batch_mode', $('input[name="batch_mode"]:checked').val() || 'limited');
         localStorage.setItem('rqm_batch_size', $('#batch_size').val() || '10');
+        localStorage.setItem('rqm_vhost', $('#migration-vhost').val() || '/');
     });
 
     // Restore state after any render (use MutationObserver to detect DOM changes)
@@ -69,6 +70,7 @@ $(document).ready(function() {
         if ($('#batch_limited').length > 0) {
             var savedMode = localStorage.getItem('rqm_batch_mode') || 'limited';
             var savedSize = localStorage.getItem('rqm_batch_size') || '10';
+            var savedVhost = localStorage.getItem('rqm_vhost') || '/';
 
             if (savedMode === 'all') {
                 $('#batch_all').prop('checked', true);
@@ -76,6 +78,7 @@ $(document).ready(function() {
                 $('#batch_limited').prop('checked', true);
             }
             $('#batch_size').val(savedSize);
+            $('#migration-vhost').val(savedVhost);
         }
     });
 
