@@ -651,7 +651,7 @@ pre_migration_validation(VHost) ->
 
 ```erlang
 Fun = fun() ->
-    ?LOG_INFO("rqm: worker starting for ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: worker starting for ~ts", [rabbit_misc:rs(Resource)]),
     try
         {ok, QuorumQ} = migrate_with_messages(ClassicQ, Resource, Status),
         PPid ! {self(), Ref, {ok, Resource, qstr(QuorumQ)}}
@@ -673,7 +673,7 @@ CPid = spawn_link(Fun),
 try
     ok = rabbit_runtime_parameters:set(VHost, <<"shovel">>, ShovelName, ShovelDef, none),
     ok = wait_for_shovel_completion(...),
-    ?LOG_INFO("rqm: shovel ~ts completed successfully", [ShovelName])
+    ?LOG_DEBUG("rqm: shovel ~ts completed successfully", [ShovelName])
 catch
     Class:Reason:Stack ->
         ?LOG_ERROR("rqm: shovel ~ts failed: ~tp:~tp", [ShovelName, Class, Reason]),
