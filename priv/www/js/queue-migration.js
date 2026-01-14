@@ -245,8 +245,6 @@ function fmt_issue_type(type) {
         'lazy_mode': 'Lazy Mode',
         'overflow_behavior': 'Overflow Behavior',
         'unsuitable_overflow': 'Unsuitable Overflow',
-        'message_count_limit': 'Too Many Messages',
-        'data_size_limit': 'Too Much Data',
         'too_many_queues': 'Too Many Queues'
     };
     return typeMap[type] || type;
