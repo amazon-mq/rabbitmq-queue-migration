@@ -271,18 +271,6 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
 -spec check_disk_space(rabbit_types:vhost(), list()) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
 check_disk_space(VHost, UnsuitableQueues) ->
-    SafetyMultiplier = rqm_config:disk_space_safety_multiplier(),
-    check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier).
-
-%% @doc Check disk space availability with custom safety multiplier.
-%% The safety multiplier accounts for:
-%% - Temporary queues created during migration (1x current usage)
-%% - Message duplication during transfer (1x current usage)
-%% - Safety buffer for other operations (0.5x current usage)
-%% Default multiplier of 2.5 provides reasonable safety margin.
--spec check_disk_space(rabbit_types:vhost(), list(), float()) ->
-    {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
-check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier) ->
     % Get current disk space information
     CurrentFree = rabbit_disk_monitor:get_disk_free(),
     DiskFreeLimit = rabbit_disk_monitor:get_disk_free_limit(),
@@ -297,9 +285,7 @@ check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier) ->
                 }}};
         _ when is_integer(CurrentFree) ->
             % Estimate disk space needed for migration
-            EstimatedUsage = estimate_migration_disk_usage(
-                VHost, UnsuitableQueues, SafetyMultiplier
-            ),
+            EstimatedUsage = estimate_migration_disk_usage(VHost, UnsuitableQueues),
             RequiredFree = EstimatedUsage + rqm_config:min_disk_space_buffer(),
 
             % Check if we have sufficient space
@@ -308,8 +294,7 @@ check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier) ->
                 DiskFreeLimit,
                 RequiredFree,
                 EstimatedUsage,
-                VHost,
-                SafetyMultiplier
+                VHost
             )
     end.
 
@@ -318,8 +303,8 @@ check_disk_space(VHost, UnsuitableQueues, SafetyMultiplier) ->
 %%----------------------------------------------------------------------------
 
 %% @doc Estimate the disk space required for migration
--spec estimate_migration_disk_usage(rabbit_types:vhost(), list(), float()) -> non_neg_integer().
-estimate_migration_disk_usage(VHost, UnsuitableQueues, SafetyMultiplier) ->
+-spec estimate_migration_disk_usage(rabbit_types:vhost(), list()) -> non_neg_integer().
+estimate_migration_disk_usage(VHost, UnsuitableQueues) ->
     AllMigratableQueues = get_mirrored_classic_queues(VHost),
 
     % Filter out unsuitable queues that will be skipped
@@ -339,23 +324,44 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues, SafetyMultiplier) ->
             ?LOG_DEBUG("rqm: disk: no migratable queues found in vhost ~ts", [VHost]),
             0;
         _ ->
-            % Calculate total disk usage for all queues
-            TotalUsage = lists:foldl(
-                fun(Queue, Acc) ->
-                    QueueUsage = get_queue_disk_usage(Queue),
-                    Acc + QueueUsage
+            % Get actual concurrency limit based on worker pool
+            % NOTE: Even though each node has its own worker pool, we calculate
+            % cluster-wide concurrency because ALL nodes store data for ALL queues
+            % (mirrored classic queues have replicas on all nodes, and quorum queues
+            % also replicate across nodes). The disk space check runs on each node,
+            % but each node needs space for all concurrently migrating queues.
+            WorkerPoolSize = rqm_config:calculate_worker_pool_size(),
+            NodeCount = length(rabbit_nodes:list_running()),
+            MaxConcurrent = WorkerPoolSize * NodeCount,
+
+            % Calculate size for each queue once and pair with queue
+            QueuesWithSize = [{Queue, get_queue_disk_usage(Queue)} || Queue <- MigratableQueues],
+
+            % Sort by size descending to get largest ones (worst case)
+            SortedBySize = lists:sort(
+                fun({_Q1, Size1}, {_Q2, Size2}) ->
+                    Size1 >= Size2
                 end,
-                0,
-                MigratableQueues
+                QueuesWithSize
             ),
 
-            % Apply safety multiplier
-            RequiredSpace = round(TotalUsage * SafetyMultiplier),
+            % Take the N largest queues that could migrate concurrently
+            ConcurrentCount = min(MaxConcurrent, QueueCount),
+            LargestQueuesWithSize = lists:sublist(SortedBySize, ConcurrentCount),
 
-            ?LOG_DEBUG(
-                "rqm: disk: ~tp bytes needed for ~tp queues "
-                "(~tp bytes base usage × ~.1f safety multiplier)",
-                [RequiredSpace, QueueCount, TotalUsage, SafetyMultiplier]
+            % Sum the sizes (already calculated)
+            ConcurrentUsage = lists:sum([Size || {_Queue, Size} <- LargestQueuesWithSize]),
+
+            % Apply 2x multiplier for peak usage (original + copy during migration)
+            % Peak occurs when both source and destination queues are full
+            PeakMultiplier = 2.0,
+            RequiredSpace = round(ConcurrentUsage * PeakMultiplier),
+
+            ?LOG_INFO(
+                "rqm: disk: estimated peak usage for ~p concurrent queues: ~pMB "
+                "(~pMB base × ~.1f multiplier), total queues: ~p",
+                [ConcurrentCount, RequiredSpace div (1024 * 1024),
+                 ConcurrentUsage div (1024 * 1024), PeakMultiplier, QueueCount]
             ),
 
             RequiredSpace
@@ -381,8 +387,7 @@ get_queue_disk_usage(Queue) ->
     non_neg_integer(),
     non_neg_integer(),
     non_neg_integer(),
-    rabbit_types:vhost(),
-    float()
+    rabbit_types:vhost()
 ) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
 check_disk_space_sufficiency(
@@ -390,8 +395,7 @@ check_disk_space_sufficiency(
     DiskFreeLimit,
     RequiredFree,
     EstimatedUsage,
-    VHost,
-    SafetyMultiplier
+    VHost
 ) ->
     % Check against both current free space and disk free limit
     AvailableForMigration = CurrentFree - DiskFreeLimit,
@@ -405,7 +409,6 @@ check_disk_space_sufficiency(
         estimated_migration_usage_bytes => EstimatedUsage,
         required_free_bytes => RequiredFree,
         space_after_migration_bytes => SpaceAfterMigration,
-        safety_multiplier => SafetyMultiplier,
         buffer_bytes => rqm_config:min_disk_space_buffer(),
 
         % Human-readable sizes

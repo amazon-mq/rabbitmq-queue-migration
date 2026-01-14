@@ -21,7 +21,6 @@
     max_messages_in_queue/0,
 
     % Disk space configuration
-    disk_space_safety_multiplier/0,
     min_disk_space_buffer/0,
 
     % Memory usage configuration
@@ -93,16 +92,6 @@ max_messages_in_queue() ->
 %%----------------------------------------------------------------------------
 %% Disk space configuration
 %%----------------------------------------------------------------------------
-
-%% @doc Get the safety multiplier for disk space calculation
--spec disk_space_safety_multiplier() -> float().
-disk_space_safety_multiplier() ->
-    case application:get_env(rabbitmq_queue_migration, disk_space_safety_multiplier) of
-        {ok, Value} when is_number(Value), Value > 0 ->
-            Value;
-        _ ->
-            ?DISK_SPACE_SAFETY_MULTIPLIER
-    end.
 
 %% @doc Get the minimum free disk space buffer in bytes
 -spec min_disk_space_buffer() -> non_neg_integer().

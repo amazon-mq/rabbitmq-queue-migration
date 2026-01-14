@@ -38,7 +38,6 @@
 -define(MAX_MESSAGES_IN_QUEUE, 15000).
 
 %% Disk space configuration
--define(DISK_SPACE_SAFETY_MULTIPLIER, 2.5).
 % 500MB
 -define(MIN_DISK_SPACE_BUFFER, 500000000).
 
