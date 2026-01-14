@@ -5,22 +5,8 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/queue-migration/status', function() {
-        // Save form state before render
-        var savedBatchMode = $('input[name="batch_mode"]:checked').val() || 'limited';
-        var savedBatchSize = $('#batch_size').val() || '10';
-
         render({queue_migration_status: '/queue-migration/status', vhosts: '/vhosts'},
                'queue-migration-status', '#/queue-migration/status');
-
-        // Restore form state after render
-        setTimeout(function() {
-            if (savedBatchMode === 'all') {
-                $('#batch_all').prop('checked', true);
-            } else {
-                $('#batch_limited').prop('checked', true);
-            }
-            $('#batch_size').val(savedBatchSize);
-        }, 0);
     });
 
     sammy.get('#/queue-migration/status/:migration_id', function() {
@@ -69,6 +55,32 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
+
+// Preserve batch size form state across page refreshes
+$(document).ready(function() {
+    // Save state on any change
+    $(document).on('change', 'input[name="batch_mode"], #batch_size', function() {
+        localStorage.setItem('rqm_batch_mode', $('input[name="batch_mode"]:checked').val() || 'limited');
+        localStorage.setItem('rqm_batch_size', $('#batch_size').val() || '10');
+    });
+
+    // Restore state after any render (use MutationObserver to detect DOM changes)
+    var observer = new MutationObserver(function() {
+        if ($('#batch_limited').length > 0) {
+            var savedMode = localStorage.getItem('rqm_batch_mode') || 'limited';
+            var savedSize = localStorage.getItem('rqm_batch_size') || '10';
+
+            if (savedMode === 'all') {
+                $('#batch_all').prop('checked', true);
+            } else {
+                $('#batch_limited').prop('checked', true);
+            }
+            $('#batch_size').val(savedSize);
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+});
 
 // Enable/disable batch size input based on radio button selection
 $(document).on('change', 'input[name="batch_mode"]', function() {
