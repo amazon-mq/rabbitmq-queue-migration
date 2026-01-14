@@ -49,10 +49,11 @@ SPDX-License-Identifier: Apache-2.0
   </div>
 
   <div class="section">
+    <a href="#/queue-migration/status" class="btn">← Back to Migration List</a>
+  </div>
+
+  <div class="section">
     <h2>Queue Migration Status</h2>
-    <p>
-      <a href="#/queue-migration/status">Back to Migration List</a>
-    </p>
 
     <% if (queue_migration_detail_status.queues && queue_migration_detail_status.queues.length > 0) { %>
       <table class="list updatable">
@@ -101,6 +102,20 @@ SPDX-License-Identifier: Apache-2.0
 <% } %>
 
 <style type="text/css">
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  background-color: #0088ce;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: normal;
+}
+.btn:hover {
+  background-color: #006ba3;
+  color: white;
+  text-decoration: none;
+}
 .progress-bar {
   width: 100px;
   height: 10px;
