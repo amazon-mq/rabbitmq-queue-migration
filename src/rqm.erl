@@ -1123,7 +1123,7 @@ tmp_qq_to_qq(FinalResource, MigrationId, Q) ->
     migrate(FinalResource, MigrationId, Q, RemoveTmpPrefixFun, phase_two).
 
 migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
-    ?LOG_INFO("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
 
     % Create final quorum queue directly (skip temporary queue)
 
@@ -1133,14 +1133,14 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
 
     % Copy bindings from classic to quorum queue
     Bindings = rabbit_binding:list_for_destination(Resource),
-    ?LOG_INFO("rqm: copying ~w bindings for ~ts", [length(Bindings), rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: copying ~w bindings for ~ts", [length(Bindings), rabbit_misc:rs(Resource)]),
 
     % Delete the source classic queue first (safe because AMQP is blocked)
-    ?LOG_INFO("rqm: deleting empty source ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: deleting empty source ~ts", [rabbit_misc:rs(Resource)]),
     try
         case rabbit_amqqueue:delete(ClassicQ, false, false, <<"migration_user">>) of
             {ok, _} ->
-                ?LOG_INFO("rqm: successfully deleted empty source ~ts", [rabbit_misc:rs(Resource)]);
+                ?LOG_DEBUG("rqm: successfully deleted empty source ~ts", [rabbit_misc:rs(Resource)]);
             Error ->
                 ?LOG_ERROR("rqm: failed to delete empty source ~ts: ~tp", [
                     rabbit_misc:rs(Resource), Error
@@ -1158,10 +1158,10 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
             rabbit_amqqueue:declare(FinalResource, true, false, NewArgs, none, <<"internal_user">>)
         of
             {new, Queue} ->
-                ?LOG_INFO("rqm: created final quorum ~ts", [rabbit_misc:rs(FinalResource)]),
+                ?LOG_DEBUG("rqm: created final quorum ~ts", [rabbit_misc:rs(FinalResource)]),
                 Queue;
             {existing, Queue} ->
-                ?LOG_INFO("rqm: using existing quorum ~ts", [rabbit_misc:rs(FinalResource)]),
+                ?LOG_DEBUG("rqm: using existing quorum ~ts", [rabbit_misc:rs(FinalResource)]),
                 Queue
         end,
 
@@ -1196,7 +1196,7 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
-    ?LOG_INFO("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
     {ok, NewQ}.
 
 migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
