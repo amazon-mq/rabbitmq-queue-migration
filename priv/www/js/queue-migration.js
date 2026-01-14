@@ -56,9 +56,9 @@ dispatcher_add(function(sammy) {
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
 
-// Toggle batch size input based on "All" checkbox
-$(document).on('change', '#batch_all', function() {
-    $('#batch_size').prop('disabled', $(this).is(':checked'));
+// Enable/disable batch size input based on radio button selection
+$(document).on('change', 'input[name="batch_mode"]', function() {
+    $('#batch_size').prop('disabled', $('#batch_all').is(':checked'));
 });
 
 $(document).on('click', '#start-migration-btn', function() {
@@ -67,7 +67,7 @@ $(document).on('click', '#start-migration-btn', function() {
     if ($('#skip_unsuitable_queues').is(':checked')) {
         requestBody.skip_unsuitable_queues = true;
     }
-    if (!$('#batch_all').is(':checked')) {
+    if ($('#batch_limited').is(':checked')) {
         var batchSize = parseInt($('#batch_size').val(), 10);
         if (!isNaN(batchSize) && batchSize > 0) {
             requestBody.batch_size = batchSize;
