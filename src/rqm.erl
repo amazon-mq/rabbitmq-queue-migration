@@ -1828,11 +1828,11 @@ count_errors_and_aborted(Errors) ->
     {ok, connection_preparation_state()}.
 
 prepare_node_connections(VHost) ->
-    ?LOG_INFO("rqm: connection preparation: starting for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: connection preparation: starting for vhost ~ts", [VHost]),
 
     % Step 1: Suspend non-HTTP listeners to block new AMQP connections
     % Keep HTTP API available for monitoring and control
-    ?LOG_INFO("rqm: connection preparation: suspending non-HTTP listeners"),
+    ?LOG_DEBUG("rqm: connection preparation: suspending non-HTTP listeners"),
     {ok, SuspendedListeners} = rqm_util:suspend_non_http_listeners(),
 
     % Step 2: Close existing AMQP connections
@@ -1854,7 +1854,7 @@ prepare_node_connections(VHost) ->
         preparation_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: connection preparation: completed successfully for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: connection preparation: completed successfully for vhost ~ts", [VHost]),
     {ok, ConnectionPreparationState}.
 
 %% @doc Restore node connection listeners after successful migration
@@ -1875,10 +1875,10 @@ restore_connection_listeners(#{
     vhost := VHost,
     suspended_listeners := SuspendedListeners
 }) when Node =:= node() ->
-    ?LOG_INFO("rqm: restoring normal operations for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: restoring normal operations for vhost ~ts", [VHost]),
 
     % Step 1: Resume suspended listeners to allow new AMQP connections
-    ?LOG_INFO("rqm: resuming suspended listeners"),
+    ?LOG_DEBUG("rqm: resuming suspended listeners"),
     {ok, _ResumedListeners} = rqm_util:resume_non_http_listeners(SuspendedListeners),
 
     RestorationState = #{
@@ -1887,7 +1887,7 @@ restore_connection_listeners(#{
         restoration_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: normal operations restored for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: normal operations restored for vhost ~ts", [VHost]),
     {ok, RestorationState};
 restore_connection_listeners(#{
     node := WrongNode,
@@ -1923,11 +1923,11 @@ restore_connection_listeners(#{
     {ok, ebs_preparation_state()}.
 
 quiesce_and_flush_node(VHost) ->
-    ?LOG_INFO("rqm: quiescing and flushing node ~tp for vhost ~ts", [node(), VHost]),
+    ?LOG_DEBUG("rqm: quiescing and flushing node ~tp for vhost ~ts", [node(), VHost]),
 
     % Sync filesystem to ensure all data is written to disk
     % This is the most critical step for EBS snapshot consistency
-    ?LOG_INFO("rqm: syncing filesystem"),
+    ?LOG_DEBUG("rqm: syncing filesystem"),
     case os:type() of
         {unix, _} ->
             os:cmd("sync"),
@@ -1943,21 +1943,21 @@ quiesce_and_flush_node(VHost) ->
         preparation_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: node ~tp successfully quiesced and flushed for vhost ~ts", [node(), VHost]),
+    ?LOG_DEBUG("rqm: node ~tp successfully quiesced and flushed for vhost ~ts", [node(), VHost]),
     {ok, EbsPreparationState}.
 
 %% @doc Set default queue type to quorum for the migrated vhost
 %% This is always done after successful migration to ensure new queues are quorum by default
 -spec set_default_queue_type_to_quorum(rabbit_types:vhost()) -> ok.
 set_default_queue_type_to_quorum(VHost) ->
-    ?LOG_INFO("rqm: setting default queue type to quorum for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: setting default queue type to quorum for vhost ~ts", [VHost]),
     case
         rabbit_vhost:update_metadata(
             VHost, #{default_queue_type => <<"quorum">>}, <<"internal_user">>
         )
     of
         ok ->
-            ?LOG_INFO("rqm: successfully set default queue type to quorum for vhost ~ts", [VHost]);
+            ?LOG_DEBUG("rqm: successfully set default queue type to quorum for vhost ~ts", [VHost]);
         {error, Reason} ->
             ?LOG_ERROR("rqm: failed to set default queue type for vhost ~ts: ~p", [VHost, Reason])
     end,
