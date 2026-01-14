@@ -946,9 +946,9 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     ),
 
     % Update queue status to in_progress
-    ?LOG_INFO("rqm: marking ~ts as in_progress", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking ~ts as in_progress", [rabbit_misc:rs(Resource)]),
     {ok, TotalMessageCount} = rqm_db:get_message_count(Resource),
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts has ~w messages to migrate",
         [rabbit_misc:rs(Resource), TotalMessageCount]
     ),
@@ -1033,7 +1033,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                             end,
 
                             % Update queue status to failed
-                            ?LOG_INFO("rqm: marking ~ts as failed", [rabbit_misc:rs(Resource)]),
+                            ?LOG_DEBUG("rqm: marking ~ts as failed", [rabbit_misc:rs(Resource)]),
                             {ok, _} = rqm_db:update_queue_status_failed(
                                 Resource,
                                 MigrationId,
@@ -1060,7 +1060,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         unlink(PPid)
     end,
 
-    ?LOG_INFO("rqm: spawning worker process for ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: spawning worker process for ~ts", [rabbit_misc:rs(Resource)]),
     % Note: must be in its own process to handle ra event messages
     CPid = spawn_link(Fun),
     ?LOG_DEBUG(
@@ -1072,7 +1072,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     % Handle result - all cases must call rqm_gatherer:in and rqm_gatherer:finish
     case Result of
         {ok, QueueResource, QueueName} ->
-            ?LOG_INFO("rqm: migrated queue ~tp", [QueueName]),
+            ?LOG_DEBUG("rqm: migrated queue ~tp", [QueueName]),
             ok = rqm_gatherer:in(Gatherer, {ok, QueueResource, QueueName}),
             ok = rqm_gatherer:finish(Gatherer);
         {error, QueueResource, ErrorDetails} ->
@@ -1092,7 +1092,7 @@ wait_for_migration(_CPid, _Ref, 0) ->
 wait_for_migration(CPid, Ref, Retries0) ->
     receive
         {CPid, Ref, {ok, QueueResource, QName}} ->
-            ?LOG_INFO("rqm: migrated queue ~tp", [QName]),
+            ?LOG_DEBUG("rqm: migrated queue ~tp", [QName]),
             {ok, QueueResource, QName};
         {CPid, Ref, {error, QueueResource, ErrorDetails}} ->
             ?LOG_ERROR("rqm: failed for ~ts: ~tp", [rabbit_misc:rs(QueueResource), ErrorDetails]),
@@ -1182,7 +1182,7 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     ],
 
     % Update queue status to completed
-    ?LOG_INFO("rqm: marking empty ~ts as completed", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking empty ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
         MigrationId,
@@ -1257,7 +1257,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
             rabbit_amqqueue:declare(NewResource, true, false, NewArgs, none, <<"internal_user">>)
         of
             {new, Queue} ->
-                ?LOG_INFO("rqm: created new queue ~ts", [rabbit_misc:rs(NewResource)]),
+                ?LOG_DEBUG("rqm: created new queue ~ts", [rabbit_misc:rs(NewResource)]),
                 Queue;
             {existing, Queue} ->
                 ?LOG_INFO("rqm: using existing queue ~ts", [rabbit_misc:rs(NewResource)]),
@@ -1291,7 +1291,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     try
         case rabbit_amqqueue:delete(Q, false, false, <<"migration_user">>) of
             {ok, _} ->
-                ?LOG_INFO("rqm: successfully deleted source queue ~ts", [rabbit_misc:rs(Resource)]);
+                ?LOG_DEBUG("rqm: deleted source queue ~ts", [rabbit_misc:rs(Resource)]);
             Error ->
                 ?LOG_ERROR("rqm: failed to delete source queue ~ts: ~tp", [
                     rabbit_misc:rs(Resource), Error
