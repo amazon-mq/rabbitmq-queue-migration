@@ -544,7 +544,7 @@ start_migration_preparation_on_node(PrepGatherer, VHost) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 post_migration_restore(Nodes, PreparationState, VHost) when is_map(PreparationState) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting post-migration restore for vhost ~tp on nodes ~tp",
         [VHost, Nodes]
     ),
@@ -799,24 +799,16 @@ start_migration_on_each_node(
 start_migration_on_node(
     QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder
 ) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: node ~tp starting migration ~s for vhost ~tp (batch: ~p, order: ~p)",
         [node(), format_migration_id(MigrationId), VHost, NodeBatchSize, BatchOrder]
     ),
 
     % Get all classic queues for this vhost on this node
     AllQueues = rabbit_db_queue:get_all_by_type_and_node(VHost, rabbit_classic_queue, node()),
-    ?LOG_INFO(
-        "rqm: found ~w classic queues on node ~tp for migration ~s",
-        [length(AllQueues), node(), format_migration_id(MigrationId)]
-    ),
 
     % Filter eligible queues
     EligibleQueues0 = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
-    ?LOG_INFO(
-        "rqm: ~w queues eligible for migration on node ~tp (migration ~s)",
-        [length(EligibleQueues0), node(), format_migration_id(MigrationId)]
-    ),
 
     % Filter out queues that already have status records for this migration (e.g., skipped queues)
     EligibleQueues1 = lists:filter(
@@ -836,27 +828,18 @@ start_migration_on_node(
     QueueCount = length(EligibleQueues2),
     SkippedByStatus = length(EligibleQueues0) - length(EligibleQueues1),
     SkippedByBatch = length(EligibleQueues1) - QueueCount,
-    case SkippedByStatus of
-        0 ->
-            ok;
-        _ ->
-            ?LOG_INFO(
-                "rqm: ~w queues already have status records (skipped), will not process on node ~tp",
-                [SkippedByStatus, node()]
-            )
-    end,
-    case SkippedByBatch of
-        0 ->
-            ok;
-        _ ->
-            ?LOG_INFO(
-                "rqm: ~w queues excluded by batch limit on node ~tp",
-                [SkippedByBatch, node()]
-            )
-    end,
+
     ?LOG_INFO(
-        "rqm: ~w queues to migrate on node ~tp (migration ~s)",
-        [QueueCount, node(), format_migration_id(MigrationId)]
+        "rqm: node ~tp queue summary for migration ~s: ~w total classic, ~w eligible, ~w skipped (status), ~w excluded (batch), ~w to migrate",
+        [
+            node(),
+            format_migration_id(MigrationId),
+            length(AllQueues),
+            length(EligibleQueues0),
+            SkippedByStatus,
+            SkippedByBatch,
+            QueueCount
+        ]
     ),
 
     % Update the migration record with the number of queues in a transaction
@@ -991,7 +974,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                         {ok, QuorumQ} =
                             case TotalMessageCount of
                                 0 ->
-                                    ?LOG_INFO(
+                                    ?LOG_DEBUG(
                                         "rqm: ~ts has zero messages, using fast-path migration",
                                         [rabbit_misc:rs(Resource)]
                                     ),
@@ -1225,7 +1208,7 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
     ),
 
     % Update queue status to completed
-    ?LOG_INFO("rqm: marking ~ts as completed", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
         Status#queue_migration_status.migration_id,
@@ -1318,7 +1301,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     {ok, MessagesToMigrate} = rqm_db:get_message_count(OldQ),
     {ok, DestInitialCount} = rqm_db:get_message_count(NewQ),
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting shovel-based migration from ~ts (~tp messages) to ~ts (~tp messages) (shovel: ~ts)",
         [OldQName, MessagesToMigrate, NewQName, DestInitialCount, ShovelName]
     ),
@@ -1996,7 +1979,7 @@ store_snapshot_information(MigrationId, PreparationState) ->
                 format_migration_id(MigrationId)
             ]);
         _ ->
-            ?LOG_INFO("rqm: storing ~p snapshots for migration ~s", [
+            ?LOG_DEBUG("rqm: storing ~p snapshots for migration ~s", [
                 length(Snapshots), format_migration_id(MigrationId)
             ]),
             {ok, _} = rqm_db:update_migration_snapshots(MigrationId, Snapshots)
