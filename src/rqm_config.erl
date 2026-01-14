@@ -17,22 +17,15 @@
     max_imbalance_ratio/0,
     min_queues_for_balance_check/0,
 
-    % Queue message count configuration
-    max_messages_in_queue/0,
-
     % Disk space configuration
     min_disk_space_buffer/0,
 
     % Memory usage configuration
     max_memory_usage_percent/0,
 
-    % Queue count and size configuration
+    % Queue count configuration
     max_queues_for_migration/0,
-    base_max_messages_in_queue/0,
-    base_max_message_bytes_in_queue/0,
     max_migration_duration_ms/0,
-    calculate_max_messages_per_queue/1,
-    calculate_max_message_bytes_per_queue/1,
 
     % Worker pool configuration
     worker_pool_name/0,
@@ -78,16 +71,6 @@ min_queues_for_balance_check() ->
 %%----------------------------------------------------------------------------
 %% Queue message count configuration
 %%----------------------------------------------------------------------------
-
-%% @doc Get the maximum number of messages allowed in a queue
--spec max_messages_in_queue() -> non_neg_integer().
-max_messages_in_queue() ->
-    case application:get_env(rabbitmq_queue_migration, max_messages_in_queue) of
-        {ok, Value} when is_integer(Value), Value > 0 ->
-            Value;
-        _ ->
-            ?MAX_MESSAGES_IN_QUEUE
-    end.
 
 %%----------------------------------------------------------------------------
 %% Disk space configuration
@@ -222,26 +205,6 @@ max_queues_for_migration() ->
             ?MAX_QUEUES_FOR_MIGRATION
     end.
 
-%% @doc Get the base maximum messages allowed in a queue (for scaling)
--spec base_max_messages_in_queue() -> non_neg_integer().
-base_max_messages_in_queue() ->
-    case application:get_env(rabbitmq_queue_migration, base_max_messages_in_queue) of
-        {ok, Value} when is_integer(Value), Value > 0 ->
-            Value;
-        _ ->
-            ?BASE_MAX_MESSAGES_IN_QUEUE
-    end.
-
-%% @doc Get the base maximum message bytes allowed in a queue (for scaling)
--spec base_max_message_bytes_in_queue() -> non_neg_integer().
-base_max_message_bytes_in_queue() ->
-    case application:get_env(rabbitmq_queue_migration, base_max_message_bytes_in_queue) of
-        {ok, Value} when is_integer(Value), Value > 0 ->
-            Value;
-        _ ->
-            ?BASE_MAX_MESSAGE_BYTES_IN_QUEUE
-    end.
-
 %% @doc Get the maximum migration duration in minutes
 -spec max_migration_duration_ms() -> non_neg_integer().
 max_migration_duration_ms() ->
@@ -251,28 +214,6 @@ max_migration_duration_ms() ->
         _ ->
             ?MAX_MIGRATION_DURATION_MS
     end.
-
-%% @doc Calculate scaled maximum messages per queue based on queue count
--spec calculate_max_messages_per_queue(non_neg_integer()) -> non_neg_integer().
-calculate_max_messages_per_queue(QueueCount) when is_integer(QueueCount), QueueCount > 0 ->
-    BaseMax = base_max_messages_in_queue(),
-    MaxQueues = max_queues_for_migration(),
-
-    % Scale linearly: as queue count increases, max messages decreases
-    % But ensure we never go below a reasonable minimum (1000 messages)
-    ScaleFactor = max(0.1, (MaxQueues - min(QueueCount, MaxQueues)) / MaxQueues),
-    max(1000, round(BaseMax * ScaleFactor)).
-
-%% @doc Calculate scaled maximum message bytes per queue based on queue count
--spec calculate_max_message_bytes_per_queue(non_neg_integer()) -> non_neg_integer().
-calculate_max_message_bytes_per_queue(QueueCount) when is_integer(QueueCount), QueueCount > 0 ->
-    BaseMax = base_max_message_bytes_in_queue(),
-    MaxQueues = max_queues_for_migration(),
-
-    % Scale linearly: as queue count increases, max bytes decreases
-    % But ensure we never go below a reasonable minimum (10MB)
-    ScaleFactor = max(0.1, (MaxQueues - min(QueueCount, MaxQueues)) / MaxQueues),
-    max(10485760, round(BaseMax * ScaleFactor)).
 
 %%----------------------------------------------------------------------------
 %% Configuration Setup

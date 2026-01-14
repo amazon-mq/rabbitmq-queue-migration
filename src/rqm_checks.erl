@@ -12,7 +12,6 @@
     check_leader_balance/1,
     check_leader_balance/2,
     check_queue_synchronization/1,
-    check_queue_message_count/1,
     check_queue_suitability/1,
     check_disk_space/2,
     check_system_migration_readiness/1,
@@ -140,31 +139,6 @@ check_queue_synchronization(VHost) ->
 %% @doc Check if mirrored classic queues have more messages than is allowed.
 %% Returns ok if no queue has too many messages.
 %% {error, Details} if one or more queues have too many messages.
--spec check_queue_message_count(rabbit_types:vhost()) ->
-    ok | {error, queues_too_deep}.
-check_queue_message_count(VHost) ->
-    MaxMessages = rqm_config:max_messages_in_queue(),
-    Filter = fun
-        ([{name, _Resource}, {messages, Count}]) when is_integer(Count), Count > MaxMessages ->
-            true;
-        (_) ->
-            false
-    end,
-    QueuesTooDeep = lists:filter(Filter, rabbit_amqqueue:info_all(VHost, [name, messages])),
-    case length(QueuesTooDeep) of
-        0 ->
-            ok;
-        Num when Num > 0 ->
-            ok = lists:foreach(
-                fun([{name, Res}, {messages, Count}]) ->
-                    QStr = rabbit_misc:rs(Res),
-                    ?LOG_ERROR("rqm: ~ts too many messages: ~b", [QStr, Count])
-                end,
-                QueuesTooDeep
-            ),
-            {error, queues_too_deep}
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
@@ -724,7 +698,6 @@ check_system_migration_readiness(VHost) ->
     LeaderBalanceResult = check_leader_balance_result(VHost),
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
     QueueSuitabilityResult = check_queue_suitability_result(VHost),
-    MessageCountResult = check_message_count_result(VHost),
     DiskSpaceResult = check_disk_space_result(VHost),
 
     [
@@ -732,7 +705,6 @@ check_system_migration_readiness(VHost) ->
         LeaderBalanceResult,
         QueueSynchronizationResult,
         QueueSuitabilityResult,
-        MessageCountResult,
         DiskSpaceResult
     ].
 
@@ -805,38 +777,6 @@ check_queue_suitability_result(VHost) ->
                 check_type => queue_suitability,
                 status => failed,
                 message => format_queue_suitability_error(ErrorDetails)
-            }
-    end.
-
-check_message_count_result(VHost) ->
-    case check_queue_message_count(VHost) of
-        ok ->
-            #{
-                check_type => message_count,
-                status => passed,
-                message => <<"Message counts are within migration limits">>
-            };
-        {error, queues_too_deep} ->
-            % Get the specific details for a better error message
-            MaxMessages = rqm_config:max_messages_in_queue(),
-            Filter = fun
-                ([{name, _Resource}, {messages, Count}]) when
-                    is_integer(Count), Count > MaxMessages
-                ->
-                    true;
-                (_) ->
-                    false
-            end,
-            QueuesTooDeep = lists:filter(Filter, rabbit_amqqueue:info_all(VHost, [name, messages])),
-            QueueCount = length(QueuesTooDeep),
-
-            #{
-                check_type => message_count,
-                status => failed,
-                message => rqm_util:unicode_format(
-                    "~tp queues have too many messages (> ~tp) for safe migration. Reduce message counts or drain queues before migration.",
-                    [QueueCount, MaxMessages]
-                )
             }
     end.
 

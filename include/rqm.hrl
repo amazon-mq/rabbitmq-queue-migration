@@ -34,21 +34,15 @@
 -define(MAX_IMBALANCE_RATIO, 1.6).
 -define(MIN_QUEUES_FOR_BALANCE_CHECK, 10).
 
-%% Queue message count configuration
--define(MAX_MESSAGES_IN_QUEUE, 15000).
-
 %% Disk space configuration
-% 500MB
--define(MIN_DISK_SPACE_BUFFER, 500000000).
+% 500MiB
+-define(MIN_DISK_SPACE_BUFFER, 524288000).
 
 %% Memory usage configuration
 -define(MAX_MEMORY_USAGE_PERCENT, 40).
 
-%% Queue count and size configuration
+%% Queue count configuration
 -define(MAX_QUEUES_FOR_MIGRATION, 10000).
--define(BASE_MAX_MESSAGES_IN_QUEUE, 20000).
-% 512MiB
--define(BASE_MAX_MESSAGE_BYTES_IN_QUEUE, 536870912).
 
 % 45 minutes
 -define(MAX_MIGRATION_DURATION_MS, 2700000).
