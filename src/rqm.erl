@@ -308,6 +308,11 @@ handle_check_cluster_partitions(
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
+handle_check_cluster_partitions({error, nodes_not_booted}, _Opts) ->
+    ?LOG_ERROR(
+        "rqm: some cluster nodes are not fully booted. Wait for all nodes to complete startup before migration."
+    ),
+    {error, nodes_not_booted};
 handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
     ?LOG_ERROR("rqm: cluster partitions detected. Resolve partitions before migration."),
     {error, partitions_detected}.

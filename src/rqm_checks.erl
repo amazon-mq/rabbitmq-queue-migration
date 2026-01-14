@@ -478,14 +478,23 @@ check_snapshot_not_in_progress() ->
 
 %% @doc Check if cluster has any partitions and all nodes are up.
 %% Returns ok if no partitions detected, {error, nodes_down| or {error, partitions_detected} otherwise
--spec check_cluster_partitions() -> ok | {error, nodes_down} | {error, partitions_detected}.
+-spec check_cluster_partitions() ->
+    ok | {error, nodes_down} | {error, partitions_detected} | {error, nodes_not_booted}.
 check_cluster_partitions() ->
     M = sets:from_list(rabbit_nodes:list_members(), [{version, 2}]),
     R = sets:from_list(rabbit_nodes:list_running(), [{version, 2}]),
     NodesHealthy = sets:is_subset(M, R) andalso sets:is_subset(R, M),
     case {NodesHealthy, rabbit_node_monitor:partitions()} of
         {true, []} ->
-            {ok, sets:to_list(sets:union(M, R))};
+            % All nodes running and no partitions, now check if all are fully booted
+            RunningNodes = sets:to_list(R),
+            AllBooted = lists:all(fun(Node) -> rabbit:is_booted(Node) end, RunningNodes),
+            case AllBooted of
+                true ->
+                    {ok, RunningNodes};
+                false ->
+                    {error, nodes_not_booted}
+            end;
         {false, _} ->
             {error, nodes_down};
         {_, _Partitions} ->

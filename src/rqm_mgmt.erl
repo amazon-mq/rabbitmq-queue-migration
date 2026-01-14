@@ -233,6 +233,30 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 unsuitable_queues => UnsuitableQueues
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, nodes_down} ->
+            Message =
+                <<"Some cluster nodes are down. Ensure all cluster nodes are running before migration.">>,
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, nodes_not_booted} ->
+            Message =
+                <<"Some cluster nodes are not fully booted. Wait for all nodes to complete startup before migration.">>,
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, partitions_detected} ->
+            Message =
+                <<"Cluster partitions detected. Resolve network partitions before migration.">>,
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, Other} ->
             Message = rqm_util:unicode_format("Migration validation failed: ~p", [Other]),
             ErrorJson = rabbit_json:encode(#{
