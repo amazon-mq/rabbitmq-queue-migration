@@ -95,7 +95,9 @@ SPDX-License-Identifier: Apache-2.0
       <p>No queue migration details available.</p>
     <% } %>
 
+    <% if (queue_migration_detail_status.queues && queue_migration_detail_status.queues.length > 20) { %>
     <button type="button" onclick="window.location.hash='#/queue-migration/status'">⬅ Back to Migration List</button>
+    <% } %>
   </div>
 <% } else { %>
   <div class="section">
