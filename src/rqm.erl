@@ -1593,16 +1593,9 @@ verify_and_update_progress(ExpectedTotal, FinalResource, MigrationId, SrcQueue, 
     {ok, SrcFinalCount} = rqm_db:get_message_count(SrcQueue),
     {ok, DestFinalCount} = rqm_db:get_message_count(DestQueue),
     ActualTotal = SrcFinalCount + DestFinalCount,
-
-    ?LOG_INFO(
-        "rqm: message count verification - Expected: ~tp, Actual: ~tp, Source: ~tp, Dest: ~tp",
-        [ExpectedTotal, ActualTotal, SrcFinalCount, DestFinalCount]
-    ),
-
     verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount).
 
 verify_message_counts(Expected, Expected, FinalResource, MigrationId, DestFinalCount) ->
-    ?LOG_INFO("rqm: message count verification PASSED"),
     rqm_db:update_queue_status_progress(FinalResource, MigrationId, DestFinalCount);
 verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount) ->
     LostMessages = ExpectedTotal - ActualTotal,
