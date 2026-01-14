@@ -416,7 +416,7 @@ check_disk_space_sufficiency(
         required_free_mb => RequiredFree div (1024 * 1024)
     },
 
-    ?LOG_DEBUG(
+    ?LOG_INFO(
         "rqm: disk: current=~tpMB, limit=~tpMB, available=~tpMB, "
         "required=~tpMB, after_migration=~tpMB",
         [
@@ -831,11 +831,13 @@ check_disk_space_result(VHost) ->
                 status => passed,
                 message => <<"Sufficient disk space available for migration">>
             };
-        {error, DiskSpaceError} ->
+        {error, {insufficient_disk_space, Details}} ->
             #{
                 check_type => disk_space,
                 status => failed,
-                message => format_disk_space_error(DiskSpaceError)
+                message => format_disk_space_error({insufficient_disk_space, Details}),
+                required_free_mb => maps:get(required_free_mb, Details, 0),
+                available_for_migration_mb => maps:get(available_for_migration_mb, Details, 0)
             }
     end.
 
@@ -863,31 +865,12 @@ format_leader_balance_error({imbalanced, Details}) ->
 
 format_disk_space_error({insufficient_disk_space, Details}) ->
     % Extract specific disk space details from the error map
-    case Details of
-        #{reason := disk_space_unknown} ->
-            rqm_util:unicode_format(
-                "Unable to determine current free disk space. Ensure disk monitoring is working properly before migration.",
-                []
-            );
-        #{required_space := RequiredBytes, current_free := CurrentFree, node := Node} ->
-            RequiredMiB = RequiredBytes div (1024 * 1024),
-            AvailableMiB = CurrentFree div (1024 * 1024),
-            rqm_util:unicode_format(
-                "Insufficient disk space for migration on node ~ts - at least ~tpMiB is required, but only ~tpMiB is available. Free up disk space before migration.",
-                [Node, RequiredMiB, AvailableMiB]
-            );
-        #{required_space := RequiredBytes} ->
-            RequiredMiB = RequiredBytes div (1024 * 1024),
-            rqm_util:unicode_format(
-                "Insufficient disk space for migration - at least ~tpMiB is required on all cluster nodes. Free up disk space before migration.",
-                [RequiredMiB]
-            );
-        _ ->
-            rqm_util:unicode_format(
-                "Insufficient disk space for migration. Ensure adequate free disk space on all cluster nodes before migration.",
-                []
-            )
-    end.
+    RequiredMB = maps:get(required_free_mb, Details, 0),
+    AvailableMB = maps:get(available_for_migration_mb, Details, 0),
+    rqm_util:unicode_format(
+        "Insufficient disk space for migration. Required: ~pMB, Available: ~pMB",
+        [RequiredMB, AvailableMB]
+    ).
 
 %% Enhanced queue suitability error formatting
 format_queue_suitability_error({unsuitable_overflow_behavior, _Details}) ->

@@ -1754,7 +1754,11 @@ format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reas
     <<"Preparation failed: ", Reason/binary>>;
 format_migration_error(_Class, {preparation_failed, Reason}) ->
     iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
-format_migration_error(_Class, {error, {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}) ->
+format_migration_error(
+    _Class,
+    {error,
+        {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}
+) ->
     % Extract AWS error message from snapshot failure
     case extract_aws_error_message(Details) of
         {ok, Code, Message} ->
