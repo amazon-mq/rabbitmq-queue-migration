@@ -1754,8 +1754,30 @@ format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reas
     <<"Preparation failed: ", Reason/binary>>;
 format_migration_error(_Class, {preparation_failed, Reason}) ->
     iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
+format_migration_error(_Class, {error, {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}) ->
+    % Extract AWS error message from snapshot failure
+    case extract_aws_error_message(Details) of
+        {ok, Code, Message} ->
+            iolist_to_binary(io_lib:format("Snapshot creation failed: ~s - ~s", [Code, Message]));
+        error ->
+            <<"Snapshot creation failed">>
+    end;
 format_migration_error(Class, Ex) ->
     iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
+
+%% Extract AWS error code and message from error details
+extract_aws_error_message(Details) when is_list(Details) ->
+    try
+        Errors = proplists:get_value("Errors", Details),
+        [ErrorMap] = proplists:get_value("Error", Errors),
+        Code = proplists:get_value("Code", ErrorMap),
+        Message = proplists:get_value("Message", ErrorMap),
+        {ok, Code, Message}
+    catch
+        _:_ -> error
+    end;
+extract_aws_error_message(_) ->
+    error.
 
 %% Helper function to compute per-node batch allocations
 %% Returns list of {Node, AllocationCount} tuples
