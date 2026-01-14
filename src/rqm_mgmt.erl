@@ -329,7 +329,7 @@ queue_status_to_json({Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs,
         migrated_messages => MigratedMsgs,
         progress_percentage => calculate_progress_percentage(MigratedMsgs, TotalMsgs),
         status => Status,
-        error => Error
+        error => format_error(Error)
     }.
 
 format_display_id({Timestamp, Node}, VHost, _StartedAt) ->
