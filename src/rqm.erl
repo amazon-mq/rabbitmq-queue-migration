@@ -1348,12 +1348,9 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
         ok = rqm_shovel:create_and_verify(VHost, ShovelName, ShovelDef),
 
         %% Wait for shovel to complete migration
-        ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
         ok = wait_for_shovel_completion(
             ShovelName, VHost, FinalResource, MigrationId, OldQ, NewQ, PreMigrationCounts
-        ),
-
-        ?LOG_INFO("rqm: shovel ~ts completed successfully", [ShovelName])
+        )
     catch
         Class:Reason:Stack ->
             ?LOG_ERROR("rqm: shovel ~ts failed: ~tp:~tp", [ShovelName, Class, Reason]),
@@ -1498,7 +1495,7 @@ wait_for_shovel_completion_stable(
                 check_shovel_completion_by_stability(ExpectedTotal, SrcCount, DestCount, NewHistory)
             of
                 {completed, Reason} ->
-                    ?LOG_INFO(
+                    ?LOG_DEBUG(
                         "rqm: shovel completed (~p) - src: ~w, dest: ~w",
                         [Reason, SrcCount, DestCount]
                     ),
