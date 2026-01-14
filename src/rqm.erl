@@ -544,7 +544,7 @@ start_migration_preparation_on_node(PrepGatherer, VHost) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 post_migration_restore(Nodes, PreparationState, VHost) when is_map(PreparationState) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting post-migration restore for vhost ~tp on nodes ~tp",
         [VHost, Nodes]
     ),
@@ -799,24 +799,16 @@ start_migration_on_each_node(
 start_migration_on_node(
     QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder
 ) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: node ~tp starting migration ~s for vhost ~tp (batch: ~p, order: ~p)",
         [node(), format_migration_id(MigrationId), VHost, NodeBatchSize, BatchOrder]
     ),
 
     % Get all classic queues for this vhost on this node
     AllQueues = rabbit_db_queue:get_all_by_type_and_node(VHost, rabbit_classic_queue, node()),
-    ?LOG_INFO(
-        "rqm: found ~w classic queues on node ~tp for migration ~s",
-        [length(AllQueues), node(), format_migration_id(MigrationId)]
-    ),
 
     % Filter eligible queues
     EligibleQueues0 = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
-    ?LOG_INFO(
-        "rqm: ~w queues eligible for migration on node ~tp (migration ~s)",
-        [length(EligibleQueues0), node(), format_migration_id(MigrationId)]
-    ),
 
     % Filter out queues that already have status records for this migration (e.g., skipped queues)
     EligibleQueues1 = lists:filter(
@@ -836,27 +828,18 @@ start_migration_on_node(
     QueueCount = length(EligibleQueues2),
     SkippedByStatus = length(EligibleQueues0) - length(EligibleQueues1),
     SkippedByBatch = length(EligibleQueues1) - QueueCount,
-    case SkippedByStatus of
-        0 ->
-            ok;
-        _ ->
-            ?LOG_INFO(
-                "rqm: ~w queues already have status records (skipped), will not process on node ~tp",
-                [SkippedByStatus, node()]
-            )
-    end,
-    case SkippedByBatch of
-        0 ->
-            ok;
-        _ ->
-            ?LOG_INFO(
-                "rqm: ~w queues excluded by batch limit on node ~tp",
-                [SkippedByBatch, node()]
-            )
-    end,
+
     ?LOG_INFO(
-        "rqm: ~w queues to migrate on node ~tp (migration ~s)",
-        [QueueCount, node(), format_migration_id(MigrationId)]
+        "rqm: node ~tp queue summary for migration ~s: ~w total classic, ~w eligible, ~w skipped (status), ~w excluded (batch), ~w to migrate",
+        [
+            node(),
+            format_migration_id(MigrationId),
+            length(AllQueues),
+            length(EligibleQueues0),
+            SkippedByStatus,
+            SkippedByBatch,
+            QueueCount
+        ]
     ),
 
     % Update the migration record with the number of queues in a transaction
@@ -866,7 +849,7 @@ start_migration_on_node(
                 % Update total queue count in the migration record and create queue status records
                 case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues2, VHost) of
                     {atomic, {ok, UpdatedQueueCount}} ->
-                        ?LOG_INFO("rqm: updated migration record with ~w queues", [
+                        ?LOG_DEBUG("rqm: updated migration record with ~w queues", [
                             UpdatedQueueCount
                         ]);
                     Other ->
@@ -905,14 +888,14 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
             % Also check if rollback is pending
             case rqm_db:is_current_status(MigrationId, rollback_pending) of
                 true ->
-                    ?LOG_INFO("rqm: aborting migration for ~ts - rollback pending", [
+                    ?LOG_ERROR("rqm: aborting migration for ~ts - rollback pending", [
                         rabbit_misc:rs(Resource)
                     ]),
                     ok = rqm_gatherer:in(Gatherer, {aborted, Resource, rollback_pending}),
                     ok = rqm_gatherer:finish(Gatherer),
                     {aborted, rollback_pending};
                 false ->
-                    ?LOG_INFO(
+                    ?LOG_ERROR(
                         "rqm: aborting migration for ~ts - overall migration no longer in progress",
                         [rabbit_misc:rs(Resource)]
                     ),
@@ -926,7 +909,7 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
     end.
 
 do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting work on ~ts (migration ~s, node ~tp)",
         [rabbit_misc:rs(Resource), format_migration_id(MigrationId), node()]
     ),
@@ -946,9 +929,9 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     ),
 
     % Update queue status to in_progress
-    ?LOG_INFO("rqm: marking ~ts as in_progress", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking ~ts as in_progress", [rabbit_misc:rs(Resource)]),
     {ok, TotalMessageCount} = rqm_db:get_message_count(Resource),
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts has ~w messages to migrate",
         [rabbit_misc:rs(Resource), TotalMessageCount]
     ),
@@ -962,7 +945,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         % exit:{{{badmatch,[]},[{mirrored_supervisor,child,2,...
         %
         % This is caught in the "catch" clause of this function.
-        ?LOG_INFO(
+        ?LOG_DEBUG(
             "rqm: worker starting for ~ts (migration ~s)",
             [rabbit_misc:rs(Resource), format_migration_id(MigrationId)]
         ),
@@ -991,7 +974,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                         {ok, QuorumQ} =
                             case TotalMessageCount of
                                 0 ->
-                                    ?LOG_INFO(
+                                    ?LOG_DEBUG(
                                         "rqm: ~ts has zero messages, using fast-path migration",
                                         [rabbit_misc:rs(Resource)]
                                     ),
@@ -1033,7 +1016,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                             end,
 
                             % Update queue status to failed
-                            ?LOG_INFO("rqm: marking ~ts as failed", [rabbit_misc:rs(Resource)]),
+                            ?LOG_DEBUG("rqm: marking ~ts as failed", [rabbit_misc:rs(Resource)]),
                             {ok, _} = rqm_db:update_queue_status_failed(
                                 Resource,
                                 MigrationId,
@@ -1060,7 +1043,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         unlink(PPid)
     end,
 
-    ?LOG_INFO("rqm: spawning worker process for ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: spawning worker process for ~ts", [rabbit_misc:rs(Resource)]),
     % Note: must be in its own process to handle ra event messages
     CPid = spawn_link(Fun),
     ?LOG_DEBUG(
@@ -1072,7 +1055,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
     % Handle result - all cases must call rqm_gatherer:in and rqm_gatherer:finish
     case Result of
         {ok, QueueResource, QueueName} ->
-            ?LOG_INFO("rqm: migrated queue ~tp", [QueueName]),
+            ?LOG_DEBUG("rqm: migrated queue ~tp", [QueueName]),
             ok = rqm_gatherer:in(Gatherer, {ok, QueueResource, QueueName}),
             ok = rqm_gatherer:finish(Gatherer);
         {error, QueueResource, ErrorDetails} ->
@@ -1080,7 +1063,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
             ok = rqm_gatherer:in(Gatherer, {error, QueueResource, ErrorDetails}),
             ok = rqm_gatherer:finish(Gatherer);
         {aborted, QueueResource, Reason} ->
-            ?LOG_INFO("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
+            ?LOG_ERROR("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
             ok = rqm_gatherer:in(Gatherer, {aborted, QueueResource, Reason}),
             ok = rqm_gatherer:finish(Gatherer)
     end,
@@ -1092,13 +1075,13 @@ wait_for_migration(_CPid, _Ref, 0) ->
 wait_for_migration(CPid, Ref, Retries0) ->
     receive
         {CPid, Ref, {ok, QueueResource, QName}} ->
-            ?LOG_INFO("rqm: migrated queue ~tp", [QName]),
+            ?LOG_DEBUG("rqm: migrated queue ~tp", [QName]),
             {ok, QueueResource, QName};
         {CPid, Ref, {error, QueueResource, ErrorDetails}} ->
             ?LOG_ERROR("rqm: failed for ~ts: ~tp", [rabbit_misc:rs(QueueResource), ErrorDetails]),
             {error, QueueResource, ErrorDetails};
         {CPid, Ref, {aborted, QueueResource, Reason}} ->
-            ?LOG_INFO("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
+            ?LOG_ERROR("rqm: aborted for ~ts: ~tp", [rabbit_misc:rs(QueueResource), Reason]),
             {aborted, QueueResource, Reason};
         Other ->
             ?LOG_DEBUG("rqm: handled other message: ~tp", [Other]),
@@ -1123,7 +1106,7 @@ tmp_qq_to_qq(FinalResource, MigrationId, Q) ->
     migrate(FinalResource, MigrationId, Q, RemoveTmpPrefixFun, phase_two).
 
 migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
-    ?LOG_INFO("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
 
     % Create final quorum queue directly (skip temporary queue)
 
@@ -1133,14 +1116,14 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
 
     % Copy bindings from classic to quorum queue
     Bindings = rabbit_binding:list_for_destination(Resource),
-    ?LOG_INFO("rqm: copying ~w bindings for ~ts", [length(Bindings), rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: copying ~w bindings for ~ts", [length(Bindings), rabbit_misc:rs(Resource)]),
 
     % Delete the source classic queue first (safe because AMQP is blocked)
-    ?LOG_INFO("rqm: deleting empty source ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: deleting empty source ~ts", [rabbit_misc:rs(Resource)]),
     try
         case rabbit_amqqueue:delete(ClassicQ, false, false, <<"migration_user">>) of
             {ok, _} ->
-                ?LOG_INFO("rqm: successfully deleted empty source ~ts", [rabbit_misc:rs(Resource)]);
+                ?LOG_DEBUG("rqm: successfully deleted empty source ~ts", [rabbit_misc:rs(Resource)]);
             Error ->
                 ?LOG_ERROR("rqm: failed to delete empty source ~ts: ~tp", [
                     rabbit_misc:rs(Resource), Error
@@ -1158,10 +1141,10 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
             rabbit_amqqueue:declare(FinalResource, true, false, NewArgs, none, <<"internal_user">>)
         of
             {new, Queue} ->
-                ?LOG_INFO("rqm: created final quorum ~ts", [rabbit_misc:rs(FinalResource)]),
+                ?LOG_DEBUG("rqm: created final quorum ~ts", [rabbit_misc:rs(FinalResource)]),
                 Queue;
             {existing, Queue} ->
-                ?LOG_INFO("rqm: using existing quorum ~ts", [rabbit_misc:rs(FinalResource)]),
+                ?LOG_DEBUG("rqm: using existing quorum ~ts", [rabbit_misc:rs(FinalResource)]),
                 Queue
         end,
 
@@ -1182,7 +1165,7 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     ],
 
     % Update queue status to completed
-    ?LOG_INFO("rqm: marking empty ~ts as completed", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking empty ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
         MigrationId,
@@ -1196,36 +1179,36 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
-    ?LOG_INFO("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
     {ok, NewQ}.
 
 migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts entering phase 1 - creating temporary quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     StartTime = erlang:system_time(millisecond),
     {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, MigrationId, ClassicQ),
     Phase1Time = erlang:system_time(millisecond) - StartTime,
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts phase 1 completed in ~wms",
         [rabbit_misc:rs(Resource), Phase1Time]
     ),
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts entering phase 2 - migrating to final quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     Phase2Start = erlang:system_time(millisecond),
     {ok, QuorumQ1} = tmp_qq_to_qq(Resource, MigrationId, QuorumQ0),
     Phase2Time = erlang:system_time(millisecond) - Phase2Start,
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: ~ts phase 2 completed in ~wms",
         [rabbit_misc:rs(Resource), Phase2Time]
     ),
 
     % Update queue status to completed
-    ?LOG_INFO("rqm: marking ~ts as completed", [rabbit_misc:rs(Resource)]),
+    ?LOG_DEBUG("rqm: marking ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
         Status#queue_migration_status.migration_id,
@@ -1237,7 +1220,6 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
     % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
-    ?LOG_INFO("rqm: ~ts migration completed successfully", [rabbit_misc:rs(Resource)]),
     {ok, QuorumQ1}.
 
 migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
@@ -1245,7 +1227,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     QName = Resource#resource.name,
     NewQName = NameFun(QName),
 
-    ?LOG_INFO("rqm: migrating ~tp to ~tp", [QName, NewQName]),
+    ?LOG_DEBUG("rqm: migrating ~tp to ~tp", [QName, NewQName]),
 
     NewResource = Resource#resource{name = NewQName},
 
@@ -1257,10 +1239,10 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
             rabbit_amqqueue:declare(NewResource, true, false, NewArgs, none, <<"internal_user">>)
         of
             {new, Queue} ->
-                ?LOG_INFO("rqm: created new queue ~ts", [rabbit_misc:rs(NewResource)]),
+                ?LOG_DEBUG("rqm: created new queue ~ts", [rabbit_misc:rs(NewResource)]),
                 Queue;
             {existing, Queue} ->
-                ?LOG_INFO("rqm: using existing queue ~ts", [rabbit_misc:rs(NewResource)]),
+                ?LOG_WARNING("rqm: using existing queue ~ts", [rabbit_misc:rs(NewResource)]),
                 Queue
         end,
 
@@ -1287,11 +1269,10 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     ok = migrate_queue_messages(FinalResource, MigrationId, Q, NewQ, Phase),
 
     %% Delete the source queue after successful message migration
-    ?LOG_INFO("rqm: deleting source ~ts after successful migration", [rabbit_misc:rs(Resource)]),
     try
         case rabbit_amqqueue:delete(Q, false, false, <<"migration_user">>) of
             {ok, _} ->
-                ?LOG_INFO("rqm: successfully deleted source queue ~ts", [rabbit_misc:rs(Resource)]);
+                ?LOG_DEBUG("rqm: deleted source queue ~ts", [rabbit_misc:rs(Resource)]);
             Error ->
                 ?LOG_ERROR("rqm: failed to delete source queue ~ts: ~tp", [
                     rabbit_misc:rs(Resource), Error
@@ -1320,7 +1301,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
     {ok, MessagesToMigrate} = rqm_db:get_message_count(OldQ),
     {ok, DestInitialCount} = rqm_db:get_message_count(NewQ),
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: starting shovel-based migration from ~ts (~tp messages) to ~ts (~tp messages) (shovel: ~ts)",
         [OldQName, MessagesToMigrate, NewQName, DestInitialCount, ShovelName]
     ),
@@ -1348,12 +1329,9 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
         ok = rqm_shovel:create_and_verify(VHost, ShovelName, ShovelDef),
 
         %% Wait for shovel to complete migration
-        ?LOG_INFO("rqm: waiting for shovel ~ts to complete migration", [ShovelName]),
         ok = wait_for_shovel_completion(
             ShovelName, VHost, FinalResource, MigrationId, OldQ, NewQ, PreMigrationCounts
-        ),
-
-        ?LOG_INFO("rqm: shovel ~ts completed successfully", [ShovelName])
+        )
     catch
         Class:Reason:Stack ->
             ?LOG_ERROR("rqm: shovel ~ts failed: ~tp:~tp", [ShovelName, Class, Reason]),
@@ -1498,7 +1476,7 @@ wait_for_shovel_completion_stable(
                 check_shovel_completion_by_stability(ExpectedTotal, SrcCount, DestCount, NewHistory)
             of
                 {completed, Reason} ->
-                    ?LOG_INFO(
+                    ?LOG_DEBUG(
                         "rqm: shovel completed (~p) - src: ~w, dest: ~w",
                         [Reason, SrcCount, DestCount]
                     ),
@@ -1593,16 +1571,9 @@ verify_and_update_progress(ExpectedTotal, FinalResource, MigrationId, SrcQueue, 
     {ok, SrcFinalCount} = rqm_db:get_message_count(SrcQueue),
     {ok, DestFinalCount} = rqm_db:get_message_count(DestQueue),
     ActualTotal = SrcFinalCount + DestFinalCount,
-
-    ?LOG_INFO(
-        "rqm: message count verification - Expected: ~tp, Actual: ~tp, Source: ~tp, Dest: ~tp",
-        [ExpectedTotal, ActualTotal, SrcFinalCount, DestFinalCount]
-    ),
-
     verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount).
 
 verify_message_counts(Expected, Expected, FinalResource, MigrationId, DestFinalCount) ->
-    ?LOG_INFO("rqm: message count verification PASSED"),
     rqm_db:update_queue_status_progress(FinalResource, MigrationId, DestFinalCount);
 verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount) ->
     LostMessages = ExpectedTotal - ActualTotal,
@@ -1857,11 +1828,11 @@ count_errors_and_aborted(Errors) ->
     {ok, connection_preparation_state()}.
 
 prepare_node_connections(VHost) ->
-    ?LOG_INFO("rqm: connection preparation: starting for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: connection preparation: starting for vhost ~ts", [VHost]),
 
     % Step 1: Suspend non-HTTP listeners to block new AMQP connections
     % Keep HTTP API available for monitoring and control
-    ?LOG_INFO("rqm: connection preparation: suspending non-HTTP listeners"),
+    ?LOG_DEBUG("rqm: connection preparation: suspending non-HTTP listeners"),
     {ok, SuspendedListeners} = rqm_util:suspend_non_http_listeners(),
 
     % Step 2: Close existing AMQP connections
@@ -1883,7 +1854,7 @@ prepare_node_connections(VHost) ->
         preparation_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: connection preparation: completed successfully for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: connection preparation: completed successfully for vhost ~ts", [VHost]),
     {ok, ConnectionPreparationState}.
 
 %% @doc Restore node connection listeners after successful migration
@@ -1904,10 +1875,10 @@ restore_connection_listeners(#{
     vhost := VHost,
     suspended_listeners := SuspendedListeners
 }) when Node =:= node() ->
-    ?LOG_INFO("rqm: restoring normal operations for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: restoring normal operations for vhost ~ts", [VHost]),
 
     % Step 1: Resume suspended listeners to allow new AMQP connections
-    ?LOG_INFO("rqm: resuming suspended listeners"),
+    ?LOG_DEBUG("rqm: resuming suspended listeners"),
     {ok, _ResumedListeners} = rqm_util:resume_non_http_listeners(SuspendedListeners),
 
     RestorationState = #{
@@ -1916,7 +1887,7 @@ restore_connection_listeners(#{
         restoration_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: normal operations restored for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: normal operations restored for vhost ~ts", [VHost]),
     {ok, RestorationState};
 restore_connection_listeners(#{
     node := WrongNode,
@@ -1952,11 +1923,11 @@ restore_connection_listeners(#{
     {ok, ebs_preparation_state()}.
 
 quiesce_and_flush_node(VHost) ->
-    ?LOG_INFO("rqm: quiescing and flushing node ~tp for vhost ~ts", [node(), VHost]),
+    ?LOG_DEBUG("rqm: quiescing and flushing node ~tp for vhost ~ts", [node(), VHost]),
 
     % Sync filesystem to ensure all data is written to disk
     % This is the most critical step for EBS snapshot consistency
-    ?LOG_INFO("rqm: syncing filesystem"),
+    ?LOG_DEBUG("rqm: syncing filesystem"),
     case os:type() of
         {unix, _} ->
             os:cmd("sync"),
@@ -1972,21 +1943,21 @@ quiesce_and_flush_node(VHost) ->
         preparation_timestamp => erlang:system_time(millisecond)
     },
 
-    ?LOG_INFO("rqm: node ~tp successfully quiesced and flushed for vhost ~ts", [node(), VHost]),
+    ?LOG_DEBUG("rqm: node ~tp successfully quiesced and flushed for vhost ~ts", [node(), VHost]),
     {ok, EbsPreparationState}.
 
 %% @doc Set default queue type to quorum for the migrated vhost
 %% This is always done after successful migration to ensure new queues are quorum by default
 -spec set_default_queue_type_to_quorum(rabbit_types:vhost()) -> ok.
 set_default_queue_type_to_quorum(VHost) ->
-    ?LOG_INFO("rqm: setting default queue type to quorum for vhost ~ts", [VHost]),
+    ?LOG_DEBUG("rqm: setting default queue type to quorum for vhost ~ts", [VHost]),
     case
         rabbit_vhost:update_metadata(
             VHost, #{default_queue_type => <<"quorum">>}, <<"internal_user">>
         )
     of
         ok ->
-            ?LOG_INFO("rqm: successfully set default queue type to quorum for vhost ~ts", [VHost]);
+            ?LOG_DEBUG("rqm: successfully set default queue type to quorum for vhost ~ts", [VHost]);
         {error, Reason} ->
             ?LOG_ERROR("rqm: failed to set default queue type for vhost ~ts: ~p", [VHost, Reason])
     end,
@@ -2008,7 +1979,7 @@ store_snapshot_information(MigrationId, PreparationState) ->
                 format_migration_id(MigrationId)
             ]);
         _ ->
-            ?LOG_INFO("rqm: storing ~p snapshots for migration ~s", [
+            ?LOG_DEBUG("rqm: storing ~p snapshots for migration ~s", [
                 length(Snapshots), format_migration_id(MigrationId)
             ]),
             {ok, _} = rqm_db:update_migration_snapshots(MigrationId, Snapshots)

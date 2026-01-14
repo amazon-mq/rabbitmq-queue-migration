@@ -138,7 +138,7 @@ suspend_non_http_listeners() ->
     AllListeners = rabbit_networking:node_client_listeners(node()),
     NonHttpListeners = lists:filter(fun is_non_http_listener/1, AllListeners),
 
-    ?LOG_INFO(
+    ?LOG_DEBUG(
         "rqm: suspending ~b non-HTTP listeners for EBS snapshot preparation. "
         "HTTP API will remain available for monitoring.",
         [length(NonHttpListeners)]
@@ -147,7 +147,7 @@ suspend_non_http_listeners() ->
     Results = lists:foldl(fun suspend_listener_with_logging/2, [], NonHttpListeners),
     case lists:foldl(fun ok_or_first_error/2, ok, Results) of
         ok ->
-            ?LOG_INFO("rqm: successfully suspended ~b non-HTTP listeners", [
+            ?LOG_DEBUG("rqm: successfully suspended ~b non-HTTP listeners", [
                 length(NonHttpListeners)
             ]),
             {ok, NonHttpListeners};
@@ -174,14 +174,14 @@ close_all_client_connections() ->
 -spec resume_non_http_listeners([rabbit_types:listener()]) ->
     {ok, [rabbit_types:listener()]} | {error, term()}.
 resume_non_http_listeners(SuspendedListeners) ->
-    ?LOG_INFO("rqm: resuming ~b previously suspended non-HTTP listeners", [
+    ?LOG_DEBUG("rqm: resuming ~b previously suspended non-HTTP listeners", [
         length(SuspendedListeners)
     ]),
 
     Results = lists:foldl(fun resume_listener_with_logging/2, [], SuspendedListeners),
     case lists:foldl(fun ok_or_first_error/2, ok, Results) of
         ok ->
-            ?LOG_INFO("rqm: successfully resumed ~b non-HTTP listeners", [
+            ?LOG_DEBUG("rqm: successfully resumed ~b non-HTTP listeners", [
                 length(SuspendedListeners)
             ]),
             {ok, SuspendedListeners};
