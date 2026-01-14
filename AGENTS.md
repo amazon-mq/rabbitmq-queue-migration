@@ -359,7 +359,6 @@ This allows applications to redeclare queues with classic arguments without erro
 - `MAX_QUEUES_FOR_MIGRATION` - 500 queues maximum
 - `BASE_MAX_MESSAGES_IN_QUEUE` - 20,000 messages per queue
 - `BASE_MAX_MESSAGE_BYTES_IN_QUEUE` - 512 MiB per queue
-- `DISK_SPACE_SAFETY_MULTIPLIER` - 2.5x safety buffer
 - `MIN_DISK_SPACE_BUFFER` - 500MB minimum free space
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
 - `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
@@ -475,7 +474,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - **Worker pool**: Never exceeds scheduler count (prevents cluster instability)
 - **Message count**: Configurable per-queue limits with scaling based on total queue count
 - **Message bytes**: Configurable per-queue byte limits with scaling
-- **Disk space**: 2.5x safety multiplier plus 500MB minimum buffer
+- **Disk space**: Based on worker pool concurrency (2x peak multiplier) plus 500MB minimum buffer
 
 ## Critical Behavioral Changes
 

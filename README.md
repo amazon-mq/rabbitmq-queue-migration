@@ -197,10 +197,6 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Default: 536870912 (512 MiB)
     {base_max_message_bytes_in_queue, 536870912},
 
-    %% Disk space safety multiplier
-    %% Default: 2.5
-    {disk_space_safety_multiplier, 2.5},
-
     %% Minimum free disk space buffer (bytes)
     %% Default: 500000000 (500MB)
     {min_disk_space_buffer, 500000000},
