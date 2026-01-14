@@ -78,8 +78,10 @@ $(document).ready(function() {
 
             if (savedMode === 'all') {
                 $('#batch_all').prop('checked', true);
+                $('#batch_size').prop('disabled', true);
             } else {
                 $('#batch_limited').prop('checked', true);
+                $('#batch_size').prop('disabled', false);
             }
             $('#batch_size').val(savedSize);
             $('#migration-vhost').val(savedVhost);
