@@ -343,6 +343,7 @@ queue_migration.worker_pool_max = 32
 queue_migration.max_queues_for_migration = 10000
 queue_migration.max_migration_duration_ms = 2700000
 queue_migration.min_disk_space_buffer = 524288000
+queue_migration.disk_usage_peak_multiplier = 2.0
 queue_migration.max_memory_usage_percent = 40
 queue_migration.message_count_over_tolerance_percent = 5.0
 queue_migration.message_count_under_tolerance_percent = 0.0
@@ -369,6 +370,7 @@ queue_migration.shovel_prefetch_count = 128
 - `DEFAULT_ROLLBACK_ON_ERROR` - true (configurable)
 - `MAX_QUEUES_FOR_MIGRATION` - 10,000 queues maximum
 - `MIN_DISK_SPACE_BUFFER` - 500MiB minimum free space
+- `DISK_USAGE_PEAK_MULTIPLIER` - 2.0x multiplier for peak disk usage estimation
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
 - `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
 - `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 0.0% tolerance for under-delivery
@@ -481,7 +483,7 @@ queue_migration.shovel_prefetch_count = 128
 
 ### Resource Limits
 - **Worker pool**: Never exceeds scheduler count (prevents cluster instability)
-- **Disk space**: Based on worker pool concurrency (2x peak multiplier) plus 500MiB minimum buffer
+- **Disk space**: Total vhost size × configurable peak multiplier (default 2.0x) plus 500MiB minimum buffer
 
 ## Critical Behavioral Changes
 

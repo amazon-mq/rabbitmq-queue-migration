@@ -19,6 +19,7 @@
 
     % Disk space configuration
     min_disk_space_buffer/0,
+    disk_usage_peak_multiplier/0,
 
     % Memory usage configuration
     max_memory_usage_percent/0,
@@ -84,6 +85,23 @@ min_disk_space_buffer() ->
             Value;
         _ ->
             ?MIN_DISK_SPACE_BUFFER
+    end.
+
+%% @doc Get the peak disk usage multiplier for migration estimation.
+%% Minimum value is 1.5 to ensure adequate safety margin.
+-spec disk_usage_peak_multiplier() -> float().
+disk_usage_peak_multiplier() ->
+    case application:get_env(rabbitmq_queue_migration, disk_usage_peak_multiplier) of
+        {ok, Value} when is_number(Value), Value >= ?MIN_DISK_USAGE_PEAK_MULTIPLIER ->
+            float(Value);
+        {ok, Value} when is_number(Value), Value < ?MIN_DISK_USAGE_PEAK_MULTIPLIER ->
+            ?LOG_WARNING(
+                "rqm: disk_usage_peak_multiplier ~p is below minimum safe value ~p, using ~p",
+                [Value, ?MIN_DISK_USAGE_PEAK_MULTIPLIER, ?MIN_DISK_USAGE_PEAK_MULTIPLIER]
+            ),
+            ?MIN_DISK_USAGE_PEAK_MULTIPLIER;
+        _ ->
+            ?DISK_USAGE_PEAK_MULTIPLIER
     end.
 
 %%----------------------------------------------------------------------------
