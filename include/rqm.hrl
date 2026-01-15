@@ -9,7 +9,7 @@
 
 %% Message count verification configuration
 -define(DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT, 5.0).
--define(DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT, 2.0).
+-define(DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT, 0.0).
 
 %% Shovel configuration
 -define(DEFAULT_SHOVEL_PREFETCH_COUNT, 128).

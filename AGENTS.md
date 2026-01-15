@@ -264,7 +264,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `snapshot_mode/0` - Get snapshot mode configuration (tar or ebs)
 - `ebs_volume_device/0` - Get EBS volume device path configuration
 - `message_count_over_tolerance_percent/0` - Get tolerance for over-delivery (default: 5.0%)
-- `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 2.0%)
+- `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 0.0%)
 - `shovel_prefetch_count/0` - Get shovel prefetch count (default: 1024)
 
 ### `rqm_snapshot.erl`
@@ -342,7 +342,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `ebs_volume_device` - EBS device path for RabbitMQ data (default: "/dev/sdh")
 - `max_queues_for_migration` - Maximum queues per migration (default: 10,000)
 - `message_count_over_tolerance_percent` - Tolerance for extra messages (default: 5.0%)
-- `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 2.0%)
+- `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 0.0%)
 - `shovel_prefetch_count` - Shovel prefetch count for message transfer (default: 1024)
 - `cleanup_snapshots_on_success` - Delete snapshots after successful migration (default: true)
 
@@ -356,7 +356,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `MIN_DISK_SPACE_BUFFER` - 500MiB minimum free space
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
 - `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
-- `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 2.0% tolerance for under-delivery
+- `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 0.0% tolerance for under-delivery
 - `DEFAULT_SHOVEL_PREFETCH_COUNT` - 1024 messages
 - `DEFAULT_CLEANUP_SNAPSHOTS_ON_SUCCESS` - true
 

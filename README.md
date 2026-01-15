@@ -203,8 +203,8 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Message count verification tolerances
     %% Over-delivery tolerance (extra messages), Default: 5.0%
     {message_count_over_tolerance_percent, 5.0},
-    %% Under-delivery tolerance (missing messages), Default: 2.0%
-    {message_count_under_tolerance_percent, 2.0},
+    %% Under-delivery tolerance (missing messages), Default: 0.0%
+    {message_count_under_tolerance_percent, 0.0},
 
     %% Shovel prefetch count for message transfer
     %% Default: 1024
