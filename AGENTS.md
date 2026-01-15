@@ -334,6 +334,21 @@ This allows applications to redeclare queues with classic arguments without erro
 
 ## Configuration Parameters
 
+### Using `rabbitmq.conf`
+```ini
+queue_migration.snapshot_mode = ebs
+queue_migration.ebs_volume_device = /dev/sdh
+queue_migration.cleanup_snapshots_on_success = true
+queue_migration.worker_pool_max = 32
+queue_migration.max_queues_for_migration = 10000
+queue_migration.max_migration_duration_ms = 2700000
+queue_migration.min_disk_space_buffer = 524288000
+queue_migration.max_memory_usage_percent = 40
+queue_migration.message_count_over_tolerance_percent = 5.0
+queue_migration.message_count_under_tolerance_percent = 0.0
+queue_migration.shovel_prefetch_count = 128
+```
+
 ### Application Environment
 - `progress_update_frequency` - Messages between progress updates (default: 10)
 - `worker_pool_max` - Maximum worker pool size (default: 32, capped at scheduler count)
