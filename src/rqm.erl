@@ -212,7 +212,7 @@ handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQue
     {error, {unsynchronized_queues, QueueNameBinaries}}.
 
 handle_check_queue_suitability(ok, Opts) ->
-    pre_migration_validation(queue_message_count, Opts);
+    pre_migration_validation(disk_space, Opts);
 handle_check_queue_suitability(
     {error, {unsuitable_queues, Details}},
     #migration_opts{skip_unsuitable_queues = true} = Opts
@@ -223,7 +223,7 @@ handle_check_queue_suitability(
         [length(ProblematicQueues)]
     ),
     UpdatedOpts = opts_add_unsuitable_queues(ProblematicQueues, Opts),
-    pre_migration_validation(queue_message_count, UpdatedOpts);
+    pre_migration_validation(disk_space, UpdatedOpts);
 handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
     ProblematicQueues = maps:get(problematic_queues, Details, []),
     ?LOG_ERROR(
