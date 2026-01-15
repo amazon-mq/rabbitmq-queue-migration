@@ -1,0 +1,50 @@
+%% Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+%% SPDX-License-Identifier: Apache-2.0
+
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Queue Migration Plugin
+%% ----------------------------------------------------------------------------
+
+%% Snapshot mode: ebs (production), tar (testing), or none (disabled)
+{mapping, "queue_migration.snapshot_mode", "rabbitmq_queue_migration.snapshot_mode",
+    [{datatype, {enum, [ebs, tar, none]}}]}.
+
+%% EBS volume device path
+{mapping, "queue_migration.ebs_volume_device", "rabbitmq_queue_migration.ebs_volume_device",
+    [{datatype, string}]}.
+
+%% Cleanup snapshots on successful migration
+{mapping, "queue_migration.cleanup_snapshots_on_success", "rabbitmq_queue_migration.cleanup_snapshots_on_success",
+    [{datatype, {enum, [true, false]}}]}.
+
+%% Maximum worker pool size (1-32)
+{mapping, "queue_migration.worker_pool_max", "rabbitmq_queue_migration.worker_pool_max",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Maximum queues per migration
+{mapping, "queue_migration.max_queues_for_migration", "rabbitmq_queue_migration.max_queues_for_migration",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Maximum migration duration in milliseconds
+{mapping, "queue_migration.max_migration_duration_ms", "rabbitmq_queue_migration.max_migration_duration_ms",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Minimum free disk space buffer in bytes
+{mapping, "queue_migration.min_disk_space_buffer", "rabbitmq_queue_migration.min_disk_space_buffer",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Maximum memory usage percentage (1-100)
+{mapping, "queue_migration.max_memory_usage_percent", "rabbitmq_queue_migration.max_memory_usage_percent",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+%% Message count over-delivery tolerance percentage (0.0-100.0)
+{mapping, "queue_migration.message_count_over_tolerance_percent", "rabbitmq_queue_migration.message_count_over_tolerance_percent",
+    [{datatype, float}]}.
+
+%% Message count under-delivery tolerance percentage (0.0-100.0)
+{mapping, "queue_migration.message_count_under_tolerance_percent", "rabbitmq_queue_migration.message_count_under_tolerance_percent",
+    [{datatype, float}]}.
+
+%% Shovel prefetch count
+{mapping, "queue_migration.shovel_prefetch_count", "rabbitmq_queue_migration.shovel_prefetch_count",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.

@@ -539,7 +539,16 @@ end
 
 ### Configuration for Large Migrations
 
-Example `advanced.config` for large migrations:
+Example `rabbitmq.conf` for large migrations:
+
+```ini
+queue_migration.snapshot_mode = ebs
+queue_migration.ebs_volume_device = /dev/sdh
+queue_migration.cleanup_snapshots_on_success = true
+queue_migration.worker_pool_max = 8
+```
+
+Or using `advanced.config`:
 
 ```erlang
 [

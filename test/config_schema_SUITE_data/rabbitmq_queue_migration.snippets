@@ -1,0 +1,98 @@
+[
+    {snapshot_mode_ebs,
+        "queue_migration.snapshot_mode = ebs",
+        [{rabbitmq_queue_migration, [{snapshot_mode, ebs}]}],
+        [rabbitmq_queue_migration]},
+
+    {snapshot_mode_tar,
+        "queue_migration.snapshot_mode = tar",
+        [{rabbitmq_queue_migration, [{snapshot_mode, tar}]}],
+        [rabbitmq_queue_migration]},
+
+    {snapshot_mode_none,
+        "queue_migration.snapshot_mode = none",
+        [{rabbitmq_queue_migration, [{snapshot_mode, none}]}],
+        [rabbitmq_queue_migration]},
+
+    {ebs_volume_device,
+        "queue_migration.ebs_volume_device = /dev/xvdf",
+        [{rabbitmq_queue_migration, [{ebs_volume_device, "/dev/xvdf"}]}],
+        [rabbitmq_queue_migration]},
+
+    {cleanup_snapshots_on_success_true,
+        "queue_migration.cleanup_snapshots_on_success = true",
+        [{rabbitmq_queue_migration, [{cleanup_snapshots_on_success, true}]}],
+        [rabbitmq_queue_migration]},
+
+    {cleanup_snapshots_on_success_false,
+        "queue_migration.cleanup_snapshots_on_success = false",
+        [{rabbitmq_queue_migration, [{cleanup_snapshots_on_success, false}]}],
+        [rabbitmq_queue_migration]},
+
+    {worker_pool_max,
+        "queue_migration.worker_pool_max = 16",
+        [{rabbitmq_queue_migration, [{worker_pool_max, 16}]}],
+        [rabbitmq_queue_migration]},
+
+    {max_queues_for_migration,
+        "queue_migration.max_queues_for_migration = 5000",
+        [{rabbitmq_queue_migration, [{max_queues_for_migration, 5000}]}],
+        [rabbitmq_queue_migration]},
+
+    {max_migration_duration_ms,
+        "queue_migration.max_migration_duration_ms = 3600000",
+        [{rabbitmq_queue_migration, [{max_migration_duration_ms, 3600000}]}],
+        [rabbitmq_queue_migration]},
+
+    {min_disk_space_buffer,
+        "queue_migration.min_disk_space_buffer = 1073741824",
+        [{rabbitmq_queue_migration, [{min_disk_space_buffer, 1073741824}]}],
+        [rabbitmq_queue_migration]},
+
+    {max_memory_usage_percent,
+        "queue_migration.max_memory_usage_percent = 60",
+        [{rabbitmq_queue_migration, [{max_memory_usage_percent, 60}]}],
+        [rabbitmq_queue_migration]},
+
+    {message_count_over_tolerance_percent,
+        "queue_migration.message_count_over_tolerance_percent = 10.0",
+        [{rabbitmq_queue_migration, [{message_count_over_tolerance_percent, 10.0}]}],
+        [rabbitmq_queue_migration]},
+
+    {message_count_under_tolerance_percent,
+        "queue_migration.message_count_under_tolerance_percent = 2.5",
+        [{rabbitmq_queue_migration, [{message_count_under_tolerance_percent, 2.5}]}],
+        [rabbitmq_queue_migration]},
+
+    {shovel_prefetch_count,
+        "queue_migration.shovel_prefetch_count = 256",
+        [{rabbitmq_queue_migration, [{shovel_prefetch_count, 256}]}],
+        [rabbitmq_queue_migration]},
+
+    {all_options,
+        "queue_migration.snapshot_mode = ebs
+         queue_migration.ebs_volume_device = /dev/sdh
+         queue_migration.cleanup_snapshots_on_success = true
+         queue_migration.worker_pool_max = 32
+         queue_migration.max_queues_for_migration = 10000
+         queue_migration.max_migration_duration_ms = 2700000
+         queue_migration.min_disk_space_buffer = 524288000
+         queue_migration.max_memory_usage_percent = 40
+         queue_migration.message_count_over_tolerance_percent = 5.0
+         queue_migration.message_count_under_tolerance_percent = 0.0
+         queue_migration.shovel_prefetch_count = 128",
+        [{rabbitmq_queue_migration, [
+            {snapshot_mode, ebs},
+            {ebs_volume_device, "/dev/sdh"},
+            {cleanup_snapshots_on_success, true},
+            {worker_pool_max, 32},
+            {max_queues_for_migration, 10000},
+            {max_migration_duration_ms, 2700000},
+            {min_disk_space_buffer, 524288000},
+            {max_memory_usage_percent, 40},
+            {message_count_over_tolerance_percent, 5.0},
+            {message_count_under_tolerance_percent, 0.0},
+            {shovel_prefetch_count, 128}
+        ]}],
+        [rabbitmq_queue_migration]}
+].

@@ -173,9 +173,25 @@ The plugin automatically converts or removes queue arguments during migration:
 
 ## Configuration
 
-### Application Environment Variables
+### Using `rabbitmq.conf` (Recommended)
 
-The plugin supports the following configuration options via `advanced.config`:
+```ini
+queue_migration.snapshot_mode = ebs
+queue_migration.ebs_volume_device = /dev/sdh
+queue_migration.cleanup_snapshots_on_success = true
+queue_migration.worker_pool_max = 32
+queue_migration.max_queues_for_migration = 10000
+queue_migration.max_migration_duration_ms = 2700000
+queue_migration.min_disk_space_buffer = 524288000
+queue_migration.max_memory_usage_percent = 40
+queue_migration.message_count_over_tolerance_percent = 5.0
+queue_migration.message_count_under_tolerance_percent = 0.0
+queue_migration.shovel_prefetch_count = 128
+```
+
+### Using `advanced.config`
+
+The plugin also supports configuration via `advanced.config`:
 
 ```erlang
 [
@@ -210,7 +226,7 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Default: 1024
     {shovel_prefetch_count, 1024},
 
-    %% Snapshot mode: ebs (production) or tar (testing/development)
+    %% Snapshot mode: ebs (production), tar (testing/development), or none (disabled)
     %% Default: ebs
     {snapshot_mode, ebs},
 
@@ -236,7 +252,12 @@ The plugin creates snapshots before migration to enable rollback in case of fail
 Creates tar.gz archives of the RabbitMQ data directory. Use this mode for
 development and testing environments.
 
-**Configuration** (in `advanced.config`):
+**Configuration** (in `rabbitmq.conf`):
+```ini
+queue_migration.snapshot_mode = tar
+```
+
+Or in `advanced.config`:
 ```erlang
 {snapshot_mode, tar}
 ```
@@ -282,6 +303,21 @@ Description: "RabbitMQ migration snapshot {ISO8601_timestamp} on {node_name}"
 **Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
 
 See [EC2_SETUP.md](EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
+
+### None Mode (Disabled)
+
+Disables snapshot creation entirely. Use this mode when snapshots are not
+needed or are handled externally.
+
+**Configuration** (in `rabbitmq.conf`):
+```ini
+queue_migration.snapshot_mode = none
+```
+
+Or in `advanced.config`:
+```erlang
+{snapshot_mode, none}
+```
 
 ## Testing
 
