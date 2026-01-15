@@ -625,13 +625,15 @@ check_system_migration_readiness(VHost) ->
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
     QueueSuitabilityResult = check_queue_suitability_result(VHost),
     DiskSpaceResult = check_disk_space_result(VHost),
+    SnapshotResult = check_snapshot_not_in_progress_result(),
 
     [
         RelaxedChecksResult,
         LeaderBalanceResult,
         QueueSynchronizationResult,
         QueueSuitabilityResult,
-        DiskSpaceResult
+        DiskSpaceResult,
+        SnapshotResult
     ].
 
 %% Helper functions to convert check results to standardized format
@@ -723,6 +725,31 @@ check_disk_space_result(VHost) ->
                 available_for_migration_mb => maps:get(available_for_migration_mb, Details, 0)
             }
     end.
+
+check_snapshot_not_in_progress_result() ->
+    case check_snapshot_not_in_progress() of
+        ok ->
+            #{
+                check_type => snapshot_not_in_progress,
+                status => passed,
+                message => <<"No EBS snapshots in progress">>
+            };
+        {error, {snapshot_in_progress, Details}} ->
+            #{
+                check_type => snapshot_not_in_progress,
+                status => failed,
+                message => format_snapshot_in_progress_error(Details)
+            }
+    end.
+
+format_snapshot_in_progress_error(Details) ->
+    SnapshotId = maps:get(snapshot_id, Details, <<"unknown">>),
+    State = maps:get(state, Details, <<"unknown">>),
+    iolist_to_binary([
+        <<"EBS snapshot ">>, SnapshotId,
+        <<" is currently in progress (state: ">>, State,
+        <<"). Wait for snapshot to complete before starting migration.">>
+    ]).
 
 %% User-friendly error message formatters with specific details
 format_leader_balance_error({imbalanced, Details}) ->

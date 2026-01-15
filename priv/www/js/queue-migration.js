@@ -226,7 +226,8 @@ function fmt_check_type_name(checkType) {
         'queue_synchronization': 'Queue Synchronization',
         'queue_suitability': 'Queue Suitability',
         'message_count': 'Message Count Limits',
-        'disk_space': 'Disk Space'
+        'disk_space': 'Disk Space',
+        'snapshot_not_in_progress': 'EBS Snapshot Status'
     };
     return nameMap[checkType] || checkType;
 }
