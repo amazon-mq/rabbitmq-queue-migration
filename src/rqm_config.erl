@@ -278,11 +278,11 @@ setup_worker_pool_max() ->
 %% @doc Get snapshot mode configuration (tar or ebs)
 -spec snapshot_mode() -> tar | ebs.
 snapshot_mode() ->
-    case application:get_env(rabbitmq_queue_migration, snapshot_mode, tar) of
+    case application:get_env(rabbitmq_queue_migration, snapshot_mode, ebs) of
         tar -> tar;
         ebs -> ebs;
-        % Default to tar for invalid values
-        _ -> tar
+        % Default to ebs for invalid values
+        _ -> ebs
     end.
 
 %% @doc Get RabbitMQ EBS data volume device

@@ -210,9 +210,9 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Default: 1024
     {shovel_prefetch_count, 1024},
 
-    %% Snapshot mode: tar (testing) or ebs (production)
-    %% Default: tar
-    {snapshot_mode, tar},
+    %% Snapshot mode: ebs (production) or tar (testing/development)
+    %% Default: ebs
+    {snapshot_mode, ebs},
 
     %% EBS volume device path (for EBS snapshots)
     %% Default: "/dev/sdh"
@@ -233,7 +233,8 @@ The plugin creates snapshots before migration to enable rollback in case of fail
 
 ### Tar Mode (Development/Testing)
 
-Creates tar.gz archives of the RabbitMQ data directory.
+Creates tar.gz archives of the RabbitMQ data directory. Use this mode for
+development and testing environments.
 
 **Configuration** (in `advanced.config`):
 ```erlang
@@ -252,11 +253,12 @@ Creates tar.gz archives of the RabbitMQ data directory.
 
 **Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
 
-### EBS Mode (Production)
+### EBS Mode (Production - Default)
 
-Creates real AWS EBS snapshots using the EC2 API.
+Creates real AWS EBS snapshots using the EC2 API. This is the default mode
+for production deployments.
 
-**Configuration** (in `advanced.config`):
+**Configuration** (optional, these are the defaults):
 ```erlang
 {snapshot_mode, ebs},
 {ebs_volume_device, "/dev/sdh"}
