@@ -210,7 +210,7 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Default: 1024
     {shovel_prefetch_count, 1024},
 
-    %% Snapshot mode: ebs (production) or tar (testing/development)
+    %% Snapshot mode: ebs (production), tar (testing/development), or none (disabled)
     %% Default: ebs
     {snapshot_mode, ebs},
 
@@ -282,6 +282,16 @@ Description: "RabbitMQ migration snapshot {ISO8601_timestamp} on {node_name}"
 **Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
 
 See [EC2_SETUP.md](EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
+
+### None Mode (Disabled)
+
+Disables snapshot creation entirely. Use this mode when snapshots are not
+needed or are handled externally.
+
+**Configuration** (in `advanced.config`):
+```erlang
+{snapshot_mode, none}
+```
 
 ## Testing
 

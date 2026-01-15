@@ -77,6 +77,10 @@ create_snapshot(ebs, VHost) ->
             ?LOG_ERROR("rqm: failed to discover EBS volumes: ~p", [Reason]),
             {error, {volume_discovery_failed, Reason}}
     end;
+%% @doc Skip snapshot creation when mode is none
+create_snapshot(none, _VHost) ->
+    ?LOG_DEBUG("rqm: snapshot mode is none, skipping snapshot creation"),
+    {ok, <<"none">>};
 %% @doc Fallback for invalid snapshot modes - defaults to tar
 create_snapshot(InvalidMode, VHost) ->
     ?LOG_WARNING("rqm: invalid snapshot mode ~p, defaulting to tar", [InvalidMode]),
@@ -94,6 +98,8 @@ check_no_snapshots_in_progress() ->
 -spec check_no_snapshots_in_progress(atom()) -> ok | {error, {snapshot_in_progress, term()}}.
 check_no_snapshots_in_progress(tar) ->
     ?LOG_DEBUG("rqm: skipping snapshot check in tar mode"),
+    ok;
+check_no_snapshots_in_progress(none) ->
     ok;
 check_no_snapshots_in_progress(ebs) ->
     check_ebs_snapshots_in_progress();
@@ -279,6 +285,9 @@ cleanup_snapshot(ebs, SnapshotId) when is_binary(SnapshotId) ->
             ?LOG_ERROR("rqm: failed to delete EBS snapshot ~s: ~p", [SnapshotIdStr, Reason]),
             {error, {ebs_delete_failed, Reason}}
     end;
+%% @doc No cleanup needed when mode is none
+cleanup_snapshot(none, _SnapshotId) ->
+    ok;
 %% @doc Fallback for invalid snapshot modes
 cleanup_snapshot(InvalidMode, SnapshotId) ->
     ?LOG_WARNING("rqm: invalid snapshot mode ~p for cleanup, skipping snapshot ~p", [

@@ -275,12 +275,13 @@ setup_worker_pool_max() ->
             )
     end.
 
-%% @doc Get snapshot mode configuration (tar or ebs)
--spec snapshot_mode() -> tar | ebs.
+%% @doc Get snapshot mode configuration (tar, ebs, or none)
+-spec snapshot_mode() -> tar | ebs | none.
 snapshot_mode() ->
     case application:get_env(rabbitmq_queue_migration, snapshot_mode, ebs) of
         tar -> tar;
         ebs -> ebs;
+        none -> none;
         % Default to ebs for invalid values
         _ -> ebs
     end.
