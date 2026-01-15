@@ -38,6 +38,7 @@
 % 500MiB
 -define(MIN_DISK_SPACE_BUFFER, 524288000).
 -define(DISK_USAGE_PEAK_MULTIPLIER, 2.0).
+-define(MIN_DISK_USAGE_PEAK_MULTIPLIER, 1.5).
 
 %% Memory usage configuration
 -define(MAX_MEMORY_USAGE_PERCENT, 40).

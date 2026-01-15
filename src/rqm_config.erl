@@ -91,16 +91,15 @@ min_disk_space_buffer() ->
 %% Minimum value is 1.5 to ensure adequate safety margin.
 -spec disk_usage_peak_multiplier() -> float().
 disk_usage_peak_multiplier() ->
-    MinSafe = 1.5,
     case application:get_env(rabbitmq_queue_migration, disk_usage_peak_multiplier) of
-        {ok, Value} when is_number(Value), Value >= MinSafe ->
+        {ok, Value} when is_number(Value), Value >= ?MIN_DISK_USAGE_PEAK_MULTIPLIER ->
             float(Value);
-        {ok, Value} when is_number(Value), Value < MinSafe ->
+        {ok, Value} when is_number(Value), Value < ?MIN_DISK_USAGE_PEAK_MULTIPLIER ->
             ?LOG_WARNING(
                 "rqm: disk_usage_peak_multiplier ~p is below minimum safe value ~p, using ~p",
-                [Value, MinSafe, MinSafe]
+                [Value, ?MIN_DISK_USAGE_PEAK_MULTIPLIER, ?MIN_DISK_USAGE_PEAK_MULTIPLIER]
             ),
-            MinSafe;
+            ?MIN_DISK_USAGE_PEAK_MULTIPLIER;
         _ ->
             ?DISK_USAGE_PEAK_MULTIPLIER
     end.
