@@ -746,8 +746,10 @@ format_snapshot_in_progress_error(Details) ->
     SnapshotId = maps:get(snapshot_id, Details, <<"unknown">>),
     State = maps:get(state, Details, <<"unknown">>),
     iolist_to_binary([
-        <<"EBS snapshot ">>, SnapshotId,
-        <<" is currently in progress (state: ">>, State,
+        <<"EBS snapshot ">>,
+        SnapshotId,
+        <<" is currently in progress (state: ">>,
+        State,
         <<"). Wait for snapshot to complete before starting migration.">>
     ]).
 
