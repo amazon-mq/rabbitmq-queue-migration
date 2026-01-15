@@ -301,12 +301,12 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues) ->
             % Sum total size of all migratable queues
             TotalUsage = lists:sum([get_queue_disk_usage(Queue) || Queue <- MigratableQueues]),
 
-            % Apply 2x multiplier for peak usage during migration.
+            % Apply multiplier for peak usage during migration.
             % During migration, disk temporarily holds both classic queue data
             % AND quorum queue data before GC reclaims the classic segments.
             % Empirical testing shows peak disk usage reaches 1.5-1.8x baseline,
             % so 2x provides adequate safety margin.
-            PeakMultiplier = 2.0,
+            PeakMultiplier = rqm_config:disk_usage_peak_multiplier(),
             RequiredSpace = round(TotalUsage * PeakMultiplier),
 
             ?LOG_INFO(

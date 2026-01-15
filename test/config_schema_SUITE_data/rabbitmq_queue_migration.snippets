@@ -49,6 +49,11 @@
         [{rabbitmq_queue_migration, [{min_disk_space_buffer, 1073741824}]}],
         [rabbitmq_queue_migration]},
 
+    {disk_usage_peak_multiplier,
+        "queue_migration.disk_usage_peak_multiplier = 2.5",
+        [{rabbitmq_queue_migration, [{disk_usage_peak_multiplier, 2.5}]}],
+        [rabbitmq_queue_migration]},
+
     {max_memory_usage_percent,
         "queue_migration.max_memory_usage_percent = 60",
         [{rabbitmq_queue_migration, [{max_memory_usage_percent, 60}]}],
@@ -77,6 +82,7 @@
          queue_migration.max_queues_for_migration = 10000
          queue_migration.max_migration_duration_ms = 2700000
          queue_migration.min_disk_space_buffer = 524288000
+         queue_migration.disk_usage_peak_multiplier = 2.0
          queue_migration.max_memory_usage_percent = 40
          queue_migration.message_count_over_tolerance_percent = 5.0
          queue_migration.message_count_under_tolerance_percent = 0.0
@@ -89,6 +95,7 @@
             {max_queues_for_migration, 10000},
             {max_migration_duration_ms, 2700000},
             {min_disk_space_buffer, 524288000},
+            {disk_usage_peak_multiplier, 2.0},
             {max_memory_usage_percent, 40},
             {message_count_over_tolerance_percent, 5.0},
             {message_count_under_tolerance_percent, 0.0},

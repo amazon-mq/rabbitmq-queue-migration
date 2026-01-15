@@ -33,6 +33,10 @@
 {mapping, "queue_migration.min_disk_space_buffer", "rabbitmq_queue_migration.min_disk_space_buffer",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 
+%% Peak disk usage multiplier for migration estimation (default 2.0)
+{mapping, "queue_migration.disk_usage_peak_multiplier", "rabbitmq_queue_migration.disk_usage_peak_multiplier",
+    [{datatype, float}]}.
+
 %% Maximum memory usage percentage (1-100)
 {mapping, "queue_migration.max_memory_usage_percent", "rabbitmq_queue_migration.max_memory_usage_percent",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
