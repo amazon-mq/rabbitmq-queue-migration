@@ -298,48 +298,25 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues) ->
             ?LOG_DEBUG("rqm: disk: no migratable queues found in vhost ~ts", [VHost]),
             0;
         _ ->
-            % Get actual concurrency limit based on worker pool
-            % NOTE: Even though each node has its own worker pool, we calculate
-            % cluster-wide concurrency because ALL nodes store data for ALL queues
-            % (mirrored classic queues have replicas on all nodes, and quorum queues
-            % also replicate across nodes). The disk space check runs on each node,
-            % but each node needs space for all concurrently migrating queues.
-            WorkerPoolSize = rqm_config:calculate_worker_pool_size(),
-            NodeCount = length(rabbit_nodes:list_running()),
-            MaxConcurrent = WorkerPoolSize * NodeCount,
+            % Sum total size of all migratable queues
+            TotalUsage = lists:sum([get_queue_disk_usage(Queue) || Queue <- MigratableQueues]),
 
-            % Calculate size for each queue once and pair with queue
-            QueuesWithSize = [{Queue, get_queue_disk_usage(Queue)} || Queue <- MigratableQueues],
-
-            % Sort by size descending to get largest ones (worst case)
-            SortedBySize = lists:sort(
-                fun({_Q1, Size1}, {_Q2, Size2}) ->
-                    Size1 >= Size2
-                end,
-                QueuesWithSize
-            ),
-
-            % Take the N largest queues that could migrate concurrently
-            ConcurrentCount = min(MaxConcurrent, QueueCount),
-            LargestQueuesWithSize = lists:sublist(SortedBySize, ConcurrentCount),
-
-            % Sum the sizes (already calculated)
-            ConcurrentUsage = lists:sum([Size || {_Queue, Size} <- LargestQueuesWithSize]),
-
-            % Apply 2x multiplier for peak usage (original + copy during migration)
-            % Peak occurs when both source and destination queues are full
+            % Apply 2x multiplier for peak usage during migration.
+            % During migration, disk temporarily holds both classic queue data
+            % AND quorum queue data before GC reclaims the classic segments.
+            % Empirical testing shows peak disk usage reaches 1.5-1.8x baseline,
+            % so 2x provides adequate safety margin.
             PeakMultiplier = 2.0,
-            RequiredSpace = round(ConcurrentUsage * PeakMultiplier),
+            RequiredSpace = round(TotalUsage * PeakMultiplier),
 
             ?LOG_INFO(
-                "rqm: disk: estimated peak usage for ~p concurrent queues: ~pMB "
-                "(~pMB base × ~.1f multiplier), total queues: ~p",
+                "rqm: disk: estimated peak usage for ~p queues: ~pMB "
+                "(~pMB total × ~.1f multiplier)",
                 [
-                    ConcurrentCount,
+                    QueueCount,
                     RequiredSpace div (1024 * 1024),
-                    ConcurrentUsage div (1024 * 1024),
-                    PeakMultiplier,
-                    QueueCount
+                    TotalUsage div (1024 * 1024),
+                    PeakMultiplier
                 ]
             ),
 
