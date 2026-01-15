@@ -492,41 +492,51 @@ start_migration_preparation_on_node(PrepGatherer, VHost) ->
     %% 1 - stop connections
     %% 2 - quiesce node
     %% 3 - EBS snapshot
-    %% TODO IMPORTANT - RESTORE CONNECTIONS ON ANY FAILURE!
     ?LOG_DEBUG("rqm: preparation: node ~tp starting for vhost ~tp", [node(), VHost]),
     ok = rqm_gatherer:fork(PrepGatherer),
     PreparationFun = fun() ->
         try
-            {ok, ConnectionPreparationState} = prepare_node_connections(VHost),
-
-            % Quiesce node
-            {ok, _EbsPreparationState} = quiesce_and_flush_node(VHost),
-
-            % Create EBS snapshot after quiescing
-            case rqm_snapshot:create_snapshot(VHost) of
-                {ok, EbsSnapshotState} ->
-                    MigrationPreparationState = #{
-                        vhost => VHost,
-                        connection_preparation_state => ConnectionPreparationState,
-                        ebs_snapshot_state => EbsSnapshotState,
-                        preparation_timestamp => erlang:system_time(millisecond)
-                    },
-                    Result = {ok, #{node() => MigrationPreparationState}},
-                    ok = rqm_gatherer:in(PrepGatherer, Result);
-                {error, _SnapshotError} = Error ->
-                    ok = rqm_gatherer:in(PrepGatherer, Error)
-            end
-        catch
-            Class:Reason:Stack ->
-                ?LOG_ERROR("rqm: preparation: exception: ~tp:~tp", [Class, Reason]),
-                ?LOG_ERROR("~tp", [Stack]),
-                ok = rqm_gatherer:in(PrepGatherer, {Class, {Reason, Stack}})
+            Result =
+                try
+                    do_migration_preparation(VHost)
+                catch
+                    Class:Reason:Stack ->
+                        ?LOG_ERROR("rqm: preparation: exception: ~tp:~tp", [Class, Reason]),
+                        ?LOG_ERROR("~tp", [Stack]),
+                        {error, {migration_preparation, {Class, Reason}}}
+                end,
+            ok = rqm_gatherer:in(PrepGatherer, Result)
         after
             ?LOG_DEBUG("rqm: node ~tp finished migration preparation for vhost ~tp", [node(), VHost]),
             ok = rqm_gatherer:finish(PrepGatherer)
         end
     end,
     ok = submit_to_worker_pool(PreparationFun).
+
+do_migration_preparation(VHost) ->
+    {ok, ConnectionPreparationState} = prepare_node_connections(VHost),
+    try
+        {ok, _EbsPreparationState} = quiesce_and_flush_node(VHost),
+        {ok, EbsSnapshotState} = rqm_snapshot:create_snapshot(VHost),
+        MigrationPreparationState = #{
+            vhost => VHost,
+            connection_preparation_state => ConnectionPreparationState,
+            ebs_snapshot_state => EbsSnapshotState,
+            preparation_timestamp => erlang:system_time(millisecond)
+        },
+        {ok, #{node() => MigrationPreparationState}}
+    catch
+        Class:Reason:Stack ->
+            case catch restore_connection_listeners(ConnectionPreparationState) of
+                {ok, _} ->
+                    ok;
+                Error ->
+                    ?LOG_ERROR("rqm: normal operations NOT restored for vhost ~ts, ~tp", [
+                        VHost, Error
+                    ])
+            end,
+            erlang:raise(Class, Reason, Stack)
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Post-migration Restore
