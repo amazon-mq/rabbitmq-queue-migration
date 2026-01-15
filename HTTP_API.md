@@ -389,11 +389,16 @@ curl -u guest:guest -X POST \
         "check_type": "queue_suitability",
         "status": "passed",
         "message": "All queues are suitable for migration"
-      }
+      },
       {
         "check_type": "disk_space",
         "status": "passed",
         "message": "Sufficient disk space available for migration"
+      },
+      {
+        "check_type": "snapshot_not_in_progress",
+        "status": "passed",
+        "message": "No EBS snapshots in progress"
       }
     ]
   }
@@ -417,6 +422,7 @@ curl -u guest:guest -X POST \
 - `queue_synchronization` - All mirrored queues synchronized
 - `queue_suitability` - All queues suitable for migration
 - `disk_space` - Sufficient disk space available
+- `snapshot_not_in_progress` - No EBS snapshots currently in progress
 
 ---
 
