@@ -260,13 +260,11 @@ This allows applications to redeclare queues with classic arguments without erro
 
 ### `rqm_config.erl`
 - `calculate_worker_pool_size/0` - Dynamic worker pool sizing (min of schedulers and worker_pool_max)
-- `calculate_max_messages_per_queue/1` - Queue size limits based on total count
-- `calculate_max_message_bytes_per_queue/1` - Byte limits for queues
 - `max_queues_for_migration/0` - Maximum queue count limits
 - `snapshot_mode/0` - Get snapshot mode configuration (tar or ebs)
 - `ebs_volume_device/0` - Get EBS volume device path configuration
 - `message_count_over_tolerance_percent/0` - Get tolerance for over-delivery (default: 5.0%)
-- `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 2.0%)
+- `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 0.0%)
 - `shovel_prefetch_count/0` - Get shovel prefetch count (default: 1024)
 
 ### `rqm_snapshot.erl`
@@ -312,8 +310,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `check_leader_balance/1` - Ensure balanced queue distribution
 - `check_queue_synchronization/1` - Verify all mirrors are synchronized
 - `check_queue_suitability/1` - Comprehensive queue eligibility
-- `check_queue_message_count/1` - Validate message counts within limits
-- `check_disk_space/1` - Disk space estimation and validation
+- `check_disk_space/1` - Disk space estimation and validation based on worker pool concurrency
 - `check_active_alarms/0` - Check for active RabbitMQ alarms
 - `check_memory_usage/0` - Validate memory usage is within limits
 - `check_snapshot_not_in_progress/0` - Verify no concurrent EBS snapshots (delegates to `rqm_snapshot`)
@@ -343,10 +340,9 @@ This allows applications to redeclare queues with classic arguments without erro
 - `rollback_on_error` - Enable automatic rollback on migration failure (default: true)
 - `snapshot_mode` - Snapshot mode: `tar` (testing) or `ebs` (production EBS snapshots) (default: tar)
 - `ebs_volume_device` - EBS device path for RabbitMQ data (default: "/dev/sdh")
-- `max_queues_for_migration` - Maximum queues per migration (default: 500)
-- `base_max_message_bytes_in_queue` - Base maximum bytes per queue (default: 512 MiB)
+- `max_queues_for_migration` - Maximum queues per migration (default: 10,000)
 - `message_count_over_tolerance_percent` - Tolerance for extra messages (default: 5.0%)
-- `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 2.0%)
+- `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 0.0%)
 - `shovel_prefetch_count` - Shovel prefetch count for message transfer (default: 1024)
 - `cleanup_snapshots_on_success` - Delete snapshots after successful migration (default: true)
 
@@ -356,13 +352,11 @@ This allows applications to redeclare queues with classic arguments without erro
 - `DEFAULT_PROGRESS_UPDATE_FREQUENCY` - 10 messages
 - `DEFAULT_WORKER_POOL_MAX` - 32 workers (capped at scheduler count)
 - `DEFAULT_ROLLBACK_ON_ERROR` - true (configurable)
-- `MAX_QUEUES_FOR_MIGRATION` - 500 queues maximum
-- `BASE_MAX_MESSAGES_IN_QUEUE` - 20,000 messages per queue
-- `BASE_MAX_MESSAGE_BYTES_IN_QUEUE` - 512 MiB per queue
-- `MIN_DISK_SPACE_BUFFER` - 500MB minimum free space
+- `MAX_QUEUES_FOR_MIGRATION` - 10,000 queues maximum
+- `MIN_DISK_SPACE_BUFFER` - 500MiB minimum free space
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
 - `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
-- `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 2.0% tolerance for under-delivery
+- `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 0.0% tolerance for under-delivery
 - `DEFAULT_SHOVEL_PREFETCH_COUNT` - 1024 messages
 - `DEFAULT_CLEANUP_SNAPSHOTS_ON_SUCCESS` - true
 
@@ -472,9 +466,7 @@ This allows applications to redeclare queues with classic arguments without erro
 
 ### Resource Limits
 - **Worker pool**: Never exceeds scheduler count (prevents cluster instability)
-- **Message count**: Configurable per-queue limits with scaling based on total queue count
-- **Message bytes**: Configurable per-queue byte limits with scaling
-- **Disk space**: Based on worker pool concurrency (2x peak multiplier) plus 500MB minimum buffer
+- **Disk space**: Based on worker pool concurrency (2x peak multiplier) plus 500MiB minimum buffer
 
 ## Critical Behavioral Changes
 

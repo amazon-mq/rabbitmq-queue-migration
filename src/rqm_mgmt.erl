@@ -176,13 +176,6 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
                 reason => Message
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
-        {error, queues_too_deep} ->
-            Message = <<"Some queues have too many messages for migration.">>,
-            ErrorJson = rabbit_json:encode(#{
-                error => bad_request,
-                reason => Message
-            }),
-            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, {insufficient_disk_space, Details}} ->
             RequiredMB = maps:get(required_free_mb, Details, 0),
             AvailableMB = maps:get(available_for_migration_mb, Details, 0),

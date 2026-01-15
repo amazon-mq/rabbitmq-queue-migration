@@ -12,7 +12,6 @@
     check_leader_balance/1,
     check_leader_balance/2,
     check_queue_synchronization/1,
-    check_queue_message_count/1,
     check_queue_suitability/1,
     check_disk_space/2,
     check_system_migration_readiness/1,
@@ -140,31 +139,6 @@ check_queue_synchronization(VHost) ->
 %% @doc Check if mirrored classic queues have more messages than is allowed.
 %% Returns ok if no queue has too many messages.
 %% {error, Details} if one or more queues have too many messages.
--spec check_queue_message_count(rabbit_types:vhost()) ->
-    ok | {error, queues_too_deep}.
-check_queue_message_count(VHost) ->
-    MaxMessages = rqm_config:max_messages_in_queue(),
-    Filter = fun
-        ([{name, _Resource}, {messages, Count}]) when is_integer(Count), Count > MaxMessages ->
-            true;
-        (_) ->
-            false
-    end,
-    QueuesTooDeep = lists:filter(Filter, rabbit_amqqueue:info_all(VHost, [name, messages])),
-    case length(QueuesTooDeep) of
-        0 ->
-            ok;
-        Num when Num > 0 ->
-            ok = lists:foreach(
-                fun([{name, Res}, {messages, Count}]) ->
-                    QStr = rabbit_misc:rs(Res),
-                    ?LOG_ERROR("rqm: ~ts too many messages: ~b", [QStr, Count])
-                end,
-                QueuesTooDeep
-            ),
-            {error, queues_too_deep}
-    end.
-
 %%----------------------------------------------------------------------------
 %% Internal functions
 %%----------------------------------------------------------------------------
@@ -640,28 +614,8 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
                 []
         end,
 
-    % Check message and byte limits for mirrored queues
-    MessageAndByteIssues =
-        case {MirroredQueueCount, TooManyQueuesIssues} of
-            {0, _} ->
-                [];
-            % Skip if already too many queues
-            {_, [_ | _]} ->
-                [];
-            _ ->
-                MaxMessagesPerQueue = rqm_config:calculate_max_messages_per_queue(
-                    MirroredQueueCount
-                ),
-                MaxBytesPerQueue = rqm_config:calculate_max_message_bytes_per_queue(
-                    MirroredQueueCount
-                ),
-                collect_message_and_byte_issues(
-                    MirroredClassicQueues, MaxMessagesPerQueue, MaxBytesPerQueue
-                )
-        end,
-
     % Combine all issues
-    RejectPublishDlxIssues ++ TooManyQueuesIssues ++ MessageAndByteIssues.
+    RejectPublishDlxIssues ++ TooManyQueuesIssues.
 
 %% @doc Collect reject-publish-dlx issues from queues
 -spec collect_reject_publish_dlx_issues([rabbit_types:amqqueue()]) -> list().
@@ -684,37 +638,6 @@ collect_reject_publish_dlx_issues(Queues) ->
     ).
 
 %% @doc Collect message count and byte limit issues from mirrored queues
--spec collect_message_and_byte_issues(
-    [rabbit_types:amqqueue()], non_neg_integer(), non_neg_integer()
-) -> list().
-collect_message_and_byte_issues(Queues, MaxMessagesPerQueue, MaxBytesPerQueue) ->
-    lists:filtermap(
-        fun(Queue) ->
-            Info = rabbit_amqqueue:info(Queue, [name, messages, message_bytes]),
-            Name = proplists:get_value(name, Info),
-            Messages = proplists:get_value(messages, Info, 0),
-            MessageBytes = proplists:get_value(message_bytes, Info, 0),
-
-            case {Messages > MaxMessagesPerQueue, MessageBytes > MaxBytesPerQueue} of
-                {true, _} ->
-                    {true, #unsuitable_queue{
-                        resource = Name,
-                        reason = too_many_messages,
-                        details = #{messages => Messages, max_messages => MaxMessagesPerQueue}
-                    }};
-                {_, true} ->
-                    {true, #unsuitable_queue{
-                        resource = Name,
-                        reason = too_many_bytes,
-                        details = #{message_bytes => MessageBytes, max_bytes => MaxBytesPerQueue}
-                    }};
-                _ ->
-                    false
-            end
-        end,
-        Queues
-    ).
-
 %% @doc Run all system-level migration readiness checks
 %% Returns list of all check results (both passed and failed)
 -spec check_system_migration_readiness(rabbit_types:vhost()) -> [map()].
@@ -724,7 +647,6 @@ check_system_migration_readiness(VHost) ->
     LeaderBalanceResult = check_leader_balance_result(VHost),
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
     QueueSuitabilityResult = check_queue_suitability_result(VHost),
-    MessageCountResult = check_message_count_result(VHost),
     DiskSpaceResult = check_disk_space_result(VHost),
 
     [
@@ -732,7 +654,6 @@ check_system_migration_readiness(VHost) ->
         LeaderBalanceResult,
         QueueSynchronizationResult,
         QueueSuitabilityResult,
-        MessageCountResult,
         DiskSpaceResult
     ].
 
@@ -808,38 +729,6 @@ check_queue_suitability_result(VHost) ->
             }
     end.
 
-check_message_count_result(VHost) ->
-    case check_queue_message_count(VHost) of
-        ok ->
-            #{
-                check_type => message_count,
-                status => passed,
-                message => <<"Message counts are within migration limits">>
-            };
-        {error, queues_too_deep} ->
-            % Get the specific details for a better error message
-            MaxMessages = rqm_config:max_messages_in_queue(),
-            Filter = fun
-                ([{name, _Resource}, {messages, Count}]) when
-                    is_integer(Count), Count > MaxMessages
-                ->
-                    true;
-                (_) ->
-                    false
-            end,
-            QueuesTooDeep = lists:filter(Filter, rabbit_amqqueue:info_all(VHost, [name, messages])),
-            QueueCount = length(QueuesTooDeep),
-
-            #{
-                check_type => message_count,
-                status => failed,
-                message => rqm_util:unicode_format(
-                    "~tp queues have too many messages (> ~tp) for safe migration. Reduce message counts or drain queues before migration.",
-                    [QueueCount, MaxMessages]
-                )
-            }
-    end.
-
 check_disk_space_result(VHost) ->
     case check_disk_space(VHost, []) of
         {ok, sufficient} ->
@@ -892,60 +781,13 @@ format_disk_space_error({insufficient_disk_space, Details}) ->
 %% Enhanced queue suitability error formatting
 format_queue_suitability_error({unsuitable_overflow_behavior, _Details}) ->
     rqm_util:unicode_format(
-        "✗ Some queues are unsuitable, see below",
+        "Some queues are unsuitable, see below",
         []
     );
 format_queue_suitability_error({unsuitable_queues, Details}) ->
     ProblematicQueues = maps:get(problematic_queues, Details),
     QueueCount = length(ProblematicQueues),
-
-    % Count different types of problems and extract limits from the actual issues
-    {MessageProblems, ByteProblems, MaxMessagesPerQueue, MaxBytesPerQueue} =
-        lists:foldl(
-            fun
-                (
-                    #unsuitable_queue{reason = too_many_messages, details = IssueDetails},
-                    {M, B, MaxMsg, MaxBytes}
-                ) ->
-                    Max = maps:get(max_messages, IssueDetails),
-                    {M + 1, B, max(MaxMsg, Max), MaxBytes};
-                (
-                    #unsuitable_queue{reason = too_many_bytes, details = IssueDetails},
-                    {M, B, MaxMsg, MaxBytes}
-                ) ->
-                    Max = maps:get(max_bytes, IssueDetails),
-                    {M, B + 1, MaxMsg, max(MaxBytes, Max)};
-                (#unsuitable_queue{reason = unsuitable_overflow}, {M, B, MaxMsg, MaxBytes}) ->
-                    {M, B, MaxMsg, MaxBytes};
-                (_, {M, B, MaxMsg, MaxBytes}) ->
-                    {M, B, MaxMsg, MaxBytes}
-            end,
-            {0, 0, 0, 0},
-            ProblematicQueues
-        ),
-
-    case {MessageProblems, ByteProblems} of
-        {M, 0} when M > 0 ->
-            rqm_util:unicode_format(
-                "~tp queues have too many messages (> ~tp per queue) for migration. Reduce message counts before migration.",
-                [M, MaxMessagesPerQueue]
-            );
-        {0, B} when B > 0 ->
-            MaxBytesMiB = MaxBytesPerQueue div (1024 * 1024),
-            rqm_util:unicode_format(
-                "~tp queues have too many message bytes (> ~tpMiB per queue) for migration. Reduce message sizes before migration.",
-                [B, MaxBytesMiB]
-            );
-        {M, B} when M > 0, B > 0 ->
-            MaxBytesMiB = MaxBytesPerQueue div (1024 * 1024),
-            rqm_util:unicode_format(
-                "~tp queues exceed migration limits (~tp with too many messages > ~tp, ~tp with too many bytes > ~tpMiB). Reduce message counts and sizes before migration.",
-                [QueueCount, M, MaxMessagesPerQueue, B, MaxBytesMiB]
-            );
-        _ ->
-            % Handle unsuitable overflow or other issues
-            rqm_util:unicode_format(
-                "✗ Some queues are unsuitable, see below",
-                []
-            )
-    end.
+    rqm_util:unicode_format(
+        "~tp queues are unsuitable for migration. Review queue configurations.",
+        [QueueCount]
+    ).

@@ -534,13 +534,12 @@ end
 ### Common Issues
 
 1. **Concurrent snapshots:** Add validation check to detect in-progress snapshots
-2. **Queue size limits:** Configure `base_max_message_bytes_in_queue` for large queues
-3. **Worker pool sizing:** Don't exceed scheduler count
-4. **Shovel cleanup races:** Benign badmatch exceptions are caught and handled
+2. **Worker pool sizing:** Don't exceed scheduler count
+3. **Shovel cleanup races:** Benign badmatch exceptions are caught and handled
 
 ### Configuration for Large Migrations
 
-Example `advanced.config` for 1000 queues with larger messages:
+Example `advanced.config` for large migrations:
 
 ```erlang
 [
@@ -548,9 +547,7 @@ Example `advanced.config` for 1000 queues with larger messages:
     {snapshot_mode, ebs},
     {ebs_volume_device, "/dev/sdh"},
     {cleanup_snapshots_on_success, true},
-    {worker_pool_max, 8},  % Will be capped at scheduler count
-    {max_queues_for_migration, 1000},
-    {base_max_message_bytes_in_queue, 268435456}  % 256 MiB
+    {worker_pool_max, 8}  % Will be capped at scheduler count
   ]}
 ].
 ```

@@ -162,24 +162,6 @@ extract_queue_suitability_issues(Queue, SuitabilityResult) ->
                         }
                     ) when QueueName =:= QueueResource ->
                         case IssueType of
-                            too_many_messages ->
-                                Messages = maps:get(messages, IssueDetails),
-                                MaxMessages = maps:get(max_messages, IssueDetails),
-                                {true,
-                                    {message_count_limit,
-                                        io_lib:format(
-                                            "Queue has ~p messages, exceeds limit of ~p",
-                                            [Messages, MaxMessages]
-                                        )}};
-                            too_many_bytes ->
-                                MessageBytes = maps:get(message_bytes, IssueDetails),
-                                MaxBytes = maps:get(max_bytes, IssueDetails),
-                                {true,
-                                    {data_size_limit,
-                                        io_lib:format(
-                                            "Queue has ~p bytes, exceeds limit of ~p",
-                                            [MessageBytes, MaxBytes]
-                                        )}};
                             too_many_queues ->
                                 QueueCount = maps:get(queue_count, IssueDetails),
                                 MaxQueues = maps:get(max_queues, IssueDetails),

@@ -114,7 +114,6 @@ The plugin performs comprehensive checks before starting migration:
 **Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
 1. **Queue Synchronization**: Verifies all queue mirrors are synchronized
 2. **Queue Suitability**: Confirms queues don't have unsuitable arguments (e.g., `reject-publish-dlx`)
-3. **Message Limits**: Validates queue message counts and bytes are within limits
 
 When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
 
@@ -193,13 +192,9 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Default: 500
     {max_queues_for_migration, 500},
 
-    %% Base maximum message bytes per queue (scales with queue count)
-    %% Default: 536870912 (512 MiB)
-    {base_max_message_bytes_in_queue, 536870912},
-
     %% Minimum free disk space buffer (bytes)
-    %% Default: 500000000 (500MB)
-    {min_disk_space_buffer, 500000000},
+    %% Default: 524288000 (500MiB)
+    {min_disk_space_buffer, 524288000},
 
     %% Maximum memory usage percentage
     %% Range: 1-100, Default: 40
@@ -208,8 +203,8 @@ The plugin supports the following configuration options via `advanced.config`:
     %% Message count verification tolerances
     %% Over-delivery tolerance (extra messages), Default: 5.0%
     {message_count_over_tolerance_percent, 5.0},
-    %% Under-delivery tolerance (missing messages), Default: 2.0%
-    {message_count_under_tolerance_percent, 2.0},
+    %% Under-delivery tolerance (missing messages), Default: 0.0%
+    {message_count_under_tolerance_percent, 0.0},
 
     %% Shovel prefetch count for message transfer
     %% Default: 1024

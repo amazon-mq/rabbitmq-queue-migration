@@ -389,12 +389,7 @@ curl -u guest:guest -X POST \
         "check_type": "queue_suitability",
         "status": "passed",
         "message": "All queues are suitable for migration"
-      },
-      {
-        "check_type": "message_count",
-        "status": "passed",
-        "message": "Message counts are within migration limits"
-      },
+      }
       {
         "check_type": "disk_space",
         "status": "passed",
@@ -421,7 +416,6 @@ curl -u guest:guest -X POST \
 - `leader_balance` - Queue leaders balanced across nodes
 - `queue_synchronization` - All mirrored queues synchronized
 - `queue_suitability` - All queues suitable for migration
-- `message_count` - Message counts within limits
 - `disk_space` - Sufficient disk space available
 
 ---
