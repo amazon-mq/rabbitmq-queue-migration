@@ -183,6 +183,7 @@ queue_migration.worker_pool_max = 32
 queue_migration.max_queues_for_migration = 10000
 queue_migration.max_migration_duration_ms = 2700000
 queue_migration.min_disk_space_buffer = 524288000
+queue_migration.disk_usage_peak_multiplier = 2.0
 queue_migration.max_memory_usage_percent = 40
 queue_migration.message_count_over_tolerance_percent = 5.0
 queue_migration.message_count_under_tolerance_percent = 0.0
@@ -211,6 +212,10 @@ The plugin also supports configuration via `advanced.config`:
     %% Minimum free disk space buffer (bytes)
     %% Default: 524288000 (500MiB)
     {min_disk_space_buffer, 524288000},
+
+    %% Peak disk usage multiplier for migration estimation
+    %% Default: 2.0
+    {disk_usage_peak_multiplier, 2.0},
 
     %% Maximum memory usage percentage
     %% Range: 1-100, Default: 40
