@@ -530,22 +530,27 @@ do_migration_preparation(VHost) ->
     {ok, ConnectionPreparationState} = prepare_node_connections(VHost),
     try
         {ok, _EbsPreparationState} = quiesce_and_flush_node(VHost),
-        {ok, EbsSnapshotState} = rqm_snapshot:create_snapshot(VHost),
-        MigrationPreparationState = #{
-            vhost => VHost,
-            connection_preparation_state => ConnectionPreparationState,
-            ebs_snapshot_state => EbsSnapshotState,
-            preparation_timestamp => erlang:system_time(millisecond)
-        },
-        {ok, #{node() => MigrationPreparationState}}
+        case rqm_snapshot:create_snapshot(VHost) of
+            {ok, EbsSnapshotState} ->
+                MigrationPreparationState = #{
+                    vhost => VHost,
+                    connection_preparation_state => ConnectionPreparationState,
+                    ebs_snapshot_state => EbsSnapshotState,
+                    preparation_timestamp => erlang:system_time(millisecond)
+                },
+                {ok, #{node() => MigrationPreparationState}};
+            {error, _}=Error ->
+                catch restore_connection_listeners(ConnectionPreparationState),
+                Error
+        end
     catch
         Class:Reason:Stack ->
             case catch restore_connection_listeners(ConnectionPreparationState) of
                 {ok, _} ->
                     ok;
-                Error ->
+                Error0 ->
                     ?LOG_ERROR("rqm: normal operations NOT restored for vhost ~ts, ~tp", [
-                        VHost, Error
+                        VHost, Error0
                     ])
             end,
             erlang:raise(Class, Reason, Stack)
