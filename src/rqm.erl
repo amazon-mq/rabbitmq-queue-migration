@@ -128,25 +128,8 @@ pre_migration_validation(snapshot_not_in_progress, Opts) ->
     handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
     handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts);
-pre_migration_validation(
-    eligible_queue_count,
-    #migration_opts{
-        vhost = VHost, unsuitable_queues = UnsuitableQueues, skip_unsuitable_queues = Skipped
-    } = Opts
-) ->
-    AllQueues = rqm_checks:get_mirrored_classic_queues(VHost),
-    EligibleCount = length(AllQueues) - length(UnsuitableQueues),
-    case EligibleCount > 0 of
-        true ->
-            {ok, Opts};
-        false ->
-            {error,
-                {no_eligible_queues, #{
-                    total => length(AllQueues),
-                    unsuitable => length(UnsuitableQueues),
-                    skipped => Skipped
-                }}}
-    end.
+pre_migration_validation(eligible_queue_count, Opts) ->
+    handle_eligible_queue_count_check(rqm_checks:check_eligible_queue_count(Opts), Opts).
 
 handle_check_shovel_plugin(ok, Opts) ->
     pre_migration_validation(khepri_disabled, Opts);
@@ -185,7 +168,7 @@ handle_check_leader_balance({error, {imbalanced, _}}, _Opts) ->
     {error, queue_leaders_imbalanced}.
 
 handle_check_queue_synchronization(ok, Opts) ->
-    pre_migration_validation(queue_suitability, Opts);
+    pre_migration_validation(eligible_queue_count, Opts);
 handle_check_queue_synchronization(
     {error, {unsynchronized_queues, UnsuitableQueues}},
     #migration_opts{skip_unsuitable_queues = true} = Opts
@@ -195,7 +178,7 @@ handle_check_queue_synchronization(
         [length(UnsuitableQueues)]
     ),
     UpdatedOpts = opts_add_unsuitable_queues(UnsuitableQueues, Opts),
-    pre_migration_validation(queue_suitability, UpdatedOpts);
+    pre_migration_validation(eligible_queue_count, UpdatedOpts);
 handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQueues}}, _Opts) ->
     QueueNameBinaries = [
         rabbit_misc:rs(R#unsuitable_queue.resource)
@@ -207,6 +190,13 @@ handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQue
         [QueueNameBinaries]
     ),
     {error, {unsynchronized_queues, QueueNameBinaries}}.
+
+handle_eligible_queue_count_check({ok, Opts}, Opts) ->
+    pre_migration_validation(queue_suitability, Opts);
+handle_eligible_queue_count_check({error, {no_eligible_queues, _Details}}, _Opts) ->
+    {error, no_eligible_queues};
+handle_eligible_queue_count_check({error, {no_matching_queues, _Details}}, _Opts) ->
+    {error, no_matching_queues}.
 
 handle_check_queue_suitability(ok, Opts) ->
     pre_migration_validation(disk_space, Opts);
@@ -277,14 +267,7 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     ),
     {error, {snapshot_in_progress, Details}}.
 
-handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only} = Opts) ->
-    case pre_migration_validation(eligible_queue_count, Opts) of
-        {ok, _} -> ok;
-        {error, _} = Error -> Error
-    end;
-handle_check_cluster_partitions(
-    {ok, Nodes}, #migration_opts{mode = migration} = Opts
-) ->
+handle_check_cluster_partitions({ok, Nodes}, Opts) ->
     handle_check_eligible_queue_count(pre_migration_validation(eligible_queue_count, Opts), Nodes);
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
@@ -832,7 +815,9 @@ start_migration_on_each_node(
     Acc0
 ) ->
     ok = rqm_gatherer:fork(QueueCountGatherer),
-    Args = [QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames],
+    Args = [
+        QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames
+    ],
     % elp:ignore W0014
     PidAndRef = spawn_monitor(Node, ?MODULE, start_migration_on_node, Args),
     Acc1 = [PidAndRef | Acc0],
@@ -855,7 +840,7 @@ start_migration_on_node(
     EligibleQueues0 = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
 
     % Filter by queue_names if specified
-    EligibleQueues1 = filter_by_queue_names(EligibleQueues0, QueueNames),
+    EligibleQueues1 = rqm_util:filter_by_queue_names(EligibleQueues0, QueueNames),
 
     % Filter out queues that already have status records for this migration (e.g., skipped queues)
     EligibleQueues2 = lists:filter(
@@ -1868,22 +1853,6 @@ compute_node_allocations(Nodes, 0) ->
     [{Node, all} || Node <- Nodes].
 
 %% Helper function to sort queues by size and limit to batch count
-filter_by_queue_names(Queues, undefined) ->
-    Queues;
-filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->
-    FilteredQueues = [Q || Q <- Queues,
-        begin
-            #resource{name = QName} = amqqueue:get_name(Q),
-            lists:member(QName, QueueNames)
-        end],
-    SpecifiedButNotFound = QueueNames -- [begin
-        #resource{name = QName} = amqqueue:get_name(Q),
-        QName
-    end || Q <- FilteredQueues],
-    [?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
-     || QName <- SpecifiedButNotFound],
-    FilteredQueues.
-
 sort_and_limit_queues(Queues, _Limit, _BatchOrder, QueueNames) when is_list(QueueNames) ->
     Queues;
 sort_and_limit_queues(Queues, all, _BatchOrder, _QueueNames) ->
