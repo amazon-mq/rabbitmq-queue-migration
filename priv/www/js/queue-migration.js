@@ -126,6 +126,13 @@ $(document).on('click', '#start-migration-btn', function() {
     });
 });
 
+$(document).on('click', '.interrupt-migration-btn', function() {
+    var migrationId = $(this).data('migration-id');
+    with_req('POST', '/queue-migration/interrupt/' + encodeURIComponent(migrationId), null, function(resp) {
+        update();
+    });
+});
+
 // Poll for migration status changes to toggle UI sections
 setInterval(function() {
     if ($('#migration-in-progress').length === 0) return;
@@ -136,6 +143,7 @@ setInterval(function() {
         if (inProgress) {
             $('#migration-controls').hide();
             $('#migration-in-progress').show();
+            update();
         } else {
             $('#migration-controls').show();
             $('#migration-in-progress').hide();
@@ -149,6 +157,8 @@ function fmt_migration_status(status) {
         return '<span class="status-blue">In Progress</span>';
     } else if (status === 'completed') {
         return '<span class="status-green">Completed</span>';
+    } else if (status === 'interrupted') {
+        return '<span class="status-yellow">Interrupted</span>';
     } else if (status === 'failed') {
         return '<span class="status-red">Failed</span>';
     } else {

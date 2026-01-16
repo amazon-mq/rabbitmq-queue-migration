@@ -16,6 +16,7 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 - **Safe Migration**: Pre-migration validation checks ensure cluster readiness
 - **Progress Tracking**: Real-time progress monitoring via HTTP API
+- **Interruption Support**: Gracefully interrupt running migrations via HTTP API
 - **Distributed Execution**: Leverages all cluster nodes for parallel processing
 - **Rollback Support**: Tracks rollback state for failed migrations
 - **Snapshot Integration**: Creates EBS or tar-based snapshots before migration
@@ -93,6 +94,17 @@ Check migration status:
 ```bash
 curl -u guest:guest http://localhost:15672/api/queue-migration/status
 ```
+
+### 4. Interrupt Migration (Optional)
+
+Gracefully interrupt a running migration:
+
+```bash
+curl -u guest:guest -X POST \
+  http://localhost:15672/api/queue-migration/interrupt/:migration_id
+```
+
+In-flight queue migrations complete while remaining queues are skipped. The migration ends with status `interrupted`.
 
 See [HTTP_API.md](HTTP_API.md) for complete API reference.
 
