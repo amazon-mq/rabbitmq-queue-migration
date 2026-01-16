@@ -311,6 +311,53 @@ Returned when the migration ID is invalid (cannot be decoded) or the migration d
 
 ---
 
+### Interrupt Migration
+
+Interrupt a running migration. In-flight queue migrations complete gracefully while remaining queues are skipped.
+
+**Endpoint:**
+```
+POST /api/queue-migration/interrupt/:migration_id
+```
+
+**Parameters:**
+- `:migration_id` - Migration ID (URL-encoded)
+
+**Request:**
+```bash
+curl -u guest:guest -X POST \
+  http://localhost:15672/api/queue-migration/interrupt/1768576931281
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "interrupted": true,
+  "migration_id": "1768576931281"
+}
+```
+
+**Behavior:**
+- Sets migration status to `interrupted`
+- Workers check status before processing each queue
+- Queues already being migrated complete normally
+- Remaining queues are skipped and marked with status `skipped`
+- Post-migration restore runs normally (listeners resumed, snapshots cleaned up)
+- Migration completes with status `interrupted` and partial queue count
+
+**Error Response (404 Not Found):**
+
+Returned when the migration ID is invalid or the migration does not exist.
+
+```json
+{
+  "error": "Object Not Found",
+  "reason": "Not Found"
+}
+```
+
+---
+
 ### Check Compatibility
 
 Check if queues are eligible for migration and validate system readiness.
