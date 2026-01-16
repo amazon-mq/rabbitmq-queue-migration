@@ -117,9 +117,7 @@ pre_migration_validation(memory_usage, Opts) ->
 pre_migration_validation(snapshot_not_in_progress, Opts) ->
     handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
-    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts);
-pre_migration_validation(eligible_queue_count, Opts) ->
-    handle_eligible_queue_count_check(rqm_checks:check_eligible_queue_count(Opts), Opts).
+    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
 handle_check_shovel_plugin(ok, Opts) ->
     pre_migration_validation(khepri_disabled, Opts);
@@ -158,7 +156,7 @@ handle_check_leader_balance({error, {imbalanced, _}}, _Opts) ->
     {error, queue_leaders_imbalanced}.
 
 handle_check_queue_synchronization(ok, Opts) ->
-    pre_migration_validation(eligible_queue_count, Opts);
+    pre_migration_validation(queue_suitability, Opts);
 handle_check_queue_synchronization(
     {error, {unsynchronized_queues, UnsuitableQueues}},
     #migration_opts{skip_unsuitable_queues = true} = Opts
@@ -168,7 +166,7 @@ handle_check_queue_synchronization(
         [length(UnsuitableQueues)]
     ),
     UpdatedOpts = opts_add_unsuitable_queues(UnsuitableQueues, Opts),
-    pre_migration_validation(eligible_queue_count, UpdatedOpts);
+    pre_migration_validation(queue_suitability, UpdatedOpts);
 handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQueues}}, _Opts) ->
     QueueNameBinaries = [
         rabbit_misc:rs(R#unsuitable_queue.resource)
@@ -180,13 +178,6 @@ handle_check_queue_synchronization({error, {unsynchronized_queues, UnsuitableQue
         [QueueNameBinaries]
     ),
     {error, {unsynchronized_queues, QueueNameBinaries}}.
-
-handle_eligible_queue_count_check({ok, Opts}, Opts) ->
-    pre_migration_validation(queue_suitability, Opts);
-handle_eligible_queue_count_check({error, {no_eligible_queues, _Details}}, _Opts) ->
-    {error, no_eligible_queues};
-handle_eligible_queue_count_check({error, {no_matching_queues, _Details}}, _Opts) ->
-    {error, no_matching_queues}.
 
 handle_check_queue_suitability(ok, Opts) ->
     pre_migration_validation(disk_space, Opts);
@@ -258,7 +249,7 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     {error, {snapshot_in_progress, Details}}.
 
 handle_check_cluster_partitions({ok, Nodes}, Opts) ->
-    handle_check_eligible_queue_count(pre_migration_validation(eligible_queue_count, Opts), Nodes);
+    handle_check_eligible_queue_count(rqm_checks:check_eligible_queue_count(Opts), Nodes);
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
