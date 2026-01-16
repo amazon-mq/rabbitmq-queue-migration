@@ -114,10 +114,9 @@ SPDX-License-Identifier: Apache-2.0
                 ) %>
               </td>
               <td>
-                <a href="#/queue-migration/status/<%= queue_migration_status.migrations[i].id %>">View Details</a>
+                <button type="button" onclick="window.location.hash='#/queue-migration/status/<%= queue_migration_status.migrations[i].id %>'" style="display: inline-block; margin-right: 5px;">View Details</button>
                 <% if (queue_migration_status.migrations[i].status === 'in_progress') { %>
-                  |
-                  <a href="#" class="interrupt-migration-link" data-migration-id="<%= queue_migration_status.migrations[i].id %>">Interrupt</a>
+                  <button type="button" class="interrupt-migration-btn" data-migration-id="<%= queue_migration_status.migrations[i].id %>" style="display: inline-block;">Interrupt</button>
                 <% } %>
               </td>
             </tr>

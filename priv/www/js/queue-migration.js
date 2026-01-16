@@ -126,8 +126,7 @@ $(document).on('click', '#start-migration-btn', function() {
     });
 });
 
-$(document).on('click', '.interrupt-migration-link', function(e) {
-    e.preventDefault();
+$(document).on('click', '.interrupt-migration-btn', function() {
     var migrationId = $(this).data('migration-id');
     with_req('POST', '/queue-migration/interrupt/' + encodeURIComponent(migrationId), null, function(resp) {
         update();
