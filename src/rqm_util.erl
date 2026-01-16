@@ -12,6 +12,7 @@
 -export([
     has_ha_policy/1,
     has_all_mirrors_synchronized/1,
+    filter_by_queue_names/2,
     base64url_encode/1,
     base64url_decode/1,
     add_base64_padding/1,
@@ -284,3 +285,31 @@ format_iso8601_utc() ->
         "~.4.0w-~.2.0w-~.2.0wT~.2.0w-~.2.0w-~.2.0wZ",
         [Year, Month, Day, Hour, Min, Sec]
     ).
+
+-spec filter_by_queue_names([rabbit_types:amqqueue()], undefined | [binary()]) ->
+    [rabbit_types:amqqueue()].
+filter_by_queue_names(Queues, undefined) ->
+    Queues;
+filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->
+    FilteredQueues = [
+        Q
+     || Q <- Queues,
+        begin
+            #resource{name = QName} = amqqueue:get_name(Q),
+            lists:member(QName, QueueNames)
+        end
+    ],
+    SpecifiedButNotFound =
+        QueueNames --
+            [
+                begin
+                    #resource{name = QName} = amqqueue:get_name(Q),
+                    QName
+                end
+             || Q <- FilteredQueues
+            ],
+    [
+        ?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
+     || QName <- SpecifiedButNotFound
+    ],
+    FilteredQueues.

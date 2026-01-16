@@ -12,15 +12,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Internal record for validation options
--record(migration_opts, {
-    vhost :: binary(),
-    mode :: validation_only | migration,
-    skip_unsuitable_queues = false :: boolean(),
-    unsuitable_queues = [] :: list(),
-    batch_size = all :: all | pos_integer(),
-    batch_order = smallest_first :: smallest_first | largest_first
-}).
-
 -export([
     start/0,
     start/1,
@@ -33,7 +24,7 @@
     get_rollback_pending_migration_json/0,
     start_migration_preparation_on_node/2,
     start_post_migration_restore_on_node/3,
-    start_migration_on_node/6
+    start_migration_on_node/7
 ]).
 
 %% TODO - these are limits given to customers
@@ -50,16 +41,7 @@ start(VHost) ->
 
 start(VHost, OptsMap) ->
     try
-        SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
-        BatchSize = maps:get(batch_size, OptsMap, all),
-        BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
-        Opts = #migration_opts{
-            vhost = VHost,
-            mode = migration,
-            skip_unsuitable_queues = SkipUnsuitableQueues,
-            batch_size = BatchSize,
-            batch_order = BatchOrder
-        },
+        Opts = build_migration_opts(VHost, migration, OptsMap),
         pre_migration_validation(shovel_plugin, Opts)
     catch
         Class:Reason:Stack ->
@@ -77,16 +59,7 @@ validate_migration(VHost) ->
     validate_migration(VHost, #{}).
 
 validate_migration(VHost, OptsMap) ->
-    SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
-    BatchSize = maps:get(batch_size, OptsMap, all),
-    BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
-    Opts = #migration_opts{
-        vhost = VHost,
-        mode = validation_only,
-        skip_unsuitable_queues = SkipUnsuitableQueues,
-        batch_size = BatchSize,
-        batch_order = BatchOrder
-    },
+    Opts = build_migration_opts(VHost, validation_only, OptsMap),
     pre_migration_validation(shovel_plugin, Opts).
 
 status() ->
@@ -104,6 +77,20 @@ status() ->
     end.
 
 %% Private
+
+build_migration_opts(VHost, Mode, OptsMap) ->
+    SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
+    BatchSize = maps:get(batch_size, OptsMap, all),
+    BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
+    QueueNames = maps:get(queue_names, OptsMap, undefined),
+    #migration_opts{
+        vhost = VHost,
+        mode = Mode,
+        skip_unsuitable_queues = SkipUnsuitableQueues,
+        batch_size = BatchSize,
+        batch_order = BatchOrder,
+        queue_names = QueueNames
+    }.
 
 pre_migration_validation(shovel_plugin, Opts) ->
     handle_check_shovel_plugin(rqm_checks:check_shovel_plugin(), Opts);
@@ -130,26 +117,7 @@ pre_migration_validation(memory_usage, Opts) ->
 pre_migration_validation(snapshot_not_in_progress, Opts) ->
     handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
-    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts);
-pre_migration_validation(
-    eligible_queue_count,
-    #migration_opts{
-        vhost = VHost, unsuitable_queues = UnsuitableQueues, skip_unsuitable_queues = Skipped
-    } = Opts
-) ->
-    AllQueues = rqm_checks:get_mirrored_classic_queues(VHost),
-    EligibleCount = length(AllQueues) - length(UnsuitableQueues),
-    case EligibleCount > 0 of
-        true ->
-            {ok, Opts};
-        false ->
-            {error,
-                {no_eligible_queues, #{
-                    total => length(AllQueues),
-                    unsuitable => length(UnsuitableQueues),
-                    skipped => Skipped
-                }}}
-    end.
+    handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
 handle_check_shovel_plugin(ok, Opts) ->
     pre_migration_validation(khepri_disabled, Opts);
@@ -280,15 +248,8 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     ),
     {error, {snapshot_in_progress, Details}}.
 
-handle_check_cluster_partitions({ok, _Nodes}, #migration_opts{mode = validation_only} = Opts) ->
-    case pre_migration_validation(eligible_queue_count, Opts) of
-        {ok, _} -> ok;
-        {error, _} = Error -> Error
-    end;
-handle_check_cluster_partitions(
-    {ok, Nodes}, #migration_opts{mode = migration} = Opts
-) ->
-    handle_check_eligible_queue_count(pre_migration_validation(eligible_queue_count, Opts), Nodes);
+handle_check_cluster_partitions({ok, Nodes}, Opts) ->
+    handle_check_eligible_queue_count(rqm_checks:check_eligible_queue_count(Opts), Nodes);
 handle_check_cluster_partitions({error, nodes_down}, _Opts) ->
     ?LOG_ERROR("rqm: nodes are down. Ensure all cluster nodes are up before migration."),
     {error, nodes_down};
@@ -301,6 +262,8 @@ handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
     ?LOG_ERROR("rqm: cluster partitions detected. Resolve partitions before migration."),
     {error, partitions_detected}.
 
+handle_check_eligible_queue_count({ok, #migration_opts{mode = validation_only}}, _Nodes) ->
+    ok;
 handle_check_eligible_queue_count({ok, #migration_opts{vhost = VHost} = Opts}, Nodes) ->
     MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
     handle_migration_result(MigrationResult, VHost);
@@ -689,9 +652,8 @@ mcq_qq_migration(
     #migration_opts{
         vhost = VHost,
         unsuitable_queues = UnsuitableQueues,
-        batch_size = BatchSize,
-        batch_order = BatchOrder
-    }
+        batch_size = BatchSize
+    } = Opts
 ) ->
     ?LOG_INFO(
         "rqm: starting migration ~s for vhost ~tp on nodes ~tp",
@@ -716,7 +678,7 @@ mcq_qq_migration(
 
     NodeAllocations = compute_node_allocations(Nodes, BatchSize),
     {ok, PidsAndRefs} = start_migration_on_each_node(
-        NodeAllocations, QueueCountGatherer, Gatherer, VHost, MigrationId, BatchOrder, []
+        NodeAllocations, QueueCountGatherer, Gatherer, VHost, MigrationId, Opts, []
     ),
     {ok, TotalQueueCount} = wait_for_total_queue_count(QueueCountGatherer, length(Nodes)),
 
@@ -823,7 +785,7 @@ wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, IsInter
     end.
 
 start_migration_on_each_node(
-    [], _QueueCountGatherer, _Gatherer, _VHost, _MigrationId, _BatchOrder, Acc
+    [], _QueueCountGatherer, _Gatherer, _VHost, _MigrationId, _Opts, Acc
 ) ->
     {ok, Acc};
 start_migration_on_each_node(
@@ -832,20 +794,22 @@ start_migration_on_each_node(
     Gatherer,
     VHost,
     MigrationId,
-    BatchOrder,
+    #migration_opts{batch_order = BatchOrder, queue_names = QueueNames} = Opts,
     Acc0
 ) ->
     ok = rqm_gatherer:fork(QueueCountGatherer),
-    Args = [QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder],
+    Args = [
+        QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames
+    ],
     % elp:ignore W0014
     PidAndRef = spawn_monitor(Node, ?MODULE, start_migration_on_node, Args),
     Acc1 = [PidAndRef | Acc0],
     start_migration_on_each_node(
-        Rest, QueueCountGatherer, Gatherer, VHost, MigrationId, BatchOrder, Acc1
+        Rest, QueueCountGatherer, Gatherer, VHost, MigrationId, Opts, Acc1
     ).
 
 start_migration_on_node(
-    QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder
+    QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames
 ) ->
     ?LOG_DEBUG(
         "rqm: node ~tp starting migration ~s for vhost ~tp (batch: ~p, order: ~p)",
@@ -858,8 +822,11 @@ start_migration_on_node(
     % Filter eligible queues
     EligibleQueues0 = [Q || Q <- AllQueues, is_queue_to_migrate(Q)],
 
+    % Filter by queue_names if specified
+    EligibleQueues1 = rqm_util:filter_by_queue_names(EligibleQueues0, QueueNames),
+
     % Filter out queues that already have status records for this migration (e.g., skipped queues)
-    EligibleQueues1 = lists:filter(
+    EligibleQueues2 = lists:filter(
         fun(Q) ->
             Resource = amqqueue:get_name(Q),
             case rqm_db:get_queue_status(Resource, MigrationId) of
@@ -867,15 +834,15 @@ start_migration_on_node(
                 {error, not_found} -> true
             end
         end,
-        EligibleQueues0
+        EligibleQueues1
     ),
 
-    % Sort and limit queues based on batch settings
-    EligibleQueues2 = sort_and_limit_queues(EligibleQueues1, NodeBatchSize, BatchOrder),
+    % Sort and limit queues based on batch settings (ignored if queue_names specified)
+    EligibleQueues3 = sort_and_limit_queues(EligibleQueues2, NodeBatchSize, BatchOrder, QueueNames),
 
-    QueueCount = length(EligibleQueues2),
+    QueueCount = length(EligibleQueues3),
     SkippedByStatus = length(EligibleQueues0) - length(EligibleQueues1),
-    SkippedByBatch = length(EligibleQueues1) - QueueCount,
+    SkippedByBatch = length(EligibleQueues2) - QueueCount,
 
     ?LOG_INFO(
         "rqm: node ~tp queue summary for migration ~s: ~w total classic, ~w eligible, ~w skipped (status), ~w excluded (batch), ~w to migrate",
@@ -1869,9 +1836,11 @@ compute_node_allocations(Nodes, 0) ->
     [{Node, all} || Node <- Nodes].
 
 %% Helper function to sort queues by size and limit to batch count
-sort_and_limit_queues(Queues, all, _BatchOrder) ->
+sort_and_limit_queues(Queues, _Limit, _BatchOrder, QueueNames) when is_list(QueueNames) ->
     Queues;
-sort_and_limit_queues(Queues, Limit, BatchOrder) when is_integer(Limit) ->
+sort_and_limit_queues(Queues, all, _BatchOrder, _QueueNames) ->
+    Queues;
+sort_and_limit_queues(Queues, Limit, BatchOrder, _QueueNames) when is_integer(Limit) ->
     SortedQueues = sort_queues_by_size(Queues, BatchOrder),
     lists:sublist(SortedQueues, Limit).
 

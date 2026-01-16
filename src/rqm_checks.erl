@@ -13,6 +13,7 @@
     check_leader_balance/2,
     check_queue_synchronization/1,
     check_queue_suitability/1,
+    check_eligible_queue_count/1,
     check_disk_space/2,
     check_system_migration_readiness/1,
     check_snapshot_not_in_progress/0,
@@ -535,6 +536,40 @@ determine_insufficient_space_reason(
 %% @doc Check if queues are suitable for migration based on count, message count, and size
 %% Returns ok if all queues are suitable for migration.
 %% {error, Details} if one or more queues are not suitable.
+-spec check_eligible_queue_count(#migration_opts{}) ->
+    {ok, #migration_opts{}} | {error, {no_eligible_queues | no_matching_queues, map()}}.
+check_eligible_queue_count(
+    #migration_opts{
+        vhost = VHost,
+        unsuitable_queues = UnsuitableQueues,
+        skip_unsuitable_queues = Skipped,
+        queue_names = QueueNames
+    } = Opts
+) ->
+    AllQueues = get_mirrored_classic_queues(VHost),
+    FilteredQueues =
+        case QueueNames of
+            undefined -> AllQueues;
+            _ -> rqm_util:filter_by_queue_names(AllQueues, QueueNames)
+        end,
+    EligibleCount = length(FilteredQueues) - length(UnsuitableQueues),
+    case EligibleCount > 0 of
+        true ->
+            {ok, Opts};
+        false when QueueNames =/= undefined ->
+            {error,
+                {no_matching_queues, #{
+                    specified => QueueNames
+                }}};
+        false ->
+            {error,
+                {no_eligible_queues, #{
+                    total => length(AllQueues),
+                    unsuitable => length(UnsuitableQueues),
+                    skipped => Skipped
+                }}}
+    end.
+
 -spec check_queue_suitability(rabbit_types:vhost()) ->
     ok | {error, map()}.
 check_queue_suitability(VHost) ->

@@ -16,7 +16,8 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 - **Safe Migration**: Pre-migration validation checks ensure cluster readiness
 - **Progress Tracking**: Real-time progress monitoring via HTTP API
-- **Interruption Support**: Gracefully interrupt running migrations via HTTP API
+- **Selective Migration**: Migrate specific queues by name via HTTP API
+- **Interruption Support**: Gracefully interrupt running migrations via HTTP API or management UI
 - **Distributed Execution**: Leverages all cluster nodes for parallel processing
 - **Rollback Support**: Tracks rollback state for failed migrations
 - **Snapshot Integration**: Creates EBS or tar-based snapshots before migration
@@ -87,6 +88,23 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
 ```
 
+To migrate specific queues by name:
+
+```bash
+# Migrate only specified queues
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"queue_names": ["orders", "payments", "notifications"]}' \
+  http://localhost:15672/api/queue-migration/start/%2Fproduction
+
+# queue_names takes precedence over batch_size
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"queue_names": ["queue1", "queue2"], "batch_size": 10}' \
+  http://localhost:15672/api/queue-migration/start/%2F
+```
+
+> **Note:** When `queue_names` is specified, `batch_size` and `batch_order` are ignored. Non-existent or ineligible queues are logged as warnings and skipped. If all specified queues are non-existent or ineligible, the migration fails with HTTP 400.
 ### 3. Monitor Progress
 
 Check migration status:
