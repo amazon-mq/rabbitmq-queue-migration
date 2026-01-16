@@ -136,6 +136,7 @@ setInterval(function() {
         if (inProgress) {
             $('#migration-controls').hide();
             $('#migration-in-progress').show();
+            update();
         } else {
             $('#migration-controls').show();
             $('#migration-in-progress').hide();
