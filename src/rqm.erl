@@ -262,6 +262,8 @@ handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
     ?LOG_ERROR("rqm: cluster partitions detected. Resolve partitions before migration."),
     {error, partitions_detected}.
 
+handle_check_eligible_queue_count({ok, #migration_opts{mode = validation_only}}, _Nodes) ->
+    ok;
 handle_check_eligible_queue_count({ok, #migration_opts{vhost = VHost} = Opts}, Nodes) ->
     MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
     handle_migration_result(MigrationResult, VHost);
