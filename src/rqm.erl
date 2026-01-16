@@ -388,8 +388,10 @@ handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
     {Results, BadNodes} = rpc:multicall(Nodes, rqm_util, resume_all_non_http_listeners, []),
     BadNodes =/= [] andalso
         ?LOG_WARNING("rqm: failed to restore listeners on nodes: ~tp", [BadNodes]),
-    [?LOG_WARNING("rqm: listener restoration returned error: ~tp", [Error])
-     || {error, Error} <- Results],
+    [
+        ?LOG_WARNING("rqm: listener restoration returned error: ~tp", [Error])
+     || {error, Error} <- Results
+    ],
     ok.
 
 handle_migration_exception(Class, Ex, Stack, MigrationId) ->
@@ -539,7 +541,7 @@ do_migration_preparation(VHost) ->
                     preparation_timestamp => erlang:system_time(millisecond)
                 },
                 {ok, #{node() => MigrationPreparationState}};
-            {error, _}=Error ->
+            {error, _} = Error ->
                 catch restore_connection_listeners(ConnectionPreparationState),
                 Error
         end
@@ -902,16 +904,23 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
     % CRITICAL: Check migration status before starting any work
     case rqm_db:is_current_status(MigrationId, in_progress) of
         false ->
-            % Also check if rollback is pending
-            case rqm_db:is_current_status(MigrationId, rollback_pending) of
-                true ->
+            % Check if migration was interrupted or rollback is pending
+            case rqm_db:get_migration_status_value(MigrationId) of
+                interrupted ->
+                    ?LOG_INFO("rqm: skipping migration for ~ts - migration interrupted", [
+                        rabbit_misc:rs(Resource)
+                    ]),
+                    ok = rqm_gatherer:in(Gatherer, {aborted, Resource, interrupted}),
+                    ok = rqm_gatherer:finish(Gatherer),
+                    {aborted, interrupted};
+                rollback_pending ->
                     ?LOG_ERROR("rqm: aborting migration for ~ts - rollback pending", [
                         rabbit_misc:rs(Resource)
                     ]),
                     ok = rqm_gatherer:in(Gatherer, {aborted, Resource, rollback_pending}),
                     ok = rqm_gatherer:finish(Gatherer),
                     {aborted, rollback_pending};
-                false ->
+                _ ->
                     ?LOG_ERROR(
                         "rqm: aborting migration for ~ts - overall migration no longer in progress",
                         [rabbit_misc:rs(Resource)]
@@ -970,15 +979,21 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         _ =
             case rqm_db:is_current_status(MigrationId, in_progress) of
                 false ->
-                    % Also check if rollback is pending
-                    case rqm_db:is_current_status(MigrationId, rollback_pending) of
-                        true ->
+                    % Check if migration was interrupted or rollback is pending
+                    case rqm_db:get_migration_status_value(MigrationId) of
+                        interrupted ->
+                            ?LOG_INFO(
+                                "rqm: skipping migration work for ~ts - migration interrupted",
+                                [rabbit_misc:rs(Resource)]
+                            ),
+                            PPid ! {self(), Ref, {aborted, Resource, interrupted}};
+                        rollback_pending ->
                             ?LOG_WARNING(
                                 "rqm: aborting migration work for ~ts - rollback pending",
                                 [rabbit_misc:rs(Resource)]
                             ),
                             PPid ! {self(), Ref, {aborted, Resource, rollback_pending}};
-                        false ->
+                        _ ->
                             ?LOG_WARNING(
                                 "rqm: aborting migration work for ~ts - status changed during startup",
                                 [rabbit_misc:rs(Resource)]

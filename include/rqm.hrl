@@ -78,7 +78,6 @@
     completed_queues,
     % Number of queues skipped
     skipped_queues = 0,
-    % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
     status :: migration_status(),
     % Error details if failed (null otherwise)
     error,
@@ -114,7 +113,6 @@
     total_messages,
     % Number of messages migrated so far
     migrated_messages,
-    % Status: 'pending', 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
     status :: migration_status(),
     % Error details if failed (null otherwise)
     error,
@@ -134,6 +132,7 @@
     | 'in_progress'
     | 'completed'
     | 'failed'
+    | 'interrupted'
     | 'skipped'
     | 'rollback_pending'
     | 'rollback_completed'.

@@ -31,6 +31,7 @@ dispatcher() ->
         {"/queue-migration/start/:vhost", ?MODULE, [start_vhost]},
         {"/queue-migration/status", ?MODULE, [status_list]},
         {"/queue-migration/status/:migration_id", ?MODULE, [status_detail]},
+        {"/queue-migration/interrupt/:migration_id", ?MODULE, [interrupt]},
         {"/queue-migration/rollback-pending", ?MODULE, [rollback_pending]}
     ].
 
@@ -99,7 +100,9 @@ to_json(ReqData, {status_detail, #context{impl = {migration_id, MigrationId}}} =
         migration => migration_to_json_detail(Migration),
         queues => [queue_status_to_json(Q) || Q <- QueueDetails]
     }),
-    {Json, ReqData, {status_detail, Context}}.
+    {Json, ReqData, {status_detail, Context}};
+to_json(ReqData, {interrupt, Context}) ->
+    {halt, ReqData, {interrupt, Context}}.
 
 is_authorized(ReqData, {EndpointType, Context}) ->
     {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
@@ -118,7 +121,10 @@ accept_content(ReqData, {start_vhost, Context}) ->
     accept_migration_start(ReqData, {start_vhost, Context});
 accept_content(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
-    accept_status_update(MigrationIdUrlEncoded, ReqData, {status_detail, Context}).
+    accept_status_update(MigrationIdUrlEncoded, ReqData, {status_detail, Context});
+accept_content(ReqData, {interrupt, Context}) ->
+    MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
+    accept_interrupt(MigrationIdUrlEncoded, ReqData, {interrupt, Context}).
 
 accept_migration_start(ReqData, {EndpointType, Context}) ->
     VHost =
@@ -284,6 +290,24 @@ accept_status_update(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
                 {ok, _} ->
                     ErrorJson = rabbit_json:encode(#{error => <<"Missing 'status' field">>}),
                     bad_request(ErrorJson, ReqData2, {EndpointType, Context})
+            end;
+        error ->
+            not_found_reply(ReqData, {EndpointType, Context})
+    end.
+
+accept_interrupt(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
+    case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
+        {ok, MigrationId} ->
+            case rqm_db:update_migration_status(MigrationId, interrupted) of
+                {ok, _Migration} ->
+                    Json = rabbit_json:encode(#{
+                        interrupted => true,
+                        migration_id => MigrationIdUrlEncoded
+                    }),
+                    ReqData2 = cowboy_req:set_resp_body(Json, ReqData),
+                    {true, ReqData2, {EndpointType, Context}};
+                {error, not_found} ->
+                    not_found_reply(ReqData, {EndpointType, Context})
             end;
         error ->
             not_found_reply(ReqData, {EndpointType, Context})

@@ -24,7 +24,8 @@
     update_migration_snapshots/2,
     get_migration/1,
     get_all_migrations/0,
-    is_current_status/2
+    is_current_status/2,
+    get_migration_status_value/1
 ]).
 
 %% Queue status record operations
@@ -477,6 +478,15 @@ is_current_status(MigrationId, ExpectedStatus) ->
         {error, _} ->
             % Migration record not found
             false
+    end.
+
+-spec get_migration_status_value(term()) -> migration_status() | undefined.
+get_migration_status_value(MigrationId) ->
+    case get_migration(MigrationId) of
+        {ok, Migration} ->
+            Migration#queue_migration.status;
+        {error, _} ->
+            undefined
     end.
 
 %% @doc Get the most recent migration with rollback_pending status
