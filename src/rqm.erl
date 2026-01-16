@@ -354,8 +354,9 @@ start_with_lock(
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% MCQ -> QQ Migration
         %%
-        {ok, MigrationDuration} = mcq_qq_migration(MigrationId, PreparationState, Nodes, Opts),
-        %% TODO IMPORTANT - RESTORE CONNECTIONS ON ANY FAILURE!
+        {ok, MigrationDuration, CompletionStatus} = mcq_qq_migration(
+            MigrationId, PreparationState, Nodes, Opts
+        ),
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Post-migration Restore
@@ -365,7 +366,7 @@ start_with_lock(
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% Migration stats
         %% Get the final count of total queues
-        ok = post_migration_stats(Nodes, MigrationId, MigrationDuration),
+        ok = post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus),
         ok
     catch
         Class:Reason:Stack ->
@@ -440,19 +441,19 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
 %% Post-migration Stats
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-post_migration_stats(Nodes, MigrationId, MigrationDuration) ->
+post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus) ->
     ?LOG_INFO("rqm: retrieving final statistics for migration ~s", [
         format_migration_id(MigrationId)
     ]),
     {ok, Migration} = rqm_db:get_migration(MigrationId),
     TotalQueues = Migration#queue_migration.total_queues,
+    CompletedQueues = Migration#queue_migration.completed_queues,
 
-    %% Update migration record as completed
     ?LOG_INFO(
-        "rqm: marking migration ~s as completed (~w queues processed)",
-        [format_migration_id(MigrationId), TotalQueues]
+        "rqm: marking migration ~s as ~tp (~w of ~w queues completed)",
+        [format_migration_id(MigrationId), CompletionStatus, CompletedQueues, TotalQueues]
     ),
-    {ok, _} = rqm_db:update_migration_completed(MigrationId, TotalQueues),
+    {ok, _} = rqm_db:update_migration_completed(MigrationId, CompletionStatus),
 
     ?LOG_INFO("rqm: SUMMARY for migration ~s:", [format_migration_id(MigrationId)]),
     ?LOG_INFO("rqm:   Duration: ~w seconds", [MigrationDuration]),
@@ -732,7 +733,7 @@ handle_migration_result({ok, _Results}, MigrationId, Start) ->
     ?LOG_INFO("rqm: migration ~s completed", [format_migration_id(MigrationId)]),
     End = erlang:system_time(second),
     Duration = End - Start,
-    {ok, Duration};
+    {ok, Duration, completed};
 handle_migration_result({interrupted, Results}, MigrationId, Start) ->
     ?LOG_INFO("rqm: migration ~s interrupted", [format_migration_id(MigrationId)]),
     InterruptedQueues = [Resource || {aborted, Resource, interrupted} <- Results],
@@ -743,7 +744,7 @@ handle_migration_result({interrupted, Results}, MigrationId, Start) ->
     {ok, _} = rqm_db:update_migration_status(MigrationId, interrupted),
     End = erlang:system_time(second),
     Duration = End - Start,
-    {ok, Duration};
+    {ok, Duration, interrupted};
 handle_migration_result({error, Errors}, MigrationId, _Start) ->
     ?LOG_WARNING(
         "rqm: checking rollback status for migration ~s",

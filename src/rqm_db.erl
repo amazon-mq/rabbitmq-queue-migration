@@ -123,14 +123,13 @@ update_migration_failed(MigrationId, Error) ->
     update_migration(MigrationId, F).
 
 %% @doc Update migration as completed
--spec update_migration_completed(term(), non_neg_integer()) ->
+-spec update_migration_completed(term(), migration_status()) ->
     {ok, #queue_migration{}} | {error, not_found}.
-update_migration_completed(MigrationId, TotalQueues) ->
+update_migration_completed(MigrationId, CompletionStatus) ->
     F = fun(M) ->
         M#queue_migration{
-            status = completed,
-            completed_at = os:timestamp(),
-            completed_queues = TotalQueues
+            status = CompletionStatus,
+            completed_at = os:timestamp()
         }
     end,
     update_migration(MigrationId, F).
