@@ -233,3 +233,21 @@ After modifying the validation chain, test:
 - **Cause:** Removed mode check from `handle_check_eligible_queue_count`
 - **Symptom:** Validation started actual migration, hung at 100%
 - **Fix:** Add mode check to return ok in validation_only mode
+
+**Detailed explanation of Bug 2:**
+
+1. Java client calls start API with 30-second timeout
+2. API runs validation (validation_only mode) to check if migration is safe
+3. Validation reaches the end and calls `eligible_queue_count` check
+4. BUG: `eligible_queue_count` starts a migration even though we're in validation mode
+5. Migration spawns and begins running in the background
+6. But the validation never returns - it's stuck waiting for this wrongly-started migration
+7. Java client times out after 30 seconds because the API never responds
+8. Meanwhile, the migration keeps running and completes all queues (10/10 or 20/20)
+9. But the migration is in the wrong context - started by validation, not normal flow
+10. The migration process exits or hangs without finalizing the status
+11. Status stays "in_progress" forever because finalization code never runs
+
+**Why it hung:** The migration was started in validation mode context, which doesn't have proper setup to finalize. Like starting a car in neutral - engine runs but you don't go anywhere.
+
+**The fix:** Check mode before starting migration. Validation mode returns ok, migration mode starts migration.
