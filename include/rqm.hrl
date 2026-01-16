@@ -113,7 +113,7 @@
     total_messages,
     % Number of messages migrated so far
     migrated_messages,
-    status :: migration_status(),
+    status :: queue_migration_status(),
     % Error details if failed (null otherwise)
     error,
     % When rollback started for this queue
@@ -133,6 +133,12 @@
     | 'completed'
     | 'failed'
     | 'interrupted'
-    | 'skipped'
     | 'rollback_pending'
     | 'rollback_completed'.
+
+-type queue_migration_status() ::
+    'pending'
+    | 'in_progress'
+    | 'completed'
+    | 'failed'
+    | 'skipped'.
