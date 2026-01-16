@@ -725,32 +725,44 @@ mcq_qq_migration(
     ),
 
     ok = wait_for_monitored_processes(PidsAndRefs, rqm_config:max_migration_duration_ms()),
-    case wait_for_per_queue_migration_results(Gatherer, TotalQueueCount) of
-        {ok, _Results} ->
-            ?LOG_INFO("rqm: migration ~s completed", [format_migration_id(MigrationId)]),
-            End = erlang:system_time(second),
-            Duration = End - Start,
-            {ok, Duration};
-        {error, Errors} ->
-            ?LOG_WARNING(
-                "rqm: checking rollback status for migration ~s",
+    Result = wait_for_per_queue_migration_results(Gatherer, TotalQueueCount),
+    handle_migration_result(Result, MigrationId, Start).
+
+handle_migration_result({ok, _Results}, MigrationId, Start) ->
+    ?LOG_INFO("rqm: migration ~s completed", [format_migration_id(MigrationId)]),
+    End = erlang:system_time(second),
+    Duration = End - Start,
+    {ok, Duration};
+handle_migration_result({interrupted, Results}, MigrationId, Start) ->
+    ?LOG_INFO("rqm: migration ~s interrupted", [format_migration_id(MigrationId)]),
+    InterruptedQueues = [Resource || {aborted, Resource, interrupted} <- Results],
+    [
+        rqm_db:create_skipped_queue_status(Resource, MigrationId, interrupted)
+     || Resource <- InterruptedQueues
+    ],
+    {ok, _} = rqm_db:update_migration_status(MigrationId, interrupted),
+    End = erlang:system_time(second),
+    Duration = End - Start,
+    {ok, Duration};
+handle_migration_result({error, Errors}, MigrationId, _Start) ->
+    ?LOG_WARNING(
+        "rqm: checking rollback status for migration ~s",
+        [format_migration_id(MigrationId)]
+    ),
+    {ok, MigrationRecord} = rqm_db:get_migration(MigrationId),
+    case MigrationRecord#queue_migration.status of
+        rollback_pending ->
+            ?LOG_CRITICAL(
+                "rqm: rollback_pending | migration_id ~s",
                 [format_migration_id(MigrationId)]
             ),
-            {ok, MigrationRecord} = rqm_db:get_migration(MigrationId),
-            case MigrationRecord#queue_migration.status of
-                rollback_pending ->
-                    ?LOG_CRITICAL(
-                        "rqm: rollback_pending | migration_id ~s",
-                        [format_migration_id(MigrationId)]
-                    ),
-                    error({migration_failed_rollback_pending, {errors, Errors}});
-                OtherStatus ->
-                    ?LOG_WARNING(
-                        "rqm: migration ~s failed but no rollback needed (status: ~tp)",
-                        [format_migration_id(MigrationId), OtherStatus]
-                    ),
-                    error({migration_failed_no_rollback, {errors, Errors}})
-            end
+            error({migration_failed_rollback_pending, {errors, Errors}});
+        OtherStatus ->
+            ?LOG_WARNING(
+                "rqm: migration ~s failed but no rollback needed (status: ~tp)",
+                [format_migration_id(MigrationId), OtherStatus]
+            ),
+            error({migration_failed_no_rollback, {errors, Errors}})
     end.
 
 wait_for_total_queue_count(Gatherer, NodeCount) ->
@@ -769,28 +781,44 @@ wait_for_total_queue_count(Gatherer, NodeCount, Acc0) ->
     end.
 
 wait_for_per_queue_migration_results(Gatherer, TotalQueueCount) ->
-    wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, false, []).
+    wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, false, false, []).
 
-wait_for_per_queue_migration_results(Gatherer, 0, true = _IsError, Acc) ->
+wait_for_per_queue_migration_results(Gatherer, 0, true = _IsError, _IsInterrupted, Acc) ->
     ok = rqm_gatherer:stop(Gatherer),
     {error, Acc};
-wait_for_per_queue_migration_results(Gatherer, 0, false = _IsError, Acc) ->
+wait_for_per_queue_migration_results(Gatherer, 0, false = _IsError, true = _IsInterrupted, Acc) ->
+    ok = rqm_gatherer:stop(Gatherer),
+    {interrupted, Acc};
+wait_for_per_queue_migration_results(Gatherer, 0, false = _IsError, false = _IsInterrupted, Acc) ->
     ok = rqm_gatherer:stop(Gatherer),
     {ok, Acc};
-wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, Acc0) ->
+wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, IsInterrupted, Acc0) ->
     case rqm_gatherer:out(Gatherer) of
         empty ->
             Acc1 = [ok | Acc0],
-            wait_for_per_queue_migration_results(Gatherer, TotalQueueCount - 1, IsError, Acc1);
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, IsError, IsInterrupted, Acc1
+            );
         {value, ok} ->
             Acc1 = [ok | Acc0],
-            wait_for_per_queue_migration_results(Gatherer, TotalQueueCount - 1, IsError, Acc1);
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, IsError, IsInterrupted, Acc1
+            );
         {value, {ok, _, _} = Val} ->
             Acc1 = [Val | Acc0],
-            wait_for_per_queue_migration_results(Gatherer, TotalQueueCount - 1, IsError, Acc1);
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, IsError, IsInterrupted, Acc1
+            );
+        {value, {aborted, _, interrupted} = Val} ->
+            Acc1 = [Val | Acc0],
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, IsError, true, Acc1
+            );
         Error ->
             Acc1 = [Error | Acc0],
-            wait_for_per_queue_migration_results(Gatherer, TotalQueueCount - 1, true, Acc1)
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
+            )
     end.
 
 start_migration_on_each_node(
