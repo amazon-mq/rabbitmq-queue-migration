@@ -369,6 +369,7 @@ start_with_lock(
         ok
     catch
         Class:Reason:Stack ->
+            ok = handle_migration_exception_on_nodes(Nodes, Class, Reason),
             ok = handle_migration_exception(Class, Reason, Stack, MigrationId),
             {error, {Class, Reason}}
     after
@@ -378,6 +379,18 @@ start_with_lock(
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Migration exception handler
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec handle_migration_exception_on_nodes([node()], atom(), term()) -> ok.
+handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
+    ?LOG_DEBUG("rqm: restoring listeners on ~w nodes after exception ~tp:~tp", [
+        length(Nodes), Class, Reason
+    ]),
+    {Results, BadNodes} = rpc:multicall(Nodes, rqm_util, resume_all_non_http_listeners, []),
+    BadNodes =/= [] andalso
+        ?LOG_WARNING("rqm: failed to restore listeners on nodes: ~tp", [BadNodes]),
+    [?LOG_WARNING("rqm: listener restoration returned error: ~tp", [Error])
+     || {error, Error} <- Results],
+    ok.
 
 handle_migration_exception(Class, Ex, Stack, MigrationId) ->
     % Log exception class without the full error details
