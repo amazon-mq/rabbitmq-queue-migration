@@ -149,6 +149,8 @@ function fmt_migration_status(status) {
         return '<span class="status-blue">In Progress</span>';
     } else if (status === 'completed') {
         return '<span class="status-green">Completed</span>';
+    } else if (status === 'interrupted') {
+        return '<span class="status-yellow">Interrupted</span>';
     } else if (status === 'failed') {
         return '<span class="status-red">Failed</span>';
     } else {
