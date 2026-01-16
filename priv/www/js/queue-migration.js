@@ -126,6 +126,13 @@ $(document).on('click', '#start-migration-btn', function() {
     });
 });
 
+$(document).on('click', '.interrupt-migration-btn', function() {
+    var migrationId = $(this).data('migration-id');
+    with_req('POST', '/queue-migration/interrupt/' + encodeURIComponent(migrationId), null, function(resp) {
+        update();
+    });
+});
+
 // Poll for migration status changes to toggle UI sections
 setInterval(function() {
     if ($('#migration-in-progress').length === 0) return;
