@@ -536,14 +536,16 @@ determine_insufficient_space_reason(
 %% @doc Check if queues are suitable for migration based on count, message count, and size
 %% Returns ok if all queues are suitable for migration.
 %% {error, Details} if one or more queues are not suitable.
--spec check_eligible_queue_count(map()) ->
-    {ok, map()} | {error, {no_eligible_queues | no_matching_queues, map()}}.
-check_eligible_queue_count(#{
-    vhost := VHost,
-    unsuitable_queues := UnsuitableQueues,
-    skip_unsuitable_queues := Skipped,
-    queue_names := QueueNames
-} = Opts) ->
+-spec check_eligible_queue_count(#migration_opts{}) ->
+    {ok, #migration_opts{}} | {error, {no_eligible_queues | no_matching_queues, map()}}.
+check_eligible_queue_count(
+    #migration_opts{
+        vhost = VHost,
+        unsuitable_queues = UnsuitableQueues,
+        skip_unsuitable_queues = Skipped,
+        queue_names = QueueNames
+    } = Opts
+) ->
     AllQueues = get_mirrored_classic_queues(VHost),
     FilteredQueues =
         case QueueNames of

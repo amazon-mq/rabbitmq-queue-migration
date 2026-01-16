@@ -12,16 +12,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Internal record for validation options
--record(migration_opts, {
-    vhost :: binary(),
-    mode :: validation_only | migration,
-    skip_unsuitable_queues = false :: boolean(),
-    unsuitable_queues = [] :: list(),
-    batch_size = all :: all | pos_integer(),
-    batch_order = smallest_first :: smallest_first | largest_first,
-    queue_names = undefined :: undefined | [binary()]
-}).
-
 -export([
     start/0,
     start/1,
