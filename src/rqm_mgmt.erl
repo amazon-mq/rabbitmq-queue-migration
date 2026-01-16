@@ -447,7 +447,8 @@ parse_migration_options(ReqData) ->
 parse_all_options(Json) ->
     Opts0 = parse_skip_unsuitable_queues(Json),
     Opts1 = parse_batch_size(Json, Opts0),
-    parse_batch_order(Json, Opts1).
+    Opts2 = parse_batch_order(Json, Opts1),
+    parse_queue_names(Json, Opts2).
 
 parse_skip_unsuitable_queues(Json) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
@@ -470,6 +471,17 @@ parse_batch_order(Json, Opts) ->
         <<"smallest_first">> -> Opts#{batch_order => smallest_first};
         <<"largest_first">> -> Opts#{batch_order => largest_first};
         _ -> Opts
+    end.
+
+parse_queue_names(Json, Opts) ->
+    case maps:get(<<"queue_names">>, Json, undefined) of
+        undefined ->
+            Opts;
+        Names when is_list(Names) ->
+            QueueNames = [rqm_util:to_unicode(N) || N <- Names],
+            Opts#{queue_names => QueueNames};
+        _ ->
+            Opts
     end.
 
 not_found_reply(ReqData, State) ->
