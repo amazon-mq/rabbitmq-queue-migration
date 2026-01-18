@@ -115,10 +115,16 @@ public class QueueMigrationClient {
         java.util.List<QueueMigrationStatus> queueStatuses = new java.util.ArrayList<>();
         if (node.has("queues") && node.get("queues").isArray()) {
             for (JsonNode queueNode : node.get("queues")) {
-                String queueName = queueNode.has("queue_name") ? queueNode.get("queue_name").asText() : "unknown";
+                String queueName = "unknown";
+                if (queueNode.has("resource") && queueNode.get("resource").has("name")) {
+                    queueName = queueNode.get("resource").get("name").asText();
+                }
                 String queueStatus = queueNode.has("status") ? queueNode.get("status").asText() : "unknown";
-                String reason = queueNode.has("reason") ? queueNode.get("reason").asText() : null;
-                queueStatuses.add(new QueueMigrationStatus(queueName, queueStatus, reason));
+                String error = null;
+                if (queueNode.has("error") && !queueNode.get("error").isNull()) {
+                    error = queueNode.get("error").asText();
+                }
+                queueStatuses.add(new QueueMigrationStatus(queueName, queueStatus, error));
             }
         }
 
