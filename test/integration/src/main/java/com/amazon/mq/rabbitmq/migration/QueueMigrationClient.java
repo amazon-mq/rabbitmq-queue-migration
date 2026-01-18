@@ -62,6 +62,70 @@ public class QueueMigrationClient {
     }
 
     /**
+     * Interrupt an in-progress migration
+     */
+    public void interruptMigration(String migrationId) throws IOException, InterruptedException {
+        logger.info("Interrupting migration: {}", migrationId);
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/queue-migration/interrupt/" + migrationId))
+            .header("Authorization", authHeader)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .timeout(Duration.ofSeconds(30))
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200 && response.statusCode() != 202 && response.statusCode() != 204) {
+            throw new IOException("Failed to interrupt migration. Status: " + response.statusCode() + ", Body: " + response.body());
+        }
+
+        logger.info("Migration interrupt request completed with status: {}", response.statusCode());
+    }
+
+    /**
+     * Get detailed migration status including per-queue information
+     */
+    public MigrationDetailResponse getMigrationDetails(String migrationId) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/queue-migration/status/" + migrationId))
+            .header("Authorization", authHeader)
+            .GET()
+            .timeout(Duration.ofSeconds(10))
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Failed to get migration details. Status: " + response.statusCode() + ", Body: " + response.body());
+        }
+
+        return parseMigrationDetails(response.body());
+    }
+
+    private MigrationDetailResponse parseMigrationDetails(String responseBody) throws IOException {
+        JsonNode node = objectMapper.readTree(responseBody);
+
+        String status = node.has("status") ? node.get("status").asText() : "unknown";
+        String displayId = node.has("display_id") ? node.get("display_id").asText() : "unknown";
+        int completedQueues = node.has("completed_queues") ? node.get("completed_queues").asInt() : 0;
+        int totalQueues = node.has("total_queues") ? node.get("total_queues").asInt() : 0;
+
+        java.util.List<QueueMigrationStatus> queueStatuses = new java.util.ArrayList<>();
+        if (node.has("queues") && node.get("queues").isArray()) {
+            for (JsonNode queueNode : node.get("queues")) {
+                String queueName = queueNode.has("queue_name") ? queueNode.get("queue_name").asText() : "unknown";
+                String queueStatus = queueNode.has("status") ? queueNode.get("status").asText() : "unknown";
+                String reason = queueNode.has("reason") ? queueNode.get("reason").asText() : null;
+                queueStatuses.add(new QueueMigrationStatus(queueName, queueStatus, reason));
+            }
+        }
+
+        return new MigrationDetailResponse(displayId, status, completedQueues, totalQueues, queueStatuses);
+    }
+
+    /**
      * Get current migration status
      */
     public MigrationStatusResponse getMigrationStatus() throws IOException, InterruptedException {
@@ -218,11 +282,62 @@ public class QueueMigrationClient {
         public boolean isCompleted() { return "completed".equals(status); }
         public boolean isFailed() { return "failed".equals(status); }
         public boolean isInProgress() { return "in_progress".equals(status); }
+        public boolean isInterrupted() { return "interrupted".equals(status); }
 
         @Override
         public String toString() {
             return String.format("MigrationInfo{id='%s', status='%s', progress=%d%%, queues=%d/%d, started='%s'}",
                 displayId, status, progressPercentage, completedQueues, totalQueues, startedAt);
         }
+    }
+
+    /**
+     * Detailed migration response with per-queue status
+     */
+    public static class MigrationDetailResponse {
+        private final String displayId;
+        private final String status;
+        private final int completedQueues;
+        private final int totalQueues;
+        private final java.util.List<QueueMigrationStatus> queueStatuses;
+
+        public MigrationDetailResponse(String displayId, String status, int completedQueues,
+                                       int totalQueues, java.util.List<QueueMigrationStatus> queueStatuses) {
+            this.displayId = displayId;
+            this.status = status;
+            this.completedQueues = completedQueues;
+            this.totalQueues = totalQueues;
+            this.queueStatuses = queueStatuses;
+        }
+
+        public String getDisplayId() { return displayId; }
+        public String getStatus() { return status; }
+        public int getCompletedQueues() { return completedQueues; }
+        public int getTotalQueues() { return totalQueues; }
+        public java.util.List<QueueMigrationStatus> getQueueStatuses() { return queueStatuses; }
+
+        public boolean isInterrupted() { return "interrupted".equals(status); }
+    }
+
+    /**
+     * Status of a single queue in a migration
+     */
+    public static class QueueMigrationStatus {
+        private final String queueName;
+        private final String status;
+        private final String reason;
+
+        public QueueMigrationStatus(String queueName, String status, String reason) {
+            this.queueName = queueName;
+            this.status = status;
+            this.reason = reason;
+        }
+
+        public String getQueueName() { return queueName; }
+        public String getStatus() { return status; }
+        public String getReason() { return reason; }
+
+        public boolean isCompleted() { return "completed".equals(status); }
+        public boolean isSkipped() { return "skipped".equals(status); }
     }
 }

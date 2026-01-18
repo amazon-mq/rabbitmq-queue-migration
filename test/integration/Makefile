@@ -43,3 +43,6 @@ integration-test: rabbitmq-queue-migration-plugin package start-cluster
 		--migration-timeout=300 \
 		--hostname=localhost \
 		--port=15672
+	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar interrupt-test \
+		--hostname=localhost \
+		--port=15672
