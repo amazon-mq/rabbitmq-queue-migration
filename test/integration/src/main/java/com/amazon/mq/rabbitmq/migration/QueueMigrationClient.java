@@ -62,6 +62,80 @@ public class QueueMigrationClient {
     }
 
     /**
+     * Interrupt an in-progress migration
+     */
+    public void interruptMigration(String migrationId) throws IOException, InterruptedException {
+        logger.info("Interrupting migration: {}", migrationId);
+
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/queue-migration/interrupt/" + migrationId))
+            .header("Authorization", authHeader)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .timeout(Duration.ofSeconds(30))
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200 && response.statusCode() != 202 && response.statusCode() != 204) {
+            throw new IOException("Failed to interrupt migration. Status: " + response.statusCode() + ", Body: " + response.body());
+        }
+
+        logger.info("Migration interrupt request completed with status: {}", response.statusCode());
+    }
+
+    /**
+     * Get detailed migration status including per-queue information
+     */
+    public MigrationDetailResponse getMigrationDetails(String migrationId) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/queue-migration/status/" + migrationId))
+            .header("Authorization", authHeader)
+            .GET()
+            .timeout(Duration.ofSeconds(10))
+            .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 404) {
+            return null;
+        }
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Failed to get migration details. Status: " + response.statusCode() + ", Body: " + response.body());
+        }
+
+        return parseMigrationDetails(response.body());
+    }
+
+    private MigrationDetailResponse parseMigrationDetails(String responseBody) throws IOException {
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode migration = root.get("migration");
+
+        String status = migration.get("status").asText();
+        String displayId = migration.get("display_id").asText();
+        int completedQueues = migration.get("completed_queues").asInt();
+        int totalQueues = migration.get("total_queues").asInt();
+
+        java.util.List<QueueMigrationStatus> queueStatuses = new java.util.ArrayList<>();
+        JsonNode queues = root.get("queues");
+        if (queues != null && queues.isArray()) {
+            for (JsonNode queueNode : queues) {
+                String queueName = queueNode.get("resource").get("name").asText();
+                String queueStatus = queueNode.get("status").asText();
+                String error = null;
+                JsonNode errorNode = queueNode.get("error");
+                if (errorNode != null && !errorNode.isNull()) {
+                    error = errorNode.asText();
+                }
+                queueStatuses.add(new QueueMigrationStatus(queueName, queueStatus, error));
+            }
+        }
+
+        return new MigrationDetailResponse(displayId, status, completedQueues, totalQueues, queueStatuses);
+    }
+
+    /**
      * Get current migration status
      */
     public MigrationStatusResponse getMigrationStatus() throws IOException, InterruptedException {
@@ -83,17 +157,17 @@ public class QueueMigrationClient {
 
     private MigrationResponse parseResponse(String responseBody) throws IOException {
         if (responseBody == null || responseBody.trim().isEmpty()) {
-            return new MigrationResponse("started", "Migration start request accepted (204 No Content)");
+            return new MigrationResponse("started", null);
         }
 
         try {
             JsonNode node = objectMapper.readTree(responseBody);
             String status = node.has("status") ? node.get("status").asText() : "started";
-            String message = node.has("message") ? node.get("message").asText() : "Migration initiated";
-            return new MigrationResponse(status, message);
+            String migrationId = node.has("migration_id") ? node.get("migration_id").asText() : null;
+            return new MigrationResponse(status, migrationId);
         } catch (Exception e) {
             logger.warn("Failed to parse migration response, using defaults: {}", e.getMessage());
-            return new MigrationResponse("started", responseBody);
+            return new MigrationResponse("started", null);
         }
     }
 
@@ -145,19 +219,19 @@ public class QueueMigrationClient {
      */
     public static class MigrationResponse {
         private final String status;
-        private final String message;
+        private final String migrationId;
 
-        public MigrationResponse(String status, String message) {
+        public MigrationResponse(String status, String migrationId) {
             this.status = status;
-            this.message = message;
+            this.migrationId = migrationId;
         }
 
         public String getStatus() { return status; }
-        public String getMessage() { return message; }
+        public String getMigrationId() { return migrationId; }
 
         @Override
         public String toString() {
-            return String.format("MigrationResponse{status='%s', message='%s'}", status, message);
+            return String.format("MigrationResponse{status='%s', migrationId='%s'}", status, migrationId);
         }
     }
 
@@ -218,11 +292,65 @@ public class QueueMigrationClient {
         public boolean isCompleted() { return "completed".equals(status); }
         public boolean isFailed() { return "failed".equals(status); }
         public boolean isInProgress() { return "in_progress".equals(status); }
+        public boolean isInterrupted() { return "interrupted".equals(status); }
 
         @Override
         public String toString() {
             return String.format("MigrationInfo{id='%s', status='%s', progress=%d%%, queues=%d/%d, started='%s'}",
                 displayId, status, progressPercentage, completedQueues, totalQueues, startedAt);
         }
+    }
+
+    /**
+     * Detailed migration response with per-queue status
+     */
+    public static class MigrationDetailResponse {
+        private final String displayId;
+        private final String status;
+        private final int completedQueues;
+        private final int totalQueues;
+        private final java.util.List<QueueMigrationStatus> queueStatuses;
+
+        public MigrationDetailResponse(String displayId, String status, int completedQueues,
+                                       int totalQueues, java.util.List<QueueMigrationStatus> queueStatuses) {
+            this.displayId = displayId;
+            this.status = status;
+            this.completedQueues = completedQueues;
+            this.totalQueues = totalQueues;
+            this.queueStatuses = queueStatuses;
+        }
+
+        public String getDisplayId() { return displayId; }
+        public String getStatus() { return status; }
+        public int getCompletedQueues() { return completedQueues; }
+        public int getTotalQueues() { return totalQueues; }
+        public java.util.List<QueueMigrationStatus> getQueueStatuses() { return queueStatuses; }
+
+        public boolean isInterrupted() { return "interrupted".equals(status); }
+        public boolean isCompleted() { return "completed".equals(status); }
+        public boolean isInProgress() { return "in_progress".equals(status); }
+        public boolean isFailed() { return "failed".equals(status); }
+    }
+
+    /**
+     * Status of a single queue in a migration
+     */
+    public static class QueueMigrationStatus {
+        private final String queueName;
+        private final String status;
+        private final String reason;
+
+        public QueueMigrationStatus(String queueName, String status, String reason) {
+            this.queueName = queueName;
+            this.status = status;
+            this.reason = reason;
+        }
+
+        public String getQueueName() { return queueName; }
+        public String getStatus() { return status; }
+        public String getReason() { return reason; }
+
+        public boolean isCompleted() { return "completed".equals(status); }
+        public boolean isSkipped() { return "skipped".equals(status); }
     }
 }

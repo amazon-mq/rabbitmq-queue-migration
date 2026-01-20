@@ -133,13 +133,19 @@ accept_migration_start(ReqData, {EndpointType, Context}) ->
             _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
         end,
     % Parse request body for options
-    OptsMap = parse_migration_options(ReqData),
+    Opts0 = parse_migration_options(VHost, ReqData),
     % First, run validation synchronously to catch errors before spawning
-    case rqm:validate_migration(VHost, OptsMap) of
+    case rqm:validate_migration(Opts0) of
         ok ->
-            % Validation passed, spawn the actual migration asynchronously
-            spawn(rqm, start, [VHost, OptsMap]),
-            {true, ReqData, {EndpointType, Context}};
+            MigrationId = rqm_util:generate_migration_id(),
+            Opts1 = Opts0#{migration_id => MigrationId},
+            spawn(rqm, start, [Opts1]),
+            Json = rabbit_json:encode(#{
+                migration_id => rqm_util:format_migration_id(MigrationId),
+                status => <<"started">>
+            }),
+            ReqData2 = cowboy_req:set_resp_body(Json, ReqData),
+            {true, ReqData2, {EndpointType, Context}};
         {error, shovel_plugin_not_enabled} ->
             Message =
                 <<
@@ -425,36 +431,46 @@ format_snapshot({Node, SnapshotId, VolumeId}) ->
         volume_id => VolumeId
     }.
 
-parse_migration_options(ReqData) ->
-    case cowboy_req:has_body(ReqData) of
-        true ->
-            {ok, Body, _} = cowboy_req:read_body(ReqData),
-            case Body of
-                <<>> ->
-                    #{};
-                _ ->
-                    case rabbit_json:try_decode(Body) of
-                        {ok, Json} when is_map(Json) ->
-                            parse_all_options(Json);
-                        _ ->
-                            #{}
-                    end
-            end;
-        false ->
-            #{}
-    end.
+parse_migration_options(VHost, ReqData) ->
+    Opts = #{vhost => VHost},
+    maybe_parse_json_body(Opts, read_body(ReqData)).
 
-parse_all_options(Json) ->
-    Opts0 = parse_skip_unsuitable_queues(Json),
-    Opts1 = parse_batch_size(Json, Opts0),
-    Opts2 = parse_batch_order(Json, Opts1),
-    parse_queue_names(Json, Opts2).
+read_body(ReqData) ->
+    HasBody = cowboy_req:has_body(ReqData),
+    read_body(HasBody, ReqData).
 
-parse_skip_unsuitable_queues(Json) ->
+read_body(false, _ReqData) ->
+    empty;
+read_body(true, ReqData) ->
+    {ok, Body, _} = cowboy_req:read_body(ReqData),
+    decode_body(Body).
+
+decode_body(<<>>) ->
+    empty;
+decode_body(Body) ->
+    try_decode_json(rabbit_json:try_decode(Body)).
+
+try_decode_json({ok, Json}) when is_map(Json) ->
+    {ok, Json};
+try_decode_json(_) ->
+    empty.
+
+maybe_parse_json_body(Opts, {ok, Json}) ->
+    parse_all_options(Opts, Json);
+maybe_parse_json_body(Opts, empty) ->
+    Opts.
+
+parse_all_options(Opts0, Json) ->
+    Opts1 = parse_skip_unsuitable_queues(Json, Opts0),
+    Opts2 = parse_batch_size(Json, Opts1),
+    Opts3 = parse_batch_order(Json, Opts2),
+    parse_queue_names(Json, Opts3).
+
+parse_skip_unsuitable_queues(Json, Opts) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
-        true -> #{skip_unsuitable_queues => true};
-        false -> #{skip_unsuitable_queues => false};
-        _ -> #{}
+        true -> Opts#{skip_unsuitable_queues => true};
+        false -> Opts#{skip_unsuitable_queues => false};
+        _ -> Opts
     end.
 
 parse_batch_size(Json, Opts) ->

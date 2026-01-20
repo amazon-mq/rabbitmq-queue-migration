@@ -139,13 +139,22 @@ POST /api/queue-migration/start           # Start migration on default vhost (/)
 POST /api/queue-migration/start/:vhost    # Start migration on specific vhost
 ```
 
+**Start Response:**
+```json
+{
+  "migration_id": "base64url_encoded_migration_id",
+  "status": "started"
+}
+```
+The `migration_id` can be used to track this specific migration via `/api/queue-migration/status/:id`.
+
 ### Status Monitoring
 ```
 GET  /api/queue-migration/status          # Overall migration status + history
 GET  /api/queue-migration/status/:id      # Specific migration details
 ```
 
-### API Response Structure
+### Status Response Structure
 ```json
 {
   "status": "cmq_qq_migration_in_progress",
