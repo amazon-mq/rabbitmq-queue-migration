@@ -153,17 +153,17 @@ public class QueueMigrationClient {
 
     private MigrationResponse parseResponse(String responseBody) throws IOException {
         if (responseBody == null || responseBody.trim().isEmpty()) {
-            return new MigrationResponse("started", "Migration start request accepted (204 No Content)");
+            return new MigrationResponse("started", null);
         }
 
         try {
             JsonNode node = objectMapper.readTree(responseBody);
             String status = node.has("status") ? node.get("status").asText() : "started";
-            String message = node.has("message") ? node.get("message").asText() : "Migration initiated";
-            return new MigrationResponse(status, message);
+            String migrationId = node.has("migration_id") ? node.get("migration_id").asText() : null;
+            return new MigrationResponse(status, migrationId);
         } catch (Exception e) {
             logger.warn("Failed to parse migration response, using defaults: {}", e.getMessage());
-            return new MigrationResponse("started", responseBody);
+            return new MigrationResponse("started", null);
         }
     }
 
@@ -215,19 +215,19 @@ public class QueueMigrationClient {
      */
     public static class MigrationResponse {
         private final String status;
-        private final String message;
+        private final String migrationId;
 
-        public MigrationResponse(String status, String message) {
+        public MigrationResponse(String status, String migrationId) {
             this.status = status;
-            this.message = message;
+            this.migrationId = migrationId;
         }
 
         public String getStatus() { return status; }
-        public String getMessage() { return message; }
+        public String getMigrationId() { return migrationId; }
 
         @Override
         public String toString() {
-            return String.format("MigrationResponse{status='%s', message='%s'}", status, message);
+            return String.format("MigrationResponse{status='%s', migrationId='%s'}", status, migrationId);
         }
     }
 
@@ -323,6 +323,8 @@ public class QueueMigrationClient {
         public java.util.List<QueueMigrationStatus> getQueueStatuses() { return queueStatuses; }
 
         public boolean isInterrupted() { return "interrupted".equals(status); }
+        public boolean isCompleted() { return "completed".equals(status); }
+        public boolean isInProgress() { return "in_progress".equals(status); }
     }
 
     /**

@@ -150,5 +150,6 @@
     unsuitable_queues = [] :: list(),
     batch_size = all :: all | pos_integer(),
     batch_order = smallest_first :: smallest_first | largest_first,
-    queue_names = undefined :: undefined | [binary()]
+    queue_names = undefined :: undefined | [binary()],
+    migration_id = undefined :: undefined | {integer(), atom()}
 }).

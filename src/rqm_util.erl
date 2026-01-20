@@ -16,6 +16,7 @@
     base64url_encode/1,
     base64url_decode/1,
     add_base64_padding/1,
+    generate_migration_id/0,
     format_migration_id/1,
     parse_migration_id/1,
     to_unicode/1,
@@ -98,6 +99,11 @@ add_base64_padding(Data) ->
 format_migration_id({Timestamp, Node}) ->
     MigrationId = {Timestamp, Node},
     base64url_encode(term_to_binary(MigrationId)).
+
+%% @doc Generate a unique migration ID
+-spec generate_migration_id() -> {integer(), atom()}.
+generate_migration_id() ->
+    {erlang:system_time(millisecond), node()}.
 
 %% @doc Parse a URL-encoded migration ID string back to the original tuple
 %% Returns {ok, MigrationId} or error if the input is invalid

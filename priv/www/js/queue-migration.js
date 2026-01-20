@@ -117,12 +117,16 @@ $(document).on('click', '#start-migration-btn', function() {
     }
 
     with_req('POST', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
-        $('#migration-started-message').show();
-        $('#migration-controls').hide();
-        $('#migration-in-progress').show();
-        setTimeout(function() {
-            update();
-        }, 3000);
+        if (resp && resp.migration_id) {
+            go('#/queue-migration/status/' + encodeURIComponent(resp.migration_id));
+        } else {
+            $('#migration-started-message').show();
+            $('#migration-controls').hide();
+            $('#migration-in-progress').show();
+            setTimeout(function() {
+                update();
+            }, 3000);
+        }
     });
 });
 

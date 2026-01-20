@@ -51,17 +51,22 @@ public class InterruptionTest {
             QueueMigrationClient client = new QueueMigrationClient(
                 config.getHttpHost(), config.getHttpPort(), "guest", "guest");
 
-            client.startMigration();
-
-            String migrationId = waitForMigrationAndInterrupt(client, INTERRUPT_AFTER_QUEUES);
+            QueueMigrationClient.MigrationResponse startResponse = client.startMigration();
+            String migrationId = startResponse.getMigrationId();
             if (migrationId == null) {
+                logger.error("❌ Failed to get migration ID from start response");
+                System.exit(1);
+            }
+            logger.info("Migration started with ID: {}", migrationId);
+
+            if (!waitAndInterrupt(client, migrationId, INTERRUPT_AFTER_QUEUES)) {
                 logger.error("❌ Failed to interrupt migration");
                 System.exit(1);
             }
 
             // Phase 4: Wait for migration to finish after interrupt
             logger.info("=== Phase 4: Wait for migration to complete ===");
-            waitForMigrationComplete(client);
+            waitForMigrationComplete(client, migrationId);
 
             // Phase 5: Validate results
             logger.info("=== Phase 5: Validate interruption results ===");
@@ -110,56 +115,47 @@ public class InterruptionTest {
         return counts;
     }
 
-    private static String waitForMigrationAndInterrupt(QueueMigrationClient client, int threshold) throws Exception {
+    private static boolean waitAndInterrupt(QueueMigrationClient client, String migrationId, int threshold) throws Exception {
         logger.info("Waiting for {} queues to complete before interrupting...", threshold);
 
         long startTime = System.currentTimeMillis();
         long timeout = 300_000; // 5 minutes
 
         while (System.currentTimeMillis() - startTime < timeout) {
-            QueueMigrationClient.MigrationStatusResponse status = client.getMigrationStatus();
+            QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
 
-            if (status.hasMigration()) {
-                QueueMigrationClient.MigrationInfo info = status.getMigrationInfo();
-
-                if (info.isCompleted() || info.isInterrupted()) {
-                    logger.error("Migration finished before we could interrupt (completed {} queues)",
-                        info.getCompletedQueues());
-                    return null;
-                }
-
-                if (info.getCompletedQueues() >= threshold) {
-                    logger.info("Threshold reached: {} queues completed, interrupting...", info.getCompletedQueues());
-                    client.interruptMigration(info.getDisplayId());
-                    return info.getDisplayId();
-                }
-
-                logger.debug("Progress: {}/{} queues", info.getCompletedQueues(), info.getTotalQueues());
+            if (details.isCompleted() || details.isInterrupted()) {
+                logger.error("Migration finished before we could interrupt (completed {} queues)",
+                    details.getCompletedQueues());
+                return false;
             }
 
+            if (details.getCompletedQueues() >= threshold) {
+                logger.info("Threshold reached: {} queues completed, interrupting...", details.getCompletedQueues());
+                client.interruptMigration(migrationId);
+                return true;
+            }
+
+            logger.debug("Progress: {}/{} queues", details.getCompletedQueues(), details.getTotalQueues());
             Thread.sleep(500);
         }
 
         logger.error("Timeout waiting for migration to reach threshold");
-        return null;
+        return false;
     }
 
-    private static void waitForMigrationComplete(QueueMigrationClient client) throws Exception {
+    private static void waitForMigrationComplete(QueueMigrationClient client, String migrationId) throws Exception {
         logger.info("Waiting for migration to finish after interrupt...");
 
         long startTime = System.currentTimeMillis();
         long timeout = 120_000; // 2 minutes
 
         while (System.currentTimeMillis() - startTime < timeout) {
-            QueueMigrationClient.MigrationStatusResponse status = client.getMigrationStatus();
+            QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
 
-            if (status.hasMigration()) {
-                QueueMigrationClient.MigrationInfo info = status.getMigrationInfo();
-
-                if (!info.isInProgress()) {
-                    logger.info("Migration finished with status: {}", info.getStatus());
-                    return;
-                }
+            if (!details.isInProgress()) {
+                logger.info("Migration finished with status: {}", details.getStatus());
+                return;
             }
 
             Thread.sleep(1000);

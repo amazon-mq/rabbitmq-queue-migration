@@ -13,11 +13,8 @@
 
 %% Internal record for validation options
 -export([
-    start/0,
     start/1,
-    start/2,
     validate_migration/1,
-    validate_migration/2,
     status/0,
     get_migration_status/0,
     get_queue_migration_status/1,
@@ -27,21 +24,12 @@
     start_migration_on_node/7
 ]).
 
-%% TODO - these are limits given to customers
-%% https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rabbitmq-sizing-guidelines.html
-%%
 %% TODO - single instance brokers should not see anything migration related.
 
 %% Public API
-start() ->
-    start(<<"/">>).
-
-start(VHost) ->
-    start(VHost, #{}).
-
-start(VHost, OptsMap) ->
+start(OptsMap) when is_map(OptsMap) ->
     try
-        Opts = build_migration_opts(VHost, migration, OptsMap),
+        Opts = build_migration_opts(migration, OptsMap),
         pre_migration_validation(shovel_plugin, Opts)
     catch
         Class:Reason:Stack ->
@@ -55,11 +43,8 @@ start(VHost, OptsMap) ->
 %% @doc Validate migration prerequisites without starting the migration
 %% This function runs all validation checks synchronously and returns
 %% ok if validation passes, or {error, Reason} if validation fails.
-validate_migration(VHost) ->
-    validate_migration(VHost, #{}).
-
-validate_migration(VHost, OptsMap) ->
-    Opts = build_migration_opts(VHost, validation_only, OptsMap),
+validate_migration(OptsMap) when is_map(OptsMap) ->
+    Opts = build_migration_opts(validation_only, OptsMap),
     pre_migration_validation(shovel_plugin, Opts).
 
 status() ->
@@ -78,18 +63,21 @@ status() ->
 
 %% Private
 
-build_migration_opts(VHost, Mode, OptsMap) ->
+build_migration_opts(Mode, OptsMap) ->
+    VHost = maps:get(vhost, OptsMap, <<"/">>),
     SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
     BatchSize = maps:get(batch_size, OptsMap, all),
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
+    MigrationId = maps:get(migration_id, OptsMap, undefined),
     #migration_opts{
         vhost = VHost,
         mode = Mode,
         skip_unsuitable_queues = SkipUnsuitableQueues,
         batch_size = BatchSize,
         batch_order = BatchOrder,
-        queue_names = QueueNames
+        queue_names = QueueNames,
+        migration_id = MigrationId
     }.
 
 pre_migration_validation(shovel_plugin, Opts) ->
@@ -265,7 +253,7 @@ handle_check_cluster_partitions({error, partitions_detected}, _Opts) ->
 handle_check_eligible_queue_count({ok, #migration_opts{mode = validation_only}}, _Nodes) ->
     ok;
 handle_check_eligible_queue_count({ok, #migration_opts{vhost = VHost} = Opts}, Nodes) ->
-    MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
+    MigrationResult = start_migration(Nodes, Opts),
     handle_migration_result(MigrationResult, VHost);
 handle_check_eligible_queue_count({error, _} = Error, _Nodes) ->
     Error.
@@ -278,12 +266,16 @@ handle_migration_result({error, MigrationError}, _VHost) ->
     % Do not attempt to restore normal operations as cluster state may be inconsistent
     {error, {migration_failed, MigrationError}}.
 
-start_with_new_migration_id(Nodes, Opts, MigrationId) ->
-    maybe_start_with_lock(get_queue_migrate_lock(Nodes), Nodes, Opts, MigrationId).
+start_migration(Nodes, #migration_opts{migration_id = undefined} = Opts0) ->
+    MigrationId = rqm_util:generate_migration_id(),
+    Opts1 = Opts0#migration_opts{migration_id = MigrationId},
+    start_migration(Nodes, Opts1);
+start_migration(Nodes, Opts) ->
+    maybe_start_with_lock(get_queue_migrate_lock(Nodes), Nodes, Opts).
 
-maybe_start_with_lock({true, GlobalLockId}, Nodes, Opts, MigrationId) ->
-    start_with_lock(GlobalLockId, Nodes, Opts, MigrationId);
-maybe_start_with_lock(false, _Nodes, _Opts, _MigrationId) ->
+maybe_start_with_lock({true, GlobalLockId}, Nodes, Opts) ->
+    start_with_lock(GlobalLockId, Nodes, Opts);
+maybe_start_with_lock(false, _Nodes, _Opts) ->
     ?LOG_WARNING("rqm: already in progress."),
     {error, in_progress}.
 
@@ -293,9 +285,9 @@ start_with_lock(
     #migration_opts{
         vhost = VHost,
         skip_unsuitable_queues = SkipUnsuitableQueues,
-        unsuitable_queues = UnsuitableQueues
-    } = Opts,
-    MigrationId
+        unsuitable_queues = UnsuitableQueues,
+        migration_id = MigrationId
+    } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
     SkippedCount = length(UnsuitableQueues),
@@ -318,7 +310,7 @@ start_with_lock(
         %% MCQ -> QQ Migration
         %%
         {ok, MigrationDuration, CompletionStatus} = mcq_qq_migration(
-            MigrationId, PreparationState, Nodes, Opts
+            PreparationState, Nodes, Opts
         ),
 
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -646,10 +638,10 @@ cleanup_single_snapshot(SnapshotId) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 mcq_qq_migration(
-    MigrationId,
     PreparationState,
     Nodes,
     #migration_opts{
+        migration_id = MigrationId,
         vhost = VHost,
         unsuitable_queues = UnsuitableQueues,
         batch_size = BatchSize
@@ -678,7 +670,7 @@ mcq_qq_migration(
 
     NodeAllocations = compute_node_allocations(Nodes, BatchSize),
     {ok, PidsAndRefs} = start_migration_on_each_node(
-        NodeAllocations, QueueCountGatherer, Gatherer, VHost, MigrationId, Opts, []
+        NodeAllocations, QueueCountGatherer, Gatherer, Opts, []
     ),
     {ok, TotalQueueCount} = wait_for_total_queue_count(QueueCountGatherer, length(Nodes)),
 
@@ -785,16 +777,20 @@ wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, IsInter
     end.
 
 start_migration_on_each_node(
-    [], _QueueCountGatherer, _Gatherer, _VHost, _MigrationId, _Opts, Acc
+    [], _QueueCountGatherer, _Gatherer, _Opts, Acc
 ) ->
     {ok, Acc};
 start_migration_on_each_node(
     [{Node, NodeBatchSize} | Rest],
     QueueCountGatherer,
     Gatherer,
-    VHost,
-    MigrationId,
-    #migration_opts{batch_order = BatchOrder, queue_names = QueueNames} = Opts,
+    #migration_opts{
+        vhost = VHost,
+        migration_id = MigrationId,
+        batch_order = BatchOrder,
+        queue_names = QueueNames
+    } =
+        Opts,
     Acc0
 ) ->
     ok = rqm_gatherer:fork(QueueCountGatherer),
@@ -805,7 +801,7 @@ start_migration_on_each_node(
     PidAndRef = spawn_monitor(Node, ?MODULE, start_migration_on_node, Args),
     Acc1 = [PidAndRef | Acc0],
     start_migration_on_each_node(
-        Rest, QueueCountGatherer, Gatherer, VHost, MigrationId, Opts, Acc1
+        Rest, QueueCountGatherer, Gatherer, Opts, Acc1
     ).
 
 start_migration_on_node(
@@ -2020,9 +2016,6 @@ set_default_queue_type_to_quorum(VHost) ->
             ?LOG_ERROR("rqm: failed to set default queue type for vhost ~ts: ~p", [VHost, Reason])
     end,
     ok.
-
-generate_migration_id() ->
-    {erlang:system_time(millisecond), node()}.
 
 submit_to_worker_pool(Fun) ->
     ok = worker_pool:submit_async(rqm_config:worker_pool_name(), Fun).

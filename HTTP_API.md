@@ -125,20 +125,16 @@ curl -u guest:guest -X POST \
 **Response (200 OK):**
 ```json
 {
-  "status": "cmq_qq_migration_in_progress",
   "migration_id": "ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz",
-  "vhost": "/",
-  "total_queues": 10,
-  "started_at": "2025-12-21 10:30:00"
+  "status": "started"
 }
 ```
 
 **Response Fields:**
-- `status` - Current migration status (`cmq_qq_migration_in_progress`)
-- `migration_id` - Base64url-encoded unique migration identifier
-- `vhost` - Virtual host being migrated
-- `total_queues` - Number of queues to migrate
-- `started_at` - Migration start timestamp
+- `migration_id` - Base64url-encoded unique migration identifier. Use this ID to track the migration via the status endpoint.
+- `status` - Request status (`started`)
+
+> **Note:** The migration runs asynchronously. Use the returned `migration_id` with the `/api/queue-migration/status/:migration_id` endpoint to monitor progress.
 
 **Error Responses:**
 
