@@ -6,4 +6,10 @@ COPY --chown=rabbitmq:rabbitmq rabbitmq.conf /etc/rabbitmq/rabbitmq.conf
 
 COPY rabbitmq_queue_migration.ez /opt/rabbitmq/plugins/
 
+RUN set -eux; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    apt-get update; \
+    apt-get install --yes --no-install-recommends unzip; \
+    unzip -d /opt/rabbitmq/plugins /opt/rabbitmq/plugins/rabbitmq_queue_migration.ez
+
 EXPOSE 4369 5672 15672 15692 25672 35672-35682
