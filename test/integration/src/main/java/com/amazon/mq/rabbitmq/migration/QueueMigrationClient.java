@@ -41,13 +41,22 @@ public class QueueMigrationClient {
      * Start queue migration for the default virtual host
      */
     public MigrationResponse startMigration() throws IOException, InterruptedException {
-        logger.info("Starting queue migration...");
+        return startMigration(false);
+    }
+
+    /**
+     * Start queue migration with options
+     */
+    public MigrationResponse startMigration(boolean skipUnsuitableQueues) throws IOException, InterruptedException {
+        logger.info("Starting queue migration (skip_unsuitable_queues: {})...", skipUnsuitableQueues);
+
+        String requestBody = skipUnsuitableQueues ? "{\"skip_unsuitable_queues\": true}" : "{}";
 
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + "/queue-migration/start"))
             .header("Authorization", authHeader)
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.noBody())
+            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .timeout(Duration.ofSeconds(30))
             .build();
 
