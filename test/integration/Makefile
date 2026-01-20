@@ -3,6 +3,7 @@
 
 SRC_DIRS := $(CURDIR)/src/main/java/com/amazon/mq/rabbitmq
 SRCS := $(wildcard $(SRC_DIRS)/**/*.java)
+JAR := $(CURDIR)/target/migration-test-setup-1.0.0.jar
 
 clean:
 	$(CURDIR)/mvnw clean
@@ -13,13 +14,13 @@ compile:
 debug:
 	@echo $(SRCS)
 
-$(CURDIR)/target/migration-test-setup-1.0.0.jar: $(SRCS)
+$(JAR): $(SRCS)
 	$(CURDIR)/mvnw package -B -q -DskipTests=true
 
-package: $(CURDIR)/target/migration-test-setup-1.0.0.jar
+package: $(JAR)
 
 run: package
-	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar $(ARGS)
+	java -jar $(JAR) $(ARGS)
 
 run-example: compile
 	$(CURDIR)/mvnw exec:java -Dexec.mainClass="com.amazon.mq.rabbitmq.publishing.PublishingExample"
@@ -36,10 +37,10 @@ start-cluster: rabbitmq-queue-migration-plugin
 stop-cluster:
 	$(MAKE) -C $(CURDIR)/docker stop-cluster
 
-integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable
+integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch
 
 integration-end-to-end: package
-	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar end-to-end \
+	java -jar $(JAR) end-to-end \
 		--queue-count=10 \
 		--total-messages=1000 \
 		--migration-timeout=300 \
@@ -47,11 +48,16 @@ integration-end-to-end: package
 		--port=15672
 
 integration-interrupt: package
-	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar interrupt-test \
+	java -jar $(JAR) interrupt-test \
 		--hostname=localhost \
 		--port=15672
 
 integration-skip-unsuitable: package
-	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar skip-unsuitable-test \
+	java -jar $(JAR) skip-unsuitable-test \
+		--hostname=localhost \
+		--port=15672
+
+integration-batch: package
+	java -jar $(JAR) batch-test \
 		--hostname=localhost \
 		--port=15672
