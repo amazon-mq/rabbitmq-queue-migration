@@ -26,6 +26,7 @@ public class MultiThreadedPublisher {
     private final Map<String, Channel> nodeChannels = new ConcurrentHashMap<>();
     private final AtomicInteger globalPublishedCount = new AtomicInteger(0);
     private final AtomicInteger globalConfirmedCount = new AtomicInteger(0);
+    private final AtomicInteger globalNackedCount = new AtomicInteger(0);
 
     private ExecutorService publishingExecutor;
     private boolean initialized = false;
@@ -85,7 +86,8 @@ public class MultiThreadedPublisher {
             CompletableFuture<Void> completedFuture = CompletableFuture.completedFuture(null);
             AtomicInteger publishedCount = new AtomicInteger(0);
             AtomicInteger confirmedCount = new AtomicInteger(0);
-            return new PublishingResult(completedFuture, publishedCount, confirmedCount, 0);
+            AtomicInteger nackedCount = new AtomicInteger(0);
+            return new PublishingResult(completedFuture, publishedCount, confirmedCount, nackedCount, 0);
         }
 
         initialize(tasks);
@@ -104,7 +106,7 @@ public class MultiThreadedPublisher {
 
         // Create result object
         PublishingResult result = new PublishingResult(
-            completionFuture, globalPublishedCount, globalConfirmedCount, tasks.size());
+            completionFuture, globalPublishedCount, globalConfirmedCount, globalNackedCount, tasks.size());
 
         // Start publishing threads
         List<CompletableFuture<Void>> threadFutures = new ArrayList<>();
@@ -365,7 +367,7 @@ public class MultiThreadedPublisher {
                 if (ack) {
                     globalConfirmedCount.addAndGet(confirmedCount);
                 } else {
-                    logger.warn("Message nacked: deliveryTag={}, multiple={}", deliveryTag, multiple);
+                    globalNackedCount.addAndGet(confirmedCount);
                 }
 
                 confirmationLock.notifyAll(); // Wake up waiting threads
