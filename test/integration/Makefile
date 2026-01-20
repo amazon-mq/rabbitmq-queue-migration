@@ -36,7 +36,7 @@ start-cluster: rabbitmq-queue-migration-plugin
 stop-cluster:
 	$(MAKE) -C $(CURDIR)/docker stop-cluster
 
-integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable
+integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch
 
 integration-end-to-end: package
 	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar end-to-end \
@@ -53,5 +53,10 @@ integration-interrupt: package
 
 integration-skip-unsuitable: package
 	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar skip-unsuitable-test \
+		--hostname=localhost \
+		--port=15672
+
+integration-batch: package
+	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar batch-test \
 		--hostname=localhost \
 		--port=15672
