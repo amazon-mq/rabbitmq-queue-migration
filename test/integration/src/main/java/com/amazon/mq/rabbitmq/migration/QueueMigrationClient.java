@@ -97,6 +97,10 @@ public class QueueMigrationClient {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
+        if (response.statusCode() == 404) {
+            return null;
+        }
+
         if (response.statusCode() != 200) {
             throw new IOException("Failed to get migration details. Status: " + response.statusCode() + ", Body: " + response.body());
         }

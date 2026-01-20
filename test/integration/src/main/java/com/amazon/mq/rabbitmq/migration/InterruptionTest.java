@@ -5,6 +5,7 @@ import com.rabbitmq.http.client.domain.QueueInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,13 @@ public class InterruptionTest {
         while (System.currentTimeMillis() - startTime < timeout) {
             QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
 
+            // Migration record may not exist yet (async creation), retry
+            if (details == null) {
+                logger.debug("Migration not found yet, waiting...");
+                Thread.sleep(1000);
+                continue;
+            }
+
             if (details.isCompleted() || details.isInterrupted()) {
                 logger.error("Migration finished before we could interrupt (completed {} queues)",
                     details.getCompletedQueues());
@@ -153,6 +161,11 @@ public class InterruptionTest {
         while (System.currentTimeMillis() - startTime < timeout) {
             QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
 
+            if (details == null) {
+                Thread.sleep(1000);
+                continue;
+            }
+
             if (!details.isInProgress()) {
                 logger.info("Migration finished with status: {}", details.getStatus());
                 return;
@@ -170,6 +183,11 @@ public class InterruptionTest {
 
         // Get detailed migration status
         QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
+
+        if (details == null) {
+            logger.error("❌ Migration {} not found", migrationId);
+            return false;
+        }
 
         // Validate overall status is interrupted
         if (!details.isInterrupted()) {
