@@ -12,6 +12,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Client for RabbitMQ Queue Migration API endpoints.
@@ -42,16 +44,44 @@ public class QueueMigrationClient {
      * Start queue migration for the default virtual host
      */
     public MigrationResponse startMigration() throws IOException, InterruptedException {
-        return startMigration(false);
+        return startMigration(false, null, null);
     }
 
     /**
-     * Start queue migration with options
+     * Start queue migration with skip unsuitable queues option
      */
     public MigrationResponse startMigration(boolean skipUnsuitableQueues) throws IOException, InterruptedException {
-        logger.info("Starting queue migration (skip_unsuitable_queues: {})...", skipUnsuitableQueues);
+        return startMigration(skipUnsuitableQueues, null, null);
+    }
 
-        String requestBody = skipUnsuitableQueues ? "{\"skip_unsuitable_queues\": true}" : "{}";
+    /**
+     * Start queue migration with batch options
+     */
+    public MigrationResponse startMigration(Integer batchSize, String batchOrder) throws IOException, InterruptedException {
+        return startMigration(false, batchSize, batchOrder);
+    }
+
+    /**
+     * Start queue migration with all options
+     */
+    public MigrationResponse startMigration(boolean skipUnsuitableQueues, Integer batchSize, String batchOrder) throws IOException, InterruptedException {
+        Map<String, Object> options = new HashMap<>();
+
+        if (skipUnsuitableQueues) {
+            options.put("skip_unsuitable_queues", true);
+        }
+
+        if (batchSize != null) {
+            options.put("batch_size", batchSize);
+        }
+
+        if (batchOrder != null) {
+            options.put("batch_order", batchOrder);
+        }
+
+        String requestBody = objectMapper.writeValueAsString(options);
+
+        logger.info("Starting queue migration with options: {}", requestBody);
 
         logger.info("Building HTTP request to: {}/queue-migration/start", baseUrl);
         HttpRequest request = HttpRequest.newBuilder()
