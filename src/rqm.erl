@@ -695,6 +695,7 @@ handle_migration_result({interrupted, Results}, MigrationId, Start) ->
         rqm_db:create_skipped_queue_status(Resource, MigrationId, interrupted)
      || Resource <- InterruptedQueues
     ],
+    {ok, _} = rqm_db:update_migration_skipped_count(MigrationId),
     {ok, _} = rqm_db:update_migration_status(MigrationId, interrupted),
     End = erlang:system_time(second),
     Duration = End - Start,

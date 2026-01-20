@@ -26,7 +26,7 @@ run-example: compile
 
 # integration-test
 
-.PHONY: integration-test start-cluster stop-cluster
+.PHONY: integration-test start-cluster stop-cluster integration-end-to-end integration-interrupt
 
 rabbitmq-queue-migration-plugin: $(CURDIR)/docker/rabbitmq_queue_migration.ez
 
@@ -36,13 +36,17 @@ start-cluster: rabbitmq-queue-migration-plugin
 stop-cluster:
 	$(MAKE) -C $(CURDIR)/docker stop-cluster
 
-integration-test: rabbitmq-queue-migration-plugin package start-cluster
+integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt
+
+integration-end-to-end: package
 	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar end-to-end \
 		--queue-count=10 \
 		--total-messages=1000 \
 		--migration-timeout=300 \
 		--hostname=localhost \
 		--port=15672
+
+integration-interrupt: package
 	java -jar $(CURDIR)/target/migration-test-setup-1.0.0.jar interrupt-test \
 		--hostname=localhost \
 		--port=15672

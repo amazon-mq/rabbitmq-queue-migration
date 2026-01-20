@@ -21,6 +21,7 @@
     update_migration_failed/2,
     update_migration_completed/2,
     update_migration_completed_count/1,
+    update_migration_skipped_count/1,
     update_migration_snapshots/2,
     get_migration/1,
     get_all_migrations/0,
@@ -154,6 +155,28 @@ update_migration_completed_count(MigrationId) ->
                 completed_queues = CompletedCount
             }),
             {ok, CompletedCount}
+    end.
+
+%% @doc Update migration skipped count based on skipped queue statuses
+-spec update_migration_skipped_count(term()) -> {ok, non_neg_integer()} | {error, not_found}.
+update_migration_skipped_count(MigrationId) ->
+    case mnesia:dirty_read(queue_migration, MigrationId) of
+        [] ->
+            {error, not_found};
+        [Migration] ->
+            % Count skipped queues
+            SkippedCount = length(
+                mnesia:dirty_match_object(
+                    queue_migration_status,
+                    #queue_migration_status{migration_id = MigrationId, status = skipped, _ = '_'}
+                )
+            ),
+
+            % Update migration record
+            mnesia:dirty_write(Migration#queue_migration{
+                skipped_queues = SkippedCount
+            }),
+            {ok, SkippedCount}
     end.
 
 %% @doc Update migration snapshots

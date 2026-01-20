@@ -109,24 +109,24 @@ public class QueueMigrationClient {
     }
 
     private MigrationDetailResponse parseMigrationDetails(String responseBody) throws IOException {
-        JsonNode node = objectMapper.readTree(responseBody);
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode migration = root.get("migration");
 
-        String status = node.has("status") ? node.get("status").asText() : "unknown";
-        String displayId = node.has("display_id") ? node.get("display_id").asText() : "unknown";
-        int completedQueues = node.has("completed_queues") ? node.get("completed_queues").asInt() : 0;
-        int totalQueues = node.has("total_queues") ? node.get("total_queues").asInt() : 0;
+        String status = migration.get("status").asText();
+        String displayId = migration.get("display_id").asText();
+        int completedQueues = migration.get("completed_queues").asInt();
+        int totalQueues = migration.get("total_queues").asInt();
 
         java.util.List<QueueMigrationStatus> queueStatuses = new java.util.ArrayList<>();
-        if (node.has("queues") && node.get("queues").isArray()) {
-            for (JsonNode queueNode : node.get("queues")) {
-                String queueName = "unknown";
-                if (queueNode.has("resource") && queueNode.get("resource").has("name")) {
-                    queueName = queueNode.get("resource").get("name").asText();
-                }
-                String queueStatus = queueNode.has("status") ? queueNode.get("status").asText() : "unknown";
+        JsonNode queues = root.get("queues");
+        if (queues != null && queues.isArray()) {
+            for (JsonNode queueNode : queues) {
+                String queueName = queueNode.get("resource").get("name").asText();
+                String queueStatus = queueNode.get("status").asText();
                 String error = null;
-                if (queueNode.has("error") && !queueNode.get("error").isNull()) {
-                    error = queueNode.get("error").asText();
+                JsonNode errorNode = queueNode.get("error");
+                if (errorNode != null && !errorNode.isNull()) {
+                    error = errorNode.asText();
                 }
                 queueStatuses.add(new QueueMigrationStatus(queueName, queueStatus, error));
             }
@@ -329,6 +329,7 @@ public class QueueMigrationClient {
         public boolean isInterrupted() { return "interrupted".equals(status); }
         public boolean isCompleted() { return "completed".equals(status); }
         public boolean isInProgress() { return "in_progress".equals(status); }
+        public boolean isFailed() { return "failed".equals(status); }
     }
 
     /**
