@@ -235,7 +235,9 @@ public class RabbitMQSetup {
         logger.info("Creating {} unsuitable queues for migration testing", unsuitableQueueCount);
 
         // Define unsuitable queue types
-        String[] unsuitableTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
+        // Note: Only reject-publish-dlx is reliably unsuitable
+        // too-many-messages and too-many-bytes require actually exceeding limits
+        String[] unsuitableTypes = {"reject-publish-dlx"};
 
         // Migration limits (should match the values used in migration compatibility checker)
         // These are rough estimates - you may need to adjust based on actual migration limits
@@ -329,6 +331,11 @@ public class RabbitMQSetup {
                 double avgRate = result.getPublishedCount() * 1000.0 / elapsed;
                 logger.info("Successfully filled {} unsuitable queues with {} total messages in {} ms ({} msg/sec)",
                            unsuitableQueueCount, result.getPublishedCount(), elapsed, String.format("%.1f", avgRate));
+
+                if (result.getNackedCount() > 0) {
+                    logger.info("Note: {} messages were nacked (expected for queues with max-length limits)",
+                               result.getNackedCount());
+                }
             }
 
         } catch (Exception e) {

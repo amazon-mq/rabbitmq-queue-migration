@@ -12,16 +12,19 @@ public class PublishingResult {
     private final CompletableFuture<Void> completionFuture;
     private final AtomicInteger publishedCount;
     private final AtomicInteger confirmedCount;
+    private final AtomicInteger nackedCount;
     private final int totalTasks;
     private final long startTime;
 
     public PublishingResult(CompletableFuture<Void> completionFuture,
                            AtomicInteger publishedCount,
                            AtomicInteger confirmedCount,
+                           AtomicInteger nackedCount,
                            int totalTasks) {
         this.completionFuture = completionFuture;
         this.publishedCount = publishedCount;
         this.confirmedCount = confirmedCount;
+        this.nackedCount = nackedCount;
         this.totalTasks = totalTasks;
         this.startTime = System.currentTimeMillis();
     }
@@ -53,6 +56,13 @@ public class PublishingResult {
      */
     public int getConfirmedCount() {
         return confirmedCount.get();
+    }
+
+    /**
+     * Get the number of messages nacked so far.
+     */
+    public int getNackedCount() {
+        return nackedCount.get();
     }
 
     /**

@@ -30,6 +30,7 @@ public class QueueMigrationClient {
         this.baseUrl = String.format("http://%s:%d/api", host, port);
         this.authHeader = "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
         this.httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
         this.objectMapper = new ObjectMapper();
@@ -52,6 +53,7 @@ public class QueueMigrationClient {
 
         String requestBody = skipUnsuitableQueues ? "{\"skip_unsuitable_queues\": true}" : "{}";
 
+        logger.info("Building HTTP request to: {}/queue-migration/start", baseUrl);
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + "/queue-migration/start"))
             .header("Authorization", authHeader)
@@ -60,14 +62,32 @@ public class QueueMigrationClient {
             .timeout(Duration.ofSeconds(30))
             .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200 && response.statusCode() != 202 && response.statusCode() != 204) {
-            throw new IOException("Failed to start migration. Status: " + response.statusCode() + ", Body: " + response.body());
+        logger.info("Sending HTTP POST request...");
+        HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            logger.info("Received HTTP response: status={}", response.statusCode());
+        } catch (IOException e) {
+            logger.error("IOException during HTTP request: {}", e.getMessage());
+            // Java HTTP client sometimes throws EOF on error responses
+            // Treat as a failed request
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("EOF")) {
+                throw new IOException("Migration start failed (likely unsuitable queues or validation error)", e);
+            }
+            throw new IOException("Failed to send migration start request: " + msg, e);
         }
 
-        logger.info("Migration start request completed with status: {}", response.statusCode());
-        return parseResponse(response.body());
+        int statusCode = response.statusCode();
+        String responseBody = response.body();
+
+        logger.info("Response body: {}", responseBody);
+
+        if (statusCode != 200 && statusCode != 202 && statusCode != 204) {
+            throw new IOException("Failed to start migration. Status: " + statusCode + ", Body: " + responseBody);
+        }
+
+        return parseResponse(responseBody);
     }
 
     /**

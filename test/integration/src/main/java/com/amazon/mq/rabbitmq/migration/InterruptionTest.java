@@ -1,5 +1,6 @@
 package com.amazon.mq.rabbitmq.migration;
 
+import com.amazon.mq.rabbitmq.ClusterTopology;
 import com.rabbitmq.http.client.Client;
 import com.rabbitmq.http.client.domain.QueueInfo;
 import org.slf4j.Logger;
@@ -30,9 +31,29 @@ public class InterruptionTest {
         try {
             logger.info("Starting migration interruption test");
 
-            // Build args with test-specific configuration
-            String[] testArgs = buildTestArgs(args);
-            TestConfiguration config = MigrationTestSetup.parseArguments(testArgs);
+            // Parse hostname and port from args
+            String hostname = "localhost";
+            int port = 15672;
+            for (String arg : args) {
+                if (arg.startsWith("--hostname=")) {
+                    hostname = arg.substring(11);
+                } else if (arg.startsWith("--port=")) {
+                    port = Integer.parseInt(arg.substring(7));
+                }
+            }
+
+            // Create configuration directly
+            ClusterTopology topology = new ClusterTopology(hostname, port);
+            TestConfiguration config = new TestConfiguration(topology);
+            config.setQueueCount(QUEUE_COUNT);
+            config.setTotalMessages(TOTAL_MESSAGES);
+            config.setSmallMessageSize(SMALL_SIZE);
+            config.setMediumMessageSize(MEDIUM_SIZE);
+            config.setLargeMessageSize(LARGE_SIZE);
+            config.setSmallMessagePercent(90);
+            config.setMediumMessagePercent(5);
+            config.setLargeMessagePercent(5);
+            config.setMigrationTimeout(600);
 
             // Phase 0: Cleanup
             logger.info("=== Phase 0: Cleanup ===");
@@ -40,7 +61,7 @@ public class InterruptionTest {
 
             // Phase 1: Setup
             logger.info("=== Phase 1: Setup ({} queues, {} messages) ===", QUEUE_COUNT, TOTAL_MESSAGES);
-            MigrationTestSetup.execute(testArgs);
+            MigrationTestSetup.execute(config);
 
             // Phase 2: Collect pre-migration stats
             logger.info("=== Phase 2: Pre-migration statistics ===");
@@ -84,23 +105,6 @@ public class InterruptionTest {
             logger.error("Interruption test failed with exception", e);
             System.exit(1);
         }
-    }
-
-    private static String[] buildTestArgs(String[] originalArgs) {
-        // Test-specific defaults
-        String[] defaults = new String[] {
-            "--queue-count=" + QUEUE_COUNT,
-            "--total-messages=" + TOTAL_MESSAGES,
-            "--message-sizes=" + SMALL_SIZE + "," + MEDIUM_SIZE + "," + LARGE_SIZE,
-            "--message-distribution=90,5,5",
-            "--migration-timeout=600"
-        };
-
-        // Merge: defaults first, then originalArgs (which can override or add --hostname, --port, etc.)
-        String[] merged = new String[defaults.length + originalArgs.length];
-        System.arraycopy(defaults, 0, merged, 0, defaults.length);
-        System.arraycopy(originalArgs, 0, merged, defaults.length, originalArgs.length);
-        return merged;
     }
 
     private static Map<String, Long> collectMessageCounts(TestConfiguration config) throws Exception {

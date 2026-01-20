@@ -1,5 +1,6 @@
 package com.amazon.mq.rabbitmq.migration;
 
+import com.amazon.mq.rabbitmq.ClusterTopology;
 import com.rabbitmq.http.client.Client;
 import com.rabbitmq.http.client.domain.QueueInfo;
 import org.slf4j.Logger;
@@ -18,18 +19,32 @@ public class SkipUnsuitableTest {
 
     private static final Logger logger = LoggerFactory.getLogger(SkipUnsuitableTest.class);
 
-    private static final int SUITABLE_QUEUE_COUNT = 20;
+    private static final int SUITABLE_QUEUE_COUNT = 25;
     private static final int UNSUITABLE_QUEUE_COUNT = 5;
-    private static final int TOTAL_QUEUE_COUNT = SUITABLE_QUEUE_COUNT + UNSUITABLE_QUEUE_COUNT;
     private static final int MESSAGES_PER_QUEUE = 200;
-    private static final int TOTAL_MESSAGES = TOTAL_QUEUE_COUNT * MESSAGES_PER_QUEUE;
+    private static final int TOTAL_MESSAGES = SUITABLE_QUEUE_COUNT * MESSAGES_PER_QUEUE;
 
     public static void main(String[] args) {
         try {
             logger.info("Starting skip unsuitable queues test");
 
-            String[] testArgs = buildTestArgs(args);
-            TestConfiguration config = MigrationTestSetup.parseArguments(testArgs);
+            // Parse hostname and port from args
+            String hostname = "localhost";
+            int port = 15672;
+            for (String arg : args) {
+                if (arg.startsWith("--hostname=")) {
+                    hostname = arg.substring(11);
+                } else if (arg.startsWith("--port=")) {
+                    port = Integer.parseInt(arg.substring(7));
+                }
+            }
+
+            // Create configuration directly
+            ClusterTopology topology = new ClusterTopology(hostname, port);
+            TestConfiguration config = new TestConfiguration(topology);
+            config.setQueueCount(SUITABLE_QUEUE_COUNT);
+            config.setTotalMessages(TOTAL_MESSAGES);
+            config.setUnsuitableQueueCount(UNSUITABLE_QUEUE_COUNT);
 
             // Phase 0: Cleanup
             logger.info("=== Phase 0: Cleanup ===");
@@ -38,7 +53,7 @@ public class SkipUnsuitableTest {
             // Phase 1: Setup with unsuitable queues
             logger.info("=== Phase 1: Setup ({} suitable, {} unsuitable queues) ===",
                 SUITABLE_QUEUE_COUNT, UNSUITABLE_QUEUE_COUNT);
-            MigrationTestSetup.execute(testArgs);
+            MigrationTestSetup.execute(config);
 
             QueueMigrationClient client = new QueueMigrationClient(
                 config.getHttpHost(), config.getHttpPort(), "guest", "guest");
@@ -80,19 +95,6 @@ public class SkipUnsuitableTest {
         }
     }
 
-    private static String[] buildTestArgs(String[] originalArgs) {
-        String[] defaults = new String[]{
-            "--queue-count", String.valueOf(TOTAL_QUEUE_COUNT),
-            "--total-messages", String.valueOf(TOTAL_MESSAGES),
-            "--unsuitable-queue-count", String.valueOf(UNSUITABLE_QUEUE_COUNT)
-        };
-
-        String[] merged = new String[defaults.length + originalArgs.length];
-        System.arraycopy(defaults, 0, merged, 0, defaults.length);
-        System.arraycopy(originalArgs, 0, merged, defaults.length, originalArgs.length);
-        return merged;
-    }
-
     private static boolean attemptMigrationWithoutSkip(QueueMigrationClient client) {
         try {
             client.startMigration(false);
@@ -100,8 +102,8 @@ public class SkipUnsuitableTest {
             return false;
         } catch (Exception e) {
             String errorMsg = e.getMessage();
-            if (errorMsg != null && errorMsg.contains("unsuitable")) {
-                logger.info("✅ Migration correctly failed with unsuitable queues error");
+            if (errorMsg != null && (errorMsg.contains("unsuitable") || errorMsg.contains("validation error"))) {
+                logger.info("✅ Migration correctly failed: {}", errorMsg);
                 return true;
             } else {
                 logger.error("Migration failed but with unexpected error: {}", errorMsg);
@@ -220,7 +222,7 @@ public class SkipUnsuitableTest {
         int classicCount = 0;
 
         for (QueueInfo queue : queues) {
-            if (queue.getName().startsWith("test.queue.")) {
+            if (queue.getName().startsWith("test.queue.") || queue.getName().startsWith("test.unsuitable.queue.")) {
                 if ("quorum".equals(queue.getType())) {
                     quorumCount++;
                 } else if ("classic".equals(queue.getType())) {

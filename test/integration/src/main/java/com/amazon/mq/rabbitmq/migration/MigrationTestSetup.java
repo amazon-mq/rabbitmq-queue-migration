@@ -24,10 +24,12 @@ public class MigrationTestSetup {
     }
 
     public static void execute(String[] args) {
-        try {
-            // Parse command line arguments
-            TestConfiguration config = parseArguments(args);
+        TestConfiguration config = parseArguments(args);
+        execute(config);
+    }
 
+    public static void execute(TestConfiguration config) {
+        try {
             if (config.isSkipSetup()) {
                 logger.info("Skipping migration test setup");
                 return;
