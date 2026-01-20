@@ -859,7 +859,7 @@ start_migration_on_node(
         case QueueCount > 0 of
             true ->
                 % Update total queue count in the migration record and create queue status records
-                case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues2, VHost) of
+                case rqm_db:update_migration_with_queues(MigrationId, EligibleQueues3, VHost) of
                     {atomic, {ok, UpdatedQueueCount}} ->
                         ?LOG_DEBUG("rqm: updated migration record with ~w queues", [
                             UpdatedQueueCount
@@ -870,7 +870,7 @@ start_migration_on_node(
                         ])
                 end,
                 % Process the eligible queues
-                process_queues_for_migration(EligibleQueues2, Gatherer, MigrationId),
+                process_queues_for_migration(EligibleQueues3, Gatherer, MigrationId),
                 {ok, {node_queue_count, QueueCount}};
             false ->
                 {ok, {node_queue_count, 0}}
