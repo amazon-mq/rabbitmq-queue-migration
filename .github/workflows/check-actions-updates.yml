@@ -1,4 +1,4 @@
-name: check-actions-updates
+name: Check-Actions-Updates
 
 on:
   workflow_dispatch:
