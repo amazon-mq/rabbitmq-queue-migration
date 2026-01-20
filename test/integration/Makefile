@@ -61,3 +61,8 @@ integration-batch: package
 	java -jar $(JAR) batch-test \
 		--hostname=localhost \
 		--port=15672
+
+integration-empty-queue: package
+	java -jar $(JAR) empty-queue-test \
+		--hostname=localhost \
+		--port=15672
