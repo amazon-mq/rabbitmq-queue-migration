@@ -34,6 +34,14 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
+## Web UI
+
+The plugin extends the RabbitMQ Management UI with:
+- **Queue Migration** tab in Admin section
+- Real-time progress monitoring
+- Migration history
+- Per-queue status details
+
 ## Installation
 
 ```shell
@@ -170,14 +178,6 @@ Quick checks:
 - **Migration fails to start:** Run compatibility check to identify issues
 - **Migration stuck:** Check status and broker logs
 - **Rollback required:** Manual cleanup needed (automatic rollback not implemented)
-
-## Web UI
-
-The plugin extends the RabbitMQ Management UI with:
-- **Queue Migration** tab in Admin section
-- Real-time progress monitoring
-- Migration history
-- Per-queue status details
 
 ## Contributing
 
