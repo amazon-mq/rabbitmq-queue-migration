@@ -204,80 +204,9 @@ The plugin automatically converts or removes queue arguments during migration:
 
 ## Configuration
 
-### Using `rabbitmq.conf` (Recommended)
+The plugin provides extensive configuration options for tuning performance, disk space management, and message count verification.
 
-```ini
-queue_migration.snapshot_mode = ebs
-queue_migration.ebs_volume_device = /dev/sdh
-queue_migration.cleanup_snapshots_on_success = true
-queue_migration.worker_pool_max = 32
-queue_migration.max_queues_for_migration = 10000
-queue_migration.max_migration_duration_ms = 2700000
-queue_migration.min_disk_space_buffer = 524288000
-queue_migration.disk_usage_peak_multiplier = 2.0
-queue_migration.max_memory_usage_percent = 40
-queue_migration.message_count_over_tolerance_percent = 5.0
-queue_migration.message_count_under_tolerance_percent = 0.0
-queue_migration.shovel_prefetch_count = 128
-```
-
-### Using `advanced.config`
-
-The plugin also supports configuration via `advanced.config`:
-
-```erlang
-[
-  {rabbitmq_queue_migration, [
-    %% Progress update frequency (messages between database updates)
-    %% Range: 1-4096, Default: 10
-    {progress_update_frequency, 10},
-
-    %% Worker pool size (capped at scheduler count for stability)
-    %% Range: 1-32, Default: 32
-    {worker_pool_max, 32},
-
-    %% Maximum queues per migration
-    %% Default: 500
-    {max_queues_for_migration, 500},
-
-    %% Minimum free disk space buffer (bytes)
-    %% Default: 524288000 (500MiB)
-    {min_disk_space_buffer, 524288000},
-
-    %% Peak disk usage multiplier for migration estimation
-    %% Default: 2.0
-    {disk_usage_peak_multiplier, 2.0},
-
-    %% Maximum memory usage percentage
-    %% Range: 1-100, Default: 40
-    {max_memory_usage_percent, 40},
-
-    %% Message count verification tolerances
-    %% Over-delivery tolerance (extra messages), Default: 5.0%
-    {message_count_over_tolerance_percent, 5.0},
-    %% Under-delivery tolerance (missing messages), Default: 0.0%
-    {message_count_under_tolerance_percent, 0.0},
-
-    %% Shovel prefetch count for message transfer
-    %% Default: 1024
-    {shovel_prefetch_count, 1024},
-
-    %% Snapshot mode: ebs (production), tar (testing/development), or none (disabled)
-    %% Default: ebs
-    {snapshot_mode, ebs},
-
-    %% EBS volume device path (for EBS snapshots)
-    %% Default: "/dev/sdh"
-    {ebs_volume_device, "/dev/sdh"},
-
-    %% Cleanup snapshots on successful migration
-    %% Default: true
-    {cleanup_snapshots_on_success, true}
-  ]}
-].
-```
-
-**Note:** Most users should not need to change these defaults. They are tuned for typical production workloads based on extensive testing with 500-1000 queues on m7g.large instances.
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for complete configuration reference including all parameters, defaults, and tuning examples.
 
 ## Snapshot Support
 
