@@ -1497,8 +1497,8 @@ wait_for_shovel_completion_stable(
             {ok, SrcCount} = rqm_db:get_message_count(SrcQueue),
             {ok, DestCount} = rqm_db:get_message_count(DestQueue),
 
-            % Keep last 3 destination counts for stability check
-            NewHistory = [DestCount | lists:sublist(DestCountHistory, 2)],
+            % Keep last 10 destination counts for stability check
+            NewHistory = [DestCount | lists:sublist(DestCountHistory, 9)],
 
             ExpectedTotal = maps:get(expected_total, PreMigrationCounts),
 
@@ -1552,8 +1552,8 @@ check_shovel_completion_by_stability(_ExpectedTotal, 0, DestCount, DestCountHist
     % Even when source is empty, wait for destination count stability
     % to handle race conditions with quorum queue count updates
     case length(DestCountHistory) of
-        N when N >= 3 ->
-            % Check if destination count has been stable for 3 iterations
+        N when N >= 10 ->
+            % Check if destination count has been stable for 10 iterations
             case lists:all(fun(Count) -> Count =:= DestCount end, DestCountHistory) of
                 true ->
                     % Source empty AND destination stable - transfer complete
