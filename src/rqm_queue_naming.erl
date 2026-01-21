@@ -14,7 +14,9 @@
 %% Creates name in format: tmp_<timestamp>_<original_name>
 %% This ensures uniqueness even if original name starts with tmp_
 -spec add_temp_prefix(binary(), {integer(), atom()}) -> binary().
-add_temp_prefix(OriginalName, {Timestamp, _Node}) when is_binary(OriginalName), is_integer(Timestamp) ->
+add_temp_prefix(OriginalName, {Timestamp, _Node}) when
+    is_binary(OriginalName), is_integer(Timestamp)
+->
     TimestampBin = integer_to_binary(Timestamp),
     <<"tmp_", TimestampBin/binary, "_", OriginalName/binary>>.
 
