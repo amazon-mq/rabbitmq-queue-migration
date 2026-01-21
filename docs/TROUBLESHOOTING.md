@@ -414,12 +414,12 @@ vm_memory_high_watermark.relative = 0.6
 - Classic queues remain with original data
 
 **Current State:**
-- Automatic rollback is not implemented
+- Automatic rollback is not implemented in this plugin
 - Manual intervention required to clean up
 
 **Manual Recovery:**
 
-Since automatic rollback is not implemented, the safest recovery method is to restore from snapshots:
+Since automatic rollback is not implemented in this plugin, the safest recovery method is to restore from snapshots:
 
 1. **Stop RabbitMQ on all nodes**
 2. **Restore from snapshots** (EBS or tar - see [Snapshots Guide](SNAPSHOTS.md))
@@ -433,7 +433,7 @@ Since automatic rollback is not implemented, the safest recovery method is to re
 - Classic queues may have been deleted during phase 1
 - Manual cleanup is error-prone and risks data loss
 
-**Note:** Automatic rollback is planned for future release but not currently implemented.
+**Note:** Automatic rollback is a feature of Amazon MQ for RabbitMQ and is not planned for this open-source plugin. For tar snapshot restoration, see `priv/tools/restore_snapshot_test.sh` as a starting point.
 
 ---
 
