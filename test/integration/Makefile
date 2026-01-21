@@ -37,7 +37,7 @@ start-cluster: rabbitmq-queue-migration-plugin
 stop-cluster:
 	$(MAKE) -C $(CURDIR)/docker stop-cluster
 
-integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch
+integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch integration-empty-queue
 
 integration-end-to-end: package
 	java -jar $(JAR) end-to-end \
