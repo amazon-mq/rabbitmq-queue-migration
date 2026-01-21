@@ -2,7 +2,7 @@
 
 **Last Updated:** January 21, 2026
 
-This guide covers common issues, error messages, and solutions when using the RabbitMQ Queue Migration Plugin.
+This guide covers potential issues, error messages, and solutions when using the RabbitMQ Queue Migration Plugin.
 
 ---
 
@@ -21,7 +21,7 @@ This guide covers common issues, error messages, and solutions when using the Ra
 
 **Symptom:** Compatibility check returns errors before migration can start
 
-**Common Causes and Solutions:**
+**Possible Causes and Solutions:**
 
 #### 1. Shovel Plugin Not Enabled
 
@@ -253,7 +253,7 @@ tail -f /var/log/rabbitmq/rabbit@<node>.log | grep rqm
 curl -u guest:guest http://localhost:15672/api/shovels
 ```
 
-**Common Causes:**
+**Possible Causes:**
 
 #### 1. Shovel Creation Failed
 
@@ -303,11 +303,9 @@ curl -u guest:guest \
 # Check error field for specific queue
 ```
 
-**Common Failure Reasons:**
+**Possible Failure Reasons:**
 
 #### 1. Shovel Transfer Failed
-
-**Error:** Shovel encountered error during message transfer
 
 **Cause:** Shovel encountered error during message transfer
 

@@ -164,7 +164,7 @@ See [Integration Testing](docs/INTEGRATION_TESTING.md) for test setup and execut
 
 ## Troubleshooting
 
-For common issues and solutions, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
+For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
 
 Quick checks:
 - **Migration fails to start:** Run compatibility check to identify issues
@@ -195,7 +195,7 @@ See [CONTRIBUTING](CONTRIBUTING.md) for contribution guidelines.
 
 ### Feature Guides
 - [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Troubleshooting guidance
 
 ### Technical Documentation
 - [AGENTS](AGENTS.md) - Architecture and implementation details
