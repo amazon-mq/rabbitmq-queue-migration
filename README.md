@@ -129,78 +129,16 @@ See [docs/HTTP_API.md](docs/HTTP_API.md) for complete API reference.
 
 ## Migration Process
 
-### Pre-Migration Validation
+The plugin uses a two-phase migration process to safely convert classic queues to quorum queues:
 
-The plugin performs comprehensive checks before starting migration:
+1. **Phase 1:** Classic → Temporary Quorum (with `tmp_<timestamp>_` prefix)
+2. **Phase 2:** Temporary → Final Quorum (original name)
 
-**System-Level Checks** (always block migration):
-1. **Plugin Requirements**: Validates `rabbitmq_shovel` is enabled and Khepri is disabled
-2. **Configuration**: Checks `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
-3. **Queue Balance**: Ensures queue leaders are balanced across nodes
-4. **Disk Space**: Estimates required disk space and verifies availability
-5. **System Health**: Checks for active alarms and memory pressure
-6. **Snapshot Availability**: Verifies no concurrent EBS snapshots in progress
-7. **Cluster Health**: Validates no partitions and all nodes are up
+This approach ensures no name conflicts and allows safe rollback if issues occur. Empty queues use a fast path that skips the two-phase process.
 
-**Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
-1. **Queue Synchronization**: Verifies all mirrored classic queues are fully synchronized
-2. **Queue Suitability**: Confirms queues don't have unsuitable arguments (e.g., `reject-publish-dlx`)
+**Important:** Migration suspends non-HTTP listeners broker-wide and closes all client connections. Plan migration windows accordingly.
 
-When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
-
-### Two-Phase Migration
-
-**Phase 1: Classic → Temporary Quorum**
-1. Create temporary quorum queue with `tmp_` prefix
-2. Copy all bindings from classic to temporary queue
-3. Migrate messages one-by-one
-4. Delete original classic queue
-
-**Phase 2: Temporary → Final Quorum**
-1. Create final quorum queue with original name
-2. Copy all bindings from temporary to final queue
-3. Migrate messages from temporary to final queue
-4. Delete temporary queue
-
-### Connection Handling During Migration
-
-**Pre-Migration Preparation:**
-- Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended broker-wide
-- All existing client connections are closed
-- HTTP API remains available for monitoring migration progress
-
-**During Migration:**
-- Clients cannot connect to the broker (non-HTTP protocols)
-- HTTP API remains accessible for monitoring
-- Migration progress can be monitored via HTTP API
-
-**Post-Migration:**
-- All listeners are restored automatically
-- Clients can reconnect to the broker
-- Migrated queues are now quorum queues with preserved bindings and messages
-
-**Important:** The connection suspension affects the entire broker, not just the vhost being migrated. Plan migration windows accordingly.
-
-### Queue Eligibility
-
-A queue is eligible for migration if:
-- Queue type is `rabbit_classic_queue`
-- Queue has HA policy applied (mirrored)
-- Queue is not exclusive
-
-### Automatic Argument Conversion
-
-The plugin automatically converts or removes queue arguments during migration:
-
-| Classic Queue Argument | Quorum Queue Equivalent | Notes |
-|------------------------|-------------------------|-------|
-| `x-queue-type: classic` | `x-queue-type: quorum` | Required conversion |
-| `x-max-priority` | *removed* | Not supported in quorum queues |
-| `x-queue-mode` | *removed* | Lazy mode doesn't apply |
-| `x-queue-master-locator` | *removed* | Classic queue specific |
-| `x-queue-version` | *removed* | Classic queue specific |
-
-**Important:** Queues with `x-overflow: reject-publish-dlx` are **not eligible** for migration. This argument is unsuitable with quorum queues and will cause the compatibility check to fail. Quorum queues support `drop-head` and `reject-publish`, but `reject-publish` does not provide dead lettering like `reject-publish-dlx` does in classic queues.
+See [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for complete details on the migration process, validation checks, queue eligibility, and argument conversion.
 
 ## Configuration
 
@@ -387,6 +325,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ### Getting Started
 - [README.md](README.md) - Overview, installation, and quick start
+- [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) - Migration process and validation
 - [docs/HTTP_API.md](docs/HTTP_API.md) - Complete HTTP API reference
 - [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) - Practical API usage examples
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Configuration parameter reference
