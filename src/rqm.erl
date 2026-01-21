@@ -1507,8 +1507,8 @@ wait_for_shovel_completion_stable(
             of
                 {completed, Reason} ->
                     ?LOG_DEBUG(
-                        "rqm: shovel completed (~p) - src: ~w, dest: ~w",
-                        [Reason, SrcCount, DestCount]
+                        "rqm: shovel completed (~p) after ~w stability iterations - src: ~w, dest: ~w",
+                        [Reason, length(NewHistory), SrcCount, DestCount]
                     ),
                     {ok, _} = verify_and_update_progress(
                         ExpectedTotal, FinalResource, MigrationId, SrcQueue, DestQueue
