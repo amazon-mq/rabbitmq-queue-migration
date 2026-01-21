@@ -100,7 +100,6 @@ format_migration_id({Timestamp, Node}) ->
     MigrationId = {Timestamp, Node},
     base64url_encode(term_to_binary(MigrationId)).
 
-%% @doc Generate a unique migration ID
 -spec generate_migration_id() -> {integer(), atom()}.
 generate_migration_id() ->
     {erlang:system_time(millisecond), node()}.

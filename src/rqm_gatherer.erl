@@ -32,16 +32,10 @@
     code_change/3
 ]).
 
-%%----------------------------------------------------------------------------
-
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 
-%%----------------------------------------------------------------------------
-
 -record(gstate, {forks, values, blocked}).
-
-%%----------------------------------------------------------------------------
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
@@ -78,8 +72,6 @@ sync_in(Pid, Value) ->
 
 out(Pid) ->
     gen_server2:call(Pid, out, infinity).
-
-%%----------------------------------------------------------------------------
 
 init([]) ->
     {ok, #gstate{forks = 0, values = queue:new(), blocked = queue:new()}, hibernate,
@@ -139,8 +131,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, State) ->
     State.
-
-%%----------------------------------------------------------------------------
 
 in(Value, From, State = #gstate{values = Values, blocked = Blocked}) ->
     case queue:out(Blocked) of

@@ -14,16 +14,10 @@
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_queue).
 -define(KHEPRI_WILDCARD_STAR_STAR, #if_path_matches{regex = any}).
 
-%% -------------------------------------------------------------------
-%% get_all_by_vhost_and_type().
-%% -------------------------------------------------------------------
 -spec get_all_by_vhost_and_type(VHostName, Type) -> [Queue] when
     VHostName :: vhost:name(),
     Type :: atom(),
     Queue :: amqqueue:amqqueue().
-%% @doc Gets all queues belonging to the given virtual host and type
-%%
-%% @returns a list of queue records.
 get_all_by_vhost_and_type(VHostName, Type) ->
     Pattern = pattern_match_on_name_and_type(rabbit_misc:r(VHostName, queue), Type),
     rabbit_khepri:handle_fallback(
@@ -46,16 +40,10 @@ get_all_by_pattern_in_khepri(Pattern) ->
             ]
     ).
 
-%% -------------------------------------------------------------------
-%% get_all_by_type_and_node().
-%% -------------------------------------------------------------------
 -spec get_all_by_type_and_node(Type, Node) -> [Queue] when
     Type :: atom(),
     Node :: 'none' | atom(),
     Queue :: amqqueue:amqqueue().
-%% @doc Gets all queues belonging to the given type
-%%
-%% @returns a list of queue records.
 get_all_by_type_and_node(Type, Node) ->
     rabbit_khepri:handle_fallback(
         #{

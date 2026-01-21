@@ -11,7 +11,6 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-%% Internal record for validation options
 -export([
     start/1,
     validate_migration/1,
@@ -25,6 +24,7 @@
 ]).
 
 %% Public API
+
 start(OptsMap) when is_map(OptsMap) ->
     try
         Opts = build_migration_opts(migration, OptsMap),
@@ -59,7 +59,7 @@ status() ->
         global:del_lock(Id)
     end.
 
-%% Private
+%% Private API
 
 build_migration_opts(Mode, OptsMap) ->
     VHost = maps:get(vhost, OptsMap, <<"/">>),
@@ -297,28 +297,14 @@ start_with_lock(
         SkippedCount
     ),
     try
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %% Pre-migration Preparation
-        %% 1 - stop connections
-        %% 2 - quiesce node
-        %% 3 - EBS snapshot
         {ok, PreparationState} = pre_migration_preparation(Nodes, VHost),
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %% MCQ -> QQ Migration
-        %%
         {ok, MigrationDuration, CompletionStatus} = mcq_qq_migration(
             PreparationState, Nodes, Opts
         ),
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %% Post-migration Restore
-        %%
         ok = post_migration_restore(Nodes, PreparationState, VHost),
 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %% Migration stats
-        %% Get the final count of total queues
         ok = post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus),
         ok
     catch
@@ -329,10 +315,6 @@ start_with_lock(
     after
         global:del_lock(GlobalLockId)
     end.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Migration exception handler
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec handle_migration_exception_on_nodes([node()], atom(), term()) -> ok.
 handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
@@ -349,14 +331,12 @@ handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
     ok.
 
 handle_migration_exception(Class, Ex, Stack, MigrationId) ->
-    % Log exception class without the full error details
     ?LOG_ERROR(
         "rqm: CRITICAL EXCEPTION in migration ~s: ~tp",
         [format_migration_id(MigrationId), Class]
     ),
     ?LOG_ERROR("~tp", [Stack]),
 
-    % Log specific error types for better debugging
     case Ex of
         {badmatch, _} ->
             ?LOG_ERROR("rqm: badmatch error in migration ~s", [format_migration_id(MigrationId)]);
@@ -378,7 +358,6 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
             ])
     end,
 
-    % Update migration record as failed with error reason
     ErrorReason = format_migration_error(Class, Ex),
     case rqm_db:update_migration_failed(MigrationId, ErrorReason) of
         {ok, _} ->
@@ -389,10 +368,6 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
             ]),
             ok
     end.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Post-migration Stats
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus) ->
     ?LOG_INFO("rqm: retrieving final statistics for migration ~s", [
@@ -413,10 +388,6 @@ post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus) ->
     ?LOG_INFO("rqm:   Total queues processed: ~w", [TotalQueues]),
     ?LOG_INFO("rqm:   Nodes involved: ~w", [length(Nodes)]),
     ok.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Migration Preparation
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 pre_migration_preparation(Nodes, VHost) ->
     ?LOG_DEBUG(
@@ -512,10 +483,6 @@ do_migration_preparation(VHost) ->
             erlang:raise(Class, Reason, Stack)
     end.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Post-migration Restore
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 post_migration_restore(Nodes, PreparationState, VHost) when is_map(PreparationState) ->
     ?LOG_DEBUG(
         "rqm: starting post-migration restore for vhost ~tp on nodes ~tp",
@@ -580,7 +547,6 @@ start_post_migration_restore_on_node(RestoreGatherer, NodePreparationState, VHos
                 ConnectionPreparationState
             ),
 
-            %% Clean up snapshots if enabled
             ok = cleanup_node_snapshots(NodePreparationState),
 
             Result = {ok, #{node() => ConnectionRestorationState}},
@@ -599,7 +565,6 @@ start_post_migration_restore_on_node(RestoreGatherer, NodePreparationState, VHos
     end,
     ok = submit_to_worker_pool(RestoreFun).
 
-%% @doc Clean up snapshots for the current node if cleanup is enabled
 -spec cleanup_node_snapshots(map()) -> ok.
 cleanup_node_snapshots(NodePreparationState) ->
     case rqm_config:cleanup_snapshots_on_success() of
@@ -612,15 +577,12 @@ cleanup_node_snapshots(NodePreparationState) ->
                     ?LOG_DEBUG("rqm: no snapshots to clean up for node ~tp", [node()]),
                     ok;
                 SnapshotState when is_binary(SnapshotState) ->
-                    %% Tar mode - single snapshot
                     cleanup_single_snapshot(SnapshotState);
                 {SnapshotId, _VolumeId} when is_binary(SnapshotId) ->
-                    %% EBS mode - single snapshot
                     cleanup_single_snapshot(SnapshotId)
             end
     end.
 
-%% @doc Clean up a single snapshot (tar or EBS mode)
 -spec cleanup_single_snapshot(binary()) -> ok.
 cleanup_single_snapshot(SnapshotId) ->
     case rqm_snapshot:cleanup_snapshot(SnapshotId) of
@@ -630,10 +592,6 @@ cleanup_single_snapshot(SnapshotId) ->
             ?LOG_WARNING("rqm: failed to clean up snapshot ~p: ~p", [SnapshotId, Reason])
     end,
     ok.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% MCQ -> QQ Migration
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 mcq_qq_migration(
     PreparationState,
@@ -651,10 +609,8 @@ mcq_qq_migration(
     ),
     Start = erlang:system_time(second),
 
-    %% Store snapshot information in migration record
     ok = store_snapshot_information(MigrationId, PreparationState),
 
-    %% Create skipped queue status records for unsuitable queues
     ok = create_skipped_queue_records(MigrationId, UnsuitableQueues),
 
     ?LOG_DEBUG("rqm: starting rqm_gatherer for migration ~s", [format_migration_id(MigrationId)]),
@@ -945,7 +901,6 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         [length(OriginalBindings), rabbit_misc:rs(Resource)]
     ),
 
-    % Update queue status to in_progress
     ?LOG_DEBUG("rqm: marking ~ts as in_progress", [rabbit_misc:rs(Resource)]),
     {ok, TotalMessageCount} = rqm_db:get_message_count(Resource),
     ?LOG_DEBUG(
@@ -1022,7 +977,6 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                             ),
                             ?LOG_ERROR("~tp", [Stack]),
 
-                            % Log specific error types for better debugging
                             case Reason of
                                 {queue_not_found, _} ->
                                     ?LOG_WARNING("rqm: ~ts was deleted during migration", [
@@ -1038,7 +992,6 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                                     ])
                             end,
 
-                            % Update queue status to failed
                             ?LOG_DEBUG("rqm: marking ~ts as failed", [rabbit_misc:rs(Resource)]),
                             {ok, _} = rqm_db:update_queue_status_failed(
                                 Resource,
@@ -1050,7 +1003,6 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                             ),
 
                             % CRITICAL: Set migration status to rollback_pending on first failure
-                            % But only if rollback is enabled
                             ?LOG_CRITICAL(
                                 "rqm: CRITICAL - failure detected for ~ts, setting migration status to rollback_pending",
                                 [rabbit_misc:rs(Resource)]
@@ -1194,7 +1146,6 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
         0
     ),
 
-    % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
     ?LOG_DEBUG("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
@@ -1225,7 +1176,6 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
         [rabbit_misc:rs(Resource), Phase2Time]
     ),
 
-    % Update queue status to completed
     ?LOG_DEBUG("rqm: marking ~ts as completed", [rabbit_misc:rs(Resource)]),
     {ok, _} = rqm_db:update_queue_status_completed(
         Resource,
@@ -1235,7 +1185,6 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
         Status#queue_migration_status.total_messages
     ),
 
-    % Update overall migration progress
     {ok, _} = rqm_db:update_migration_completed_count(Status#queue_migration_status.migration_id),
 
     {ok, QuorumQ1}.
@@ -1320,7 +1269,6 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
 migrate_queue_messages(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
     ok = migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase).
 
-%% Shovel-based message migration implementation
 migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
     OldQName = get_queue_name(OldQ),
     NewQName = get_queue_name(NewQ),
@@ -1349,15 +1297,12 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
         expected_total => MessagesToMigrate + DestInitialCount
     },
 
-    %% Create shovel definition for high-performance message transfer
     ShovelDef = rqm_shovel:build_definition(OldQName, NewQName, MessagesToMigrate, VHost),
 
     try
-        %% Create and verify shovel with retry logic
         ?LOG_DEBUG("rqm: creating and verifying shovel ~ts", [ShovelName]),
         ok = rqm_shovel:create_and_verify(VHost, ShovelName, ShovelDef),
 
-        %% Wait for shovel to complete migration
         ok = wait_for_shovel_completion(
             ShovelName, VHost, FinalResource, MigrationId, OldQ, NewQ, PreMigrationCounts
         )
@@ -1367,7 +1312,6 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
             ?LOG_ERROR("~tp", [Stack]),
             erlang:raise(Class, Reason, Stack)
     after
-        %% Always clean up shovel parameter
         rqm_shovel:cleanup(ShovelName, VHost)
     end.
 
@@ -1425,9 +1369,6 @@ convert_args(Args) ->
         ),
     [QQType | NewArgs].
 
-%% Helper functions for shovel-based migration
-
-%% Create a unique shovel name for migration
 create_migration_shovel_name(Resource, Phase) ->
     QueueName = Resource#resource.name,
     PhaseStr =
@@ -1437,12 +1378,10 @@ create_migration_shovel_name(Resource, Phase) ->
         end,
     <<"migration_", QueueName/binary, PhaseStr/binary>>.
 
-%% Get queue name from amqqueue record
 get_queue_name(Q) ->
     Resource = amqqueue:get_name(Q),
     Resource#resource.name.
 
-%% Get vhost from resource
 get_vhost_from_resource(Resource) ->
     Resource#resource.virtual_host.
 
@@ -1742,8 +1681,6 @@ ensure_no_local_connections() ->
             true
     end.
 
-%% API for retrieving migration status
-
 get_migration_status() ->
     rqm_db:get_migration_status().
 
@@ -1790,7 +1727,6 @@ format_migration_error(
     {error,
         {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}
 ) ->
-    % Extract AWS error message from snapshot failure
     case extract_aws_error_message(Details) of
         {ok, Code, Message} ->
             iolist_to_binary(io_lib:format("Snapshot creation failed: ~s - ~s", [Code, Message]));
@@ -1800,7 +1736,6 @@ format_migration_error(
 format_migration_error(Class, Ex) ->
     iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
 
-%% Extract AWS error code and message from error details
 extract_aws_error_message(Details) when is_list(Details) ->
     try
         Errors = proplists:get_value("Errors", Details),
@@ -1868,10 +1803,6 @@ count_errors_and_aborted(Errors) ->
     ErrorCount = length([E || E <- Errors, element(1, E) =:= error]),
     AbortedCount = length([A || A <- Errors, element(1, A) =:= aborted]),
     {ErrorCount, AbortedCount}.
-
-%% =============================================================================
-%% Connection management for migrations
-%% =============================================================================
 
 %% @doc Prepare the RabbitMQ node connections for migration
 %% 1. Suspend non-HTTP listeners (blocks AMQP connections, keeps HTTP API available)
@@ -1965,10 +1896,6 @@ restore_connection_listeners(#{
         restoration_timestamp => erlang:system_time(millisecond)
     },
     {ok, RestorationState}.
-
-%% =============================================================================
-%% EBS Snapshot-based Migration Workflow (Internal Functions)
-%% =============================================================================
 
 %% @doc Prepare the RabbitMQ cluster for EBS snapshot creation
 %% This function implements the pre-snapshot quiescing workflow:

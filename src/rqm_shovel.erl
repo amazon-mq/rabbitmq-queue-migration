@@ -93,7 +93,6 @@ build_definition(SourceQueueName, DestQueueName, MessageCount, VHost) ->
         {<<"prefetch-count">>, Prefetch}
     ].
 
-%% @doc Calculate prefetch count based on message count
 -spec calculate_prefetch(non_neg_integer()) -> pos_integer().
 calculate_prefetch(MessageCount) ->
     MaxPrefetch = rqm_config:shovel_prefetch_count(),
@@ -150,7 +149,6 @@ verify_started(VHost, ShovelName, Attempts, Delay) ->
 cleanup(ShovelName, VHost) ->
     case rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName) of
         not_found ->
-            %% With "never" mode, not_found is an error condition
             ?LOG_ERROR(
                 "rqm: shovel ~ts not found during cleanup - this indicates a problem",
                 [ShovelName]
