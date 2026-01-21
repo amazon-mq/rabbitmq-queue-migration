@@ -400,9 +400,11 @@ vm_memory_high_watermark.relative = 0.6
 
 ## Rollback and Recovery
 
+**Note:** Migration failures requiring rollback are rare. The plugin's comprehensive pre-migration validation prevents most issues before migration starts.
+
 ### After Failed Migration
 
-**Scenario:** Migration failed with status `rollback_pending`
+**Scenario:** Migration failed with status `rollback_pending` (rare edge case)
 
 **What Happens:**
 - Migration status set to `rollback_pending`
