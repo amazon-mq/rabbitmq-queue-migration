@@ -148,79 +148,13 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for complete configuration re
 
 ## Snapshot Support
 
-The plugin creates snapshots before migration to enable rollback in case of failure. Two modes are supported:
+The plugin creates snapshots before migration to enable rollback if issues occur. Three modes are supported:
 
-### Tar Mode (Development/Testing)
+- **EBS Mode** (default) - AWS EBS snapshots for production
+- **Tar Mode** - Tar archives for development/testing
+- **None Mode** - Disabled (snapshots handled externally)
 
-Creates tar.gz archives of the RabbitMQ data directory. Use this mode for
-development and testing environments.
-
-**Configuration** (in `rabbitmq.conf`):
-```ini
-queue_migration.snapshot_mode = tar
-```
-
-Or in `advanced.config`:
-```erlang
-{snapshot_mode, tar}
-```
-
-**Snapshot Location:**
-```
-/tmp/rabbitmq_migration_snapshots/{ISO8601_timestamp}/{node_name}.tar.gz
-```
-
-**Example:**
-```
-/tmp/rabbitmq_migration_snapshots/2025-12-21T17:30:00Z/rabbit@node1.tar.gz
-```
-
-**Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
-
-### EBS Mode (Production - Default)
-
-Creates real AWS EBS snapshots using the EC2 API. This is the default mode
-for production deployments.
-
-**Configuration** (optional, these are the defaults):
-```erlang
-{snapshot_mode, ebs},
-{ebs_volume_device, "/dev/sdh"}
-```
-
-**Requirements:**
-- RabbitMQ data directory must be on an EBS volume
-- EBS volume must be attached at the configured device path (default: `/dev/sdh`)
-- EC2 instance must have IAM permissions:
-  - `ec2:CreateSnapshot`
-  - `ec2:DescribeVolumes`
-  - `ec2:DescribeSnapshots`
-  - `ec2:CreateTags`
-- AWS credentials configured (EC2 instance role recommended)
-
-**Snapshot Naming:**
-```
-Description: "RabbitMQ migration snapshot {ISO8601_timestamp} on {node_name}"
-```
-
-**Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
-
-See [docs/EC2_SETUP.md](docs/EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
-
-### None Mode (Disabled)
-
-Disables snapshot creation entirely. Use this mode when snapshots are not
-needed or are handled externally.
-
-**Configuration** (in `rabbitmq.conf`):
-```ini
-queue_migration.snapshot_mode = none
-```
-
-Or in `advanced.config`:
-```erlang
-{snapshot_mode, none}
-```
+See [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) for complete snapshot configuration and [docs/EC2_SETUP.md](docs/EC2_SETUP.md) for AWS IAM setup.
 
 ## Testing
 
@@ -314,6 +248,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 ### Getting Started
 - [README.md](README.md) - Overview, installation, and quick start
 - [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) - Migration process and validation
+- [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) - Snapshot modes and configuration
 - [docs/HTTP_API.md](docs/HTTP_API.md) - Complete HTTP API reference
 - [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) - Practical API usage examples
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Configuration parameter reference
