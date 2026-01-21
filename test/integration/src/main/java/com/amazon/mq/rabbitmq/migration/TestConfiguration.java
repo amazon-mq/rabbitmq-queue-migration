@@ -183,4 +183,11 @@ public class TestConfiguration {
     public void setUnsuitableQueueCount(int unsuitableQueueCount) {
         this.unsuitableQueueCount = Math.max(0, unsuitableQueueCount);
     }
+
+    private int quorumQueueCount = 0; // Number of quorum queues to create for testing
+
+    public int getQuorumQueueCount() { return quorumQueueCount; }
+    public void setQuorumQueueCount(int quorumQueueCount) {
+        this.quorumQueueCount = Math.max(0, quorumQueueCount);
+    }
 }

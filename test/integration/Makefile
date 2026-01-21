@@ -37,7 +37,7 @@ start-cluster: rabbitmq-queue-migration-plugin
 stop-cluster:
 	$(MAKE) -C $(CURDIR)/docker stop-cluster
 
-integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch integration-empty-queue
+integration-test: rabbitmq-queue-migration-plugin start-cluster integration-end-to-end integration-interrupt integration-skip-unsuitable integration-batch integration-empty-queue integration-already-quorum
 
 integration-end-to-end: package
 	java -jar $(JAR) end-to-end \
@@ -64,5 +64,10 @@ integration-batch: package
 
 integration-empty-queue: package
 	java -jar $(JAR) empty-queue-test \
+		--hostname=localhost \
+		--port=15672
+
+integration-already-quorum: package
+	java -jar $(JAR) already-quorum-test \
 		--hostname=localhost \
 		--port=15672

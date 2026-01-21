@@ -143,6 +143,9 @@ public class RabbitMQSetup {
         // 3.1. Create unsuitable queues for testing (if requested)
         createUnsuitableQueues();
 
+        // 3.2. Create quorum queues for testing (if requested)
+        createQuorumQueues();
+
         // 4. Create bindings
         createBindings();
 
@@ -490,6 +493,34 @@ public class RabbitMQSetup {
         }
 
         logger.info("HA synchronization check completed for all {} queues", queueCount);
+    }
+
+    private void createQuorumQueues() throws IOException {
+        int quorumQueueCount = config.getQuorumQueueCount();
+
+        if (quorumQueueCount <= 0) {
+            return; // No quorum queues to create
+        }
+
+        logger.info("Creating {} quorum queues for testing", quorumQueueCount);
+
+        for (int i = 0; i < quorumQueueCount; i++) {
+            String queueName = String.format("test.quorum.queue.%d", i);
+
+            // Round-robin across available channels
+            int nodeIndex = i % channels.length;
+            Channel nodeChannel = channels[nodeIndex];
+
+            // Queue arguments for quorum queues
+            Map<String, Object> arguments = new HashMap<>();
+            arguments.put("x-queue-type", "quorum");
+
+            nodeChannel.queueDeclare(queueName, true, false, false, arguments);
+            queueToConnectionMap.put(queueName, nodeIndex);
+            logger.debug("Created quorum queue: {} on node {}", queueName, nodeIndex + 1);
+        }
+
+        logger.info("Created {} quorum queues", quorumQueueCount);
     }
 
     private void createBindings() throws IOException {

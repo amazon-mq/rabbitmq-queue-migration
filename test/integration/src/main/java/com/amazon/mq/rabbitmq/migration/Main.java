@@ -24,6 +24,9 @@ public class Main {
         } else if (args.length > 0 && args[0].equals("empty-queue-test")) {
             String[] testArgs = Arrays.copyOfRange(args, 1, args.length);
             EmptyQueueTest.main(testArgs);
+        } else if (args.length > 0 && args[0].equals("already-quorum-test")) {
+            String[] testArgs = Arrays.copyOfRange(args, 1, args.length);
+            AlreadyQuorumTest.main(testArgs);
         } else if (args.length > 0 && args[0].equals("setup-env")) {
             String[] setupArgs = Arrays.copyOfRange(args, 1, args.length);
             MigrationTestSetup.main(setupArgs);
