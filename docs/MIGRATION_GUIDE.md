@@ -39,7 +39,7 @@ These checks always block migration if they fail:
 4. **Disk Space**
    - Estimates required disk space based on queue data size
    - Verifies sufficient free space available on all nodes
-   - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for disk space calculation details
+   - See [TROUBLESHOOTING](TROUBLESHOOTING.md) for disk space calculation details
 
 5. **System Health**
    - Checks for active memory or disk alarms
@@ -73,7 +73,7 @@ When `skip_unsuitable_queues` is enabled:
 - Skipped queues remain as classic queues
 - Can be migrated in subsequent runs after fixing issues
 
-See [SKIP_UNSUITABLE_QUEUES.md](SKIP_UNSUITABLE_QUEUES.md) for complete guide on using skip mode.
+See [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md) for complete guide on using skip mode.
 
 ---
 
@@ -262,8 +262,8 @@ Arguments that are compatible with quorum queues are preserved:
 
 ## Related Documentation
 
-- **API Reference:** [HTTP_API.md](HTTP_API.md)
-- **API Examples:** [API_EXAMPLES.md](API_EXAMPLES.md)
-- **Skip Unsuitable Queues:** [SKIP_UNSUITABLE_QUEUES.md](SKIP_UNSUITABLE_QUEUES.md)
-- **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- **Configuration:** [CONFIGURATION.md](CONFIGURATION.md)
+- **API Reference:** [HTTP_API](HTTP_API.md)
+- **API Examples:** [API_EXAMPLES](API_EXAMPLES.md)
+- **Skip Unsuitable Queues:** [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md)
+- **Troubleshooting:** [TROUBLESHOOTING](TROUBLESHOOTING.md)
+- **Configuration:** [CONFIGURATION](CONFIGURATION.md)

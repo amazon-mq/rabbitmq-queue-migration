@@ -125,7 +125,7 @@ curl -u guest:guest -X POST \
 
 In-flight queue migrations complete while remaining queues are skipped. The migration ends with status `interrupted`.
 
-See [docs/HTTP_API.md](docs/HTTP_API.md) for complete API reference.
+See [HTTP API](docs/HTTP_API.md) for complete API reference.
 
 ## Migration Process
 
@@ -138,13 +138,13 @@ This approach ensures no name conflicts and allows safe rollback if issues occur
 
 **Important:** Migration suspends non-HTTP listeners broker-wide and closes all client connections. Plan migration windows accordingly.
 
-See [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for complete details on the migration process, validation checks, queue eligibility, and argument conversion.
+See [Migration Guide](docs/MIGRATION_GUIDE.md) for complete details on the migration process, validation checks, queue eligibility, and argument conversion.
 
 ## Configuration
 
 The plugin provides extensive configuration options for tuning performance, disk space management, and message count verification.
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for complete configuration reference including all parameters, defaults, and tuning examples.
+See [Configuration Reference](docs/CONFIGURATION.md) for complete configuration reference including all parameters, defaults, and tuning examples.
 
 ## Snapshot Support
 
@@ -154,7 +154,7 @@ The plugin creates snapshots before migration to enable rollback if issues occur
 - **Tar Mode** - Tar archives for development/testing
 - **None Mode** - Disabled (snapshots handled externally)
 
-See [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) for complete snapshot configuration and [docs/EC2_SETUP.md](docs/EC2_SETUP.md) for AWS IAM setup.
+See [Snapshots Guide](docs/SNAPSHOTS.md) for complete snapshot configuration and [EC2 Setup](docs/EC2_SETUP.md) for AWS IAM setup.
 
 ## Testing
 
@@ -180,11 +180,11 @@ echo "127.0.0.1 rmq2" | sudo tee -a /etc/hosts
 make --file integration-test.mk integration-test
 ```
 
-See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
+See [Integration Testing](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
 
 ## Troubleshooting
 
-For common issues and solutions, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+For common issues and solutions, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
 
 Quick checks:
 - **Migration fails to start:** Run compatibility check to identify issues
@@ -201,29 +201,29 @@ The plugin extends the RabbitMQ Management UI with:
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See [CONTRIBUTING](CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
 
 ### Getting Started
-- [README.md](README.md) - Overview, installation, and quick start
-- [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) - Migration process and validation
-- [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) - Snapshot modes and configuration
-- [docs/HTTP_API.md](docs/HTTP_API.md) - Complete HTTP API reference
-- [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) - Practical API usage examples
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Configuration parameter reference
+- [README](README.md) - Overview, installation, and quick start
+- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration process and validation
+- [Snapshots Guide](docs/SNAPSHOTS.md) - Snapshot modes and configuration
+- [HTTP API](docs/HTTP_API.md) - Complete HTTP API reference
+- [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
+- [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
 
 ### Feature Guides
-- [docs/SKIP_UNSUITABLE_QUEUES.md](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ### Technical Documentation
-- [AGENTS.md](AGENTS.md) - Architecture and implementation details
-- [docs/VALIDATION_CHAIN.md](docs/VALIDATION_CHAIN.md) - Validation chain architecture
+- [AGENTS](AGENTS.md) - Architecture and implementation details
+- [Validation Chain](docs/VALIDATION_CHAIN.md) - Validation chain architecture
 
 ### Testing and Deployment
-- [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) - Integration testing guide
-- [docs/EC2_SETUP.md](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
+- [Integration Testing](docs/INTEGRATION_TESTING.md) - Integration testing guide
+- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
 
 ## Security
 

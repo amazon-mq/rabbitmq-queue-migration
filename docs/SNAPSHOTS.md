@@ -114,7 +114,7 @@ When enabled, EBS snapshots are automatically deleted after successful migration
 
 ### IAM Setup
 
-See [EC2_SETUP.md](EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
+See [EC2_SETUP](EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
 
 ---
 
@@ -177,6 +177,6 @@ queue_migration.cleanup_snapshots_on_success = false
 
 ## Related Documentation
 
-- **EC2 IAM Setup:** [EC2_SETUP.md](EC2_SETUP.md)
-- **Configuration Reference:** [CONFIGURATION.md](CONFIGURATION.md)
-- **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- **EC2 IAM Setup:** [EC2_SETUP](EC2_SETUP.md)
+- **Configuration Reference:** [CONFIGURATION](CONFIGURATION.md)
+- **Troubleshooting:** [TROUBLESHOOTING](TROUBLESHOOTING.md)
