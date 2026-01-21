@@ -1460,6 +1460,7 @@ filter_default_bindings(Bindings, QueueName) ->
 wait_for_shovel_completion(
     ShovelName, VHost, FinalResource, MigrationId, SrcQueue, DestQueue, PreMigrationCounts
 ) when ?is_amqqueue(SrcQueue), ?is_amqqueue(DestQueue) ->
+    % MaxRetries = 900, with 1-second sleep per retry = 15 minutes maximum wait
     wait_for_shovel_completion_stable(
         ShovelName,
         VHost,
@@ -1468,7 +1469,7 @@ wait_for_shovel_completion(
         SrcQueue,
         DestQueue,
         PreMigrationCounts,
-        180,
+        900,
         []
     ).
 
@@ -1526,8 +1527,9 @@ wait_for_shovel_completion_stable(
                         ]
                     ),
                     update_queue_status_progress(FinalResource, MigrationId, DestQueue),
-                    % TODO LRB configurable?
-                    timer:sleep(5000),
+
+                    timer:sleep(1000),
+
                     wait_for_shovel_completion_stable(
                         ShovelName,
                         VHost,
