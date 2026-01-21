@@ -23,46 +23,52 @@ This plugin provides a production-ready solution for migrating mirrored classic 
 | `rqm_config.erl` | Configuration management | Dynamic configuration calculation, safety limits, worker pool sizing |
 | `rqm_checks.erl` | Pre-migration validation | Comprehensive system readiness checks, resource validation |
 | `rqm_compat_checker.erl` | Queue compatibility analysis | Individual queue eligibility assessment |
-| `rqm_compat_checker_mgmt.erl` | Compatibility API | HTTP endpoints for queue compatibility checking |
-| `rqm_snapshot.erl` | EBS snapshot management | Creates EBS or tar-based snapshots during pre-migration preparation |
+| `rqm_snapshot.erl` | Snapshot management | Creates EBS or tar-based snapshots during pre-migration preparation |
 | `rqm_ebs.erl` | AWS EBS operations | Low-level EBS snapshot creation/deletion, volume discovery |
 | `rqm_db_queue.erl` | Queue database queries | Query queues by vhost/type, supports both Mnesia and Khepri |
 | `rqm_gatherer.erl` | Distributed result collection | Coordinates asynchronous task results across cluster nodes |
+| `rqm_shovel.erl` | Shovel management | Creates and manages shovels for message transfer with retry logic |
+| `rqm_queue_naming.erl` | Queue naming | Generates unique temporary queue names using migration ID timestamp |
 
 ### Data Structures
 
 #### Migration Record (`queue_migration`)
 ```erlang
 -record(queue_migration, {
-    id,                     % Unique migration ID (timestamp + node)
-    vhost,                  % Virtual host being migrated
-    started_at,             % Timestamp when migration started
-    completed_at,           % Timestamp when migration completed (null if in progress)
-    total_queues,           % Total number of queues to migrate
-    completed_queues,       % Number of queues completed
-    status,                 % Status: 'in_progress', 'completed', 'failed', 'rollback_pending', 'rollback_completed'
-    rollback_started_at,    % Timestamp when rollback started
-    rollback_completed_at,  % Timestamp when rollback completed
-    rollback_errors         % List of rollback errors per queue
+    id,                              % Unique migration ID (timestamp + node)
+    vhost,                           % Virtual host being migrated
+    started_at,                      % Timestamp when migration started
+    completed_at,                    % Timestamp when migration completed (null if in progress)
+    total_queues,                    % Total number of queues to migrate
+    completed_queues,                % Number of queues completed
+    skipped_queues = 0,              % Number of queues skipped
+    status :: migration_status(),    % Status: 'pending', 'in_progress', 'completed', 'failed', 'interrupted', 'rollback_pending', 'rollback_completed'
+    error,                           % Error details if failed (null otherwise)
+    rollback_started_at,             % Timestamp when rollback started
+    rollback_completed_at,           % Timestamp when rollback completed
+    rollback_errors,                 % List of rollback errors per queue
+    snapshots,                       % List of snapshot info: [{Node, SnapshotId, VolumeId}, ...]
+    skip_unsuitable_queues = false   % Whether to skip unsuitable queues instead of blocking migration
 }).
 ```
 
 #### Queue Status Record (`queue_migration_status`)
 ```erlang
 -record(queue_migration_status, {
-    queue_resource,         % Queue resource record (primary key)
-    migration_id,           % Reference to parent migration
-    original_queue_args,    % Store original classic queue arguments for rollback
-    original_bindings,      % Store original binding details for rollback
-    started_at,             % When this queue's migration started
-    completed_at,           % When this queue's migration completed (null if in progress)
-    total_messages,         % Total messages in queue at start
-    migrated_messages,      % Number of messages migrated so far
-    status,                 % Status: 'pending', 'in_progress', 'completed', 'failed', 'rollback_completed', 'rollback_failed'
-    error,                  % Error details if failed (null otherwise)
-    rollback_started_at,    % When rollback started for this queue
-    rollback_completed_at,  % When rollback completed for this queue
-    rollback_error          % Specific rollback error if any
+    key,                             % Composite primary key: {QueueResource, MigrationId}
+    queue_resource,                  % Queue resource record
+    migration_id,                    % Reference to parent migration
+    original_queue_args,             % Store original classic queue arguments for rollback
+    original_bindings,               % Store original binding details for rollback
+    started_at,                      % When this queue's migration started
+    completed_at,                    % When this queue's migration completed (null if in progress)
+    total_messages,                  % Total messages in queue at start
+    migrated_messages,               % Number of messages migrated so far
+    status :: queue_migration_status(), % Status: 'pending', 'in_progress', 'completed', 'failed', 'skipped'
+    error,                           % Error details if failed or skip reason if skipped (null otherwise)
+    rollback_started_at,             % When rollback started for this queue
+    rollback_completed_at,           % When rollback completed for this queue
+    rollback_error                   % Specific rollback error if any
 }).
 ```
 
@@ -71,11 +77,13 @@ This plugin provides a production-ready solution for migrating mirrored classic 
 ### Prerequisites (BEFORE Migration)
 
 1. **Cluster Health**: All cluster nodes must be running
-2. **No Active Connections**: No connections/channels to target virtual host
+2. **Plugin Enabled**: `rabbitmq_queue_migration` and `rabbitmq_shovel` plugins loaded
 3. **Queue Eligibility**: Only mirrored classic queues with HA policies
-4. **Plugin Enabled**: `rabbitmq_queue_migration` plugin loaded
+4. **Khepri Disabled**: Classic Mnesia required (Khepri not compatible)
 5. **AWS Configuration**: For EBS snapshots, AWS credentials and region must be configured
 6. **EBS Volume**: RabbitMQ data directory must be on EBS volume (configurable device path)
+
+**Note:** The plugin suspends non-HTTP listeners and closes client connections during migration. Active connections are not a prerequisite - they are handled automatically.
 
 ### Two-Phase Migration Algorithm
 
@@ -87,7 +95,7 @@ Pre-migration Preparation:
 └── Validate cluster state before proceeding
 
 Phase 1: Classic Queue → Temporary Quorum Queue
-├── Create temporary quorum queue with "tmp_" prefix
+├── Create temporary quorum queue with "tmp_<timestamp>_" prefix
 ├── Copy all bindings from classic to temporary queue
 ├── Migrate messages one-by-one (dequeue → deliver → settle)
 ├── Delete original classic queue
@@ -116,20 +124,28 @@ A queue is eligible for migration if ALL conditions are met:
 
 ### Message Migration Details
 
-- **Transfer Method**: Message-by-message dequeue/deliver/settle cycle
+- **Transfer Method**: Shovel-based message transfer between queues
+- **Shovel Configuration**: `ack-mode: on-confirm` for reliable delivery
+- **Prefetch**: Configurable (default: 128 messages)
 - **Progress Updates**: Configurable frequency (default: every 10 messages)
-- **Timeout Handling**: 2-minute timeout per queue, 5 retries (10 minutes total)
+- **Timeout Handling**: 2-minute timeout per queue, 15 retries (30 minutes total)
 - **Error Recovery**: Failed queues don't stop overall migration
+- **Retry Logic**: Shovel creation retries up to 10 times (handles transient errors)
 
 ### Queue Argument Conversion
 
 ```erlang
 % Automatic argument transformations:
 x-queue-type: classic → quorum                    % Required change
-x-overflow: reject-publish-dlx → reject-publish   % Behavioral change!
 x-max-priority: <removed>                         % Not supported in quorum
 x-queue-mode: <removed>                          % Lazy mode works differently
+x-queue-master-locator: <removed>                % Classic queue specific
+x-queue-version: <removed>                       % Classic queue specific
 ```
+
+**Unsuitable Arguments:**
+- `x-overflow: reject-publish-dlx` - Not compatible with quorum queues, causes queue to be marked unsuitable
+- Use `skip_unsuitable_queues` mode to skip these queues during migration
 
 ## HTTP API Endpoints
 
@@ -137,6 +153,18 @@ x-queue-mode: <removed>                          % Lazy mode works differently
 ```
 POST /api/queue-migration/start           # Start migration on default vhost (/)
 POST /api/queue-migration/start/:vhost    # Start migration on specific vhost
+POST /api/queue-migration/check/:vhost    # Check compatibility before migration
+POST /api/queue-migration/interrupt/:migration_id  # Interrupt running migration
+```
+
+**Start Request Body (optional):**
+```json
+{
+  "skip_unsuitable_queues": true,
+  "batch_size": 50,
+  "batch_order": "smallest_first",
+  "queue_names": ["queue1", "queue2"]
+}
 ```
 
 **Start Response:**
@@ -146,7 +174,6 @@ POST /api/queue-migration/start/:vhost    # Start migration on specific vhost
   "status": "started"
 }
 ```
-The `migration_id` can be used to track this specific migration via `/api/queue-migration/status/:id`.
 
 ### Status Monitoring
 ```
@@ -157,7 +184,7 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 ### Status Response Structure
 ```json
 {
-  "status": "cmq_qq_migration_in_progress",
+  "status": "in_progress",
   "migrations": [
     {
       "id": "base64url_encoded_migration_id",
@@ -167,8 +194,11 @@ GET  /api/queue-migration/status/:id      # Specific migration details
       "completed_at": null,
       "total_queues": 64,
       "completed_queues": 32,
+      "skipped_queues": 0,
       "progress_percentage": 50,
-      "status": "in_progress"
+      "status": "in_progress",
+      "skip_unsuitable_queues": false,
+      "error": null
     }
   ]
 }
@@ -210,9 +240,10 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 
 ## Post-Migration Configuration
 
-After successful migration, these configurations should be applied:
+After successful migration, consider applying these configurations:
 
-### 1. Set Default Queue Type
+### Set Default Queue Type
+
 ```bash
 curl -X POST -u guest:guest \
     -H "Content-Type: application/json" \
@@ -220,47 +251,87 @@ curl -X POST -u guest:guest \
     "http://localhost:15672/api/vhosts/%2F"
 ```
 
-### 2. Enable Relaxed Argument Checks
-```ini
-# In rabbitmq.conf
-quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true
-```
+This ensures new queues are created as quorum type by default.
 
-This allows applications to redeclare queues with classic arguments without errors.
+**Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled **before** migration (validated during pre-migration checks). This allows applications to redeclare queues with classic arguments after migration without errors.
 
 ## Key Functions by Module
 
-### `rqm.erl`
-- `start/0`, `start/1` - Entry points for migration
+### `rqm.erl` (Core Migration Engine)
+
+**Exported API:**
+- `start/1` - Start migration with options map
 - `validate_migration/1` - Pre-migration validation without starting
-- `pre_migration_preparation/2` - Cluster preparation and connection blocking
-- `mcq_qq_migration/3` - Core two-phase migration execution
-- `post_migration_restore/3` - Restore normal operations after migration
-- `start_rollback/2` - Initiate rollback process
-- `handle_migration_exception/5` - Exception handling and recovery with summary logging
-- `create_shovel_with_retry/4` - Retry shovel creation up to 10 times on exceptions
-- `cleanup_migration_shovel/2` - Clean up shovel with exception handling (uses `case catch`)
-- `verify_message_counts/4` - Verify message counts match expectations
-- `check_message_count_tolerance/5` - Check over/under delivery against separate tolerances
-- `check_within_tolerance/7` - Validate mismatch is within configured tolerance
-- `count_errors_and_aborted/1` - Helper to count error and aborted results for logging
+- `status/0` - Get overall migration system status
+- `get_migration_status/0` - Get list of all migrations
+- `get_queue_migration_status/1` - Get detailed status for specific migration
+- `get_rollback_pending_migration_json/0` - Get migration requiring rollback
+- `start_migration_preparation_on_node/2` - Distributed preparation phase
+- `start_post_migration_restore_on_node/3` - Distributed restoration phase
+- `start_migration_on_node/7` - Distributed migration execution
 
-### `rqm_db.erl`
+**Key Internal Functions:**
+- `mcq_qq_migration/3` - Core two-phase migration logic
+- `migrate_to_tmp_qq/3` - Phase 1: Classic → Temporary quorum
+- `tmp_qq_to_qq/3` - Phase 2: Temporary → Final quorum
+- `migrate_empty_queue_fast_path/4` - Optimized path for empty queues
+- `verify_message_counts/5` - Message count verification with tolerances
+
+### `rqm_db.erl` (State Management)
+
+**Key Functions:**
 - `create_migration/3` - Initialize migration record
-- `update_migration_with_queues/3` - Atomic queue count update
-- `update_queue_status_progress/2` - Progress tracking
-- `get_migration_status/0` - API status retrieval
-- `store_original_queue_metadata/3` - Store rollback information
-- `update_queue_status_rollback_*` - Rollback status management
+- `update_migration_with_queues/3` - Update migration with queue list
+- `update_migration_status/2` - Update migration status
+- `update_migration_skipped_count/1` - Update skipped queue count
+- `create_queue_status/3` - Create queue status record
+- `create_skipped_queue_status/3` - Create skipped queue record
+- `update_queue_status_*` - Various queue status updates
+- `get_migration_status/0` - Get all migrations
+- `get_queue_migration_status/1` - Get specific migration details
 
-### `rqm_mgmt.erl`
-- `to_json/2` - Format API responses
-- `accept_content/2` - Handle migration start requests
-- `migration_to_json/1` - Convert internal records to JSON
+### `rqm_mgmt.erl` (HTTP API)
 
-### `rqm_gatherer.erl`
-- `start_link/0` - Start gatherer process for collecting distributed results
-- `stop/1` - Stop gatherer process
+**Endpoints:**
+- `accept_migration_start/2` - Handle POST /api/queue-migration/start
+- `accept_compatibility_check/2` - Handle POST /api/queue-migration/check/:vhost
+- `accept_interrupt/3` - Handle POST /api/queue-migration/interrupt/:migration_id
+- `to_json/2` - Format responses for status endpoints
+
+### `rqm_checks.erl` (Validation)
+
+**System Checks:**
+- `check_shovel_plugin/0` - Verify shovel plugin enabled
+- `check_khepri_disabled/0` - Verify Khepri not enabled
+- `check_leader_balance/1` - Verify queue leaders balanced
+- `check_disk_space/2` - Verify sufficient disk space
+- `check_active_alarms/0` - Check for memory/disk alarms
+- `check_memory_usage/0` - Verify memory usage acceptable
+- `check_snapshot_not_in_progress/0` - Verify no concurrent snapshots
+- `check_cluster_partitions/0` - Verify no network partitions
+
+**Queue Checks:**
+- `check_queue_synchronization/1` - Verify mirrored queues synchronized
+- `check_queue_suitability/1` - Verify queue arguments suitable
+
+### `rqm_shovel.erl` (Shovel Management)
+
+**Key Functions:**
+- `setup_shovel/4` - Create shovel for message transfer
+- `create_with_retry/4` - Retry shovel creation (10 attempts, 1-second delays)
+- `delete_shovel/2` - Delete shovel after migration
+
+### `rqm_queue_naming.erl` (Queue Naming)
+
+**Key Functions:**
+- `add_temp_prefix/2` - Create temporary name with timestamp
+- `remove_temp_prefix/2` - Extract original name using migration ID
+
+### `rqm_config.erl` (Configuration)
+
+**Key Functions:**
+- All configuration getters return values from application environment or defaults
+- See Configuration Parameters section for complete list
 - `fork/1` - Declare intent to produce results (increment producer count)
 - `finish/1` - Signal completion of work (decrement producer count)
 - `in/2` - Add result to gatherer queue (async)
@@ -274,7 +345,7 @@ This allows applications to redeclare queues with classic arguments without erro
 - `ebs_volume_device/0` - Get EBS volume device path configuration
 - `message_count_over_tolerance_percent/0` - Get tolerance for over-delivery (default: 5.0%)
 - `message_count_under_tolerance_percent/0` - Get tolerance for under-delivery (default: 0.0%)
-- `shovel_prefetch_count/0` - Get shovel prefetch count (default: 1024)
+- `shovel_prefetch_count/0` - Get shovel prefetch count (default: 128)
 
 ### `rqm_snapshot.erl`
 - `create_snapshot/1` - Create snapshot using configured mode (tar or ebs)
@@ -362,50 +433,61 @@ queue_migration.shovel_prefetch_count = 128
 ### Application Environment
 - `progress_update_frequency` - Messages between progress updates (default: 10)
 - `worker_pool_max` - Maximum worker pool size (default: 32, capped at scheduler count)
-- `rollback_on_error` - Enable automatic rollback on migration failure (default: true)
 - `snapshot_mode` - Snapshot mode: `tar` (testing), `ebs` (production EBS snapshots), or `none` (disabled) (default: ebs)
 - `ebs_volume_device` - EBS device path for RabbitMQ data (default: "/dev/sdh")
+- `cleanup_snapshots_on_success` - Delete snapshots after successful migration (default: true)
 - `max_queues_for_migration` - Maximum queues per migration (default: 10,000)
+- `max_migration_duration_ms` - Maximum migration duration (default: 2,700,000ms / 45 minutes)
+- `min_disk_space_buffer` - Minimum free disk space buffer (default: 524,288,000 bytes / 500MB)
+- `disk_usage_peak_multiplier` - Peak disk usage multiplier (default: 2.0)
+- `max_memory_usage_percent` - Maximum memory usage percentage (default: 40)
 - `message_count_over_tolerance_percent` - Tolerance for extra messages (default: 5.0%)
 - `message_count_under_tolerance_percent` - Tolerance for missing messages (default: 0.0%)
-- `shovel_prefetch_count` - Shovel prefetch count for message transfer (default: 1024)
-- `cleanup_snapshots_on_success` - Delete snapshots after successful migration (default: true)
+- `shovel_prefetch_count` - Shovel prefetch count for message transfer (default: 128)
 
 ### Constants (in header file)
 - `QUEUE_MIGRATION_TIMEOUT_MS` - 120,000ms (2 minutes)
 - `QUEUE_MIGRATION_TIMEOUT_RETRIES` - 15 retries (30 minutes total)
 - `DEFAULT_PROGRESS_UPDATE_FREQUENCY` - 10 messages
 - `DEFAULT_WORKER_POOL_MAX` - 32 workers (capped at scheduler count)
-- `DEFAULT_ROLLBACK_ON_ERROR` - true (configurable)
 - `MAX_QUEUES_FOR_MIGRATION` - 10,000 queues maximum
-- `MIN_DISK_SPACE_BUFFER` - 500MiB minimum free space
+- `MIN_DISK_SPACE_BUFFER` - 524,288,000 bytes (500MB)
 - `DISK_USAGE_PEAK_MULTIPLIER` - 2.0x multiplier for peak disk usage estimation
+- `MIN_DISK_USAGE_PEAK_MULTIPLIER` - 1.5x minimum safety margin
 - `DEFAULT_EBS_VOLUME_DEVICE` - "/dev/sdh" default EBS device path
 - `DEFAULT_MESSAGE_COUNT_OVER_TOLERANCE_PERCENT` - 5.0% tolerance for over-delivery
 - `DEFAULT_MESSAGE_COUNT_UNDER_TOLERANCE_PERCENT` - 0.0% tolerance for under-delivery
-- `DEFAULT_SHOVEL_PREFETCH_COUNT` - 1024 messages
+- `DEFAULT_SHOVEL_PREFETCH_COUNT` - 128 messages
 - `DEFAULT_CLEANUP_SNAPSHOTS_ON_SUCCESS` - true
+- `MAX_MEMORY_USAGE_PERCENT` - 40%
+- `MAX_MIGRATION_DURATION_MS` - 2,700,000ms (45 minutes)
 
 ## Rollback Functionality
 
-### Automatic Rollback
-- **Trigger**: Configurable via `rollback_on_error` setting (default: enabled)
-- **Scope**: Per-queue rollback when individual queue migration fails
-- **State Preservation**: Original queue arguments and bindings stored before migration
-- **Status Tracking**: Detailed rollback progress and error tracking
+### Current State
 
-### Rollback Process
-1. **Detection**: Migration failure triggers rollback evaluation
-2. **State Restoration**: Recreate original classic queue with stored metadata
-3. **Binding Restoration**: Restore all original queue bindings
-4. **Message Recovery**: Attempt to recover messages from temporary queues
-5. **Cleanup**: Remove temporary migration artifacts
+**Automatic rollback is not implemented in this open-source plugin.** The migration record includes rollback-related fields (`rollback_started_at`, `rollback_completed_at`, `rollback_errors`) but these are not currently used.
 
-### Rollback Status Tracking
-- **Migration Level**: Overall rollback status in migration record
-- **Queue Level**: Individual queue rollback status and errors
-- **Timestamps**: Rollback start and completion times
-- **Error Details**: Specific rollback failure reasons
+When a migration fails:
+- Migration status is set to `rollback_pending`
+- Failed queue is marked with error details
+- Shovels are cleaned up automatically
+- Destination quorum queues remain (not automatically deleted)
+- Classic queues remain with original data (if not yet deleted)
+
+### Recovery Options
+
+**Snapshot Restore (Recommended):**
+1. Stop RabbitMQ on all nodes
+2. Restore from snapshots (EBS or tar)
+3. Restart RabbitMQ cluster
+
+See `priv/tools/restore_snapshot_test.sh` for tar snapshot restoration example.
+
+**Automatic Rollback:**
+- Feature of Amazon MQ for RabbitMQ managed service
+- Not planned for this open-source plugin
+- Rollback fields in records reserved for potential future use
 
 ## Error Handling
 
@@ -435,14 +517,37 @@ queue_migration.shovel_prefetch_count = 128
 
 ## Testing Considerations
 
-### Current Test Implementation
-- **Test Suite**: `unit_SUITE.erl` - Comprehensive unit test coverage with 6 test groups
-- **Base64 URL Encoding**: Tests for migration ID encoding/decoding with URL-safety validation
-- **Migration ID Generation**: Validation of unique ID creation and round-trip encoding
-- **Configuration Validation**: Tests for balance checks and disk space estimation
-- **Padding and Compatibility**: URL-safety and standard base64 comparison tests
-- **Migration Checks**: Tests for leader balance, disk usage estimation, and synchronization checks
-- **Test Groups**: Organized into parallel test groups for efficient execution
+### Unit Tests
+
+**Test Suite**: `unit_SUITE.erl` - Comprehensive unit test coverage with 8 test groups
+
+**Test Groups:**
+1. **base64url_encoding** - URL-safe base64 encoding tests
+2. **base64url_decoding** - URL-safe base64 decoding tests
+3. **roundtrip_tests** - Round-trip encoding/decoding validation
+4. **migration_id_tests** - Migration ID generation and encoding
+5. **padding_tests** - Base64 padding handling
+6. **compatibility_tests** - URL-safety and standard base64 comparison
+7. **migration_checks** - Leader balance, disk usage, synchronization checks
+8. **queue_naming** - Temporary queue name generation with timestamp-based uniqueness
+
+### Integration Tests
+
+**Test Suite**: 6 comprehensive integration tests in `test/integration/`
+
+**Tests:**
+1. **EndToEndMigrationTest** - Happy path migration validation
+2. **InterruptionTest** - Migration interruption handling
+3. **SkipUnsuitableTest** - Skip unsuitable queues feature (25 suitable + 5 unsuitable)
+4. **BatchMigrationTest** - Batch migration with batch_size/batch_order (50 queues in 3 batches)
+5. **EmptyQueueTest** - Empty queue migration (20 queues, 0 messages)
+6. **AlreadyQuorumTest** - Idempotency validation (15 classic + 10 quorum)
+
+**CI Integration:** All tests run automatically in GitHub Actions
+
+**Bug Discovery:** Integration tests caught:
+- Batch migration using wrong queue list
+- Skipped queue count not updated for interrupted migrations
 
 ### Prerequisites Testing
 - Verify cluster health checks work correctly
@@ -470,11 +575,20 @@ queue_migration.shovel_prefetch_count = 128
 
 ## Performance Characteristics
 
-### Typical Migration Rates
-- **Small queues** (empty or few messages): 3-4 queues per minute
-- **Large queues** (thousands of messages): Depends on message size and queue depth
-- **Parallel processing**: Multiple queues migrate simultaneously via worker pool
-- **Resource usage**: Moderate memory increase during migration
+### Migration Performance
+
+Performance varies significantly based on:
+- Queue message counts
+- Message sizes
+- Worker pool size (capped at scheduler count)
+- Disk I/O capacity
+- Network bandwidth
+
+**Example Results:**
+- **5000 queues, 10 messages each**: 2.5 hours (33 queues/minute)
+- **500 queues, 100 messages each, 2 workers**: 14-15 minutes (35 queues/minute)
+
+**Note:** Empty queues migrate much faster using the fast-path optimization.
 
 ### Tested Performance (m7g.large, 2 vCPUs)
 - **500 queues, 100 messages each**:
@@ -497,12 +611,13 @@ queue_migration.shovel_prefetch_count = 128
 ## Critical Behavioral Changes
 
 ### Queue Argument Differences
-1. **Overflow Behavior**: `reject-publish-dlx` → `reject-publish` (different semantics!)
+1. **Unsuitable Arguments**: Queues with `x-overflow: reject-publish-dlx` are marked unsuitable and skipped (use `skip_unsuitable_queues` mode)
 2. **Priority Queues**: `x-max-priority` removed (quorum queues use high/low priority)
-3. **Lazy Mode**: Removed (quorum queues handle memory management differently)
+3. **Lazy Mode**: `x-queue-mode` removed (quorum queues handle memory management differently)
+4. **Classic-Specific**: `x-queue-master-locator` and `x-queue-version` removed
 
 ### Application Impact
-- Applications may need updates for new overflow behavior
+- Applications using `reject-publish-dlx` must change overflow policy before migration
 - Priority queue usage patterns may need adjustment
 - Memory usage patterns will change with quorum queues
 
@@ -591,24 +706,39 @@ queue_migration.shovel_prefetch_count = 128
 
 ## Recent Improvements (January 2026)
 
+### Skip Unsuitable Queues Feature
+- **Skip Mode**: `skip_unsuitable_queues` parameter allows migration to proceed by skipping problematic queues
+- **Skip Reasons**: Tracks why queues were skipped (unsynchronized, too_many_queues, unsuitable_overflow, interrupted)
+- **Integration Tests**: SkipUnsuitableTest validates feature works correctly
+
+### Batch Migration Feature
+- **Batch Size**: `batch_size` parameter limits number of queues per migration
+- **Batch Order**: `batch_order` parameter controls selection order (smallest_first, largest_first)
+- **Integration Tests**: BatchMigrationTest validates feature works correctly
+- **Bug Fix**: Fixed batch migration using wrong queue list (EligibleQueues2 vs EligibleQueues3)
+
+### Queue Naming Improvements
+- **Unique Prefixes**: Temporary queues use `tmp_<timestamp>_<original_name>` format
+- **Collision Prevention**: Timestamp from migration ID ensures uniqueness
+- **Module**: `rqm_queue_naming` with comprehensive unit tests
+
+### Integration Test Suite
+- **6 Tests**: EndToEnd, Interruption, SkipUnsuitable, BatchMigration, EmptyQueue, AlreadyQuorum
+- **CI Integration**: All tests run automatically in GitHub Actions
+- **Bug Discovery**: Tests caught batch migration bug and skipped queue count bug
+
+### Documentation Improvements
+- **Comprehensive Guides**: Migration Guide, Snapshots Guide, API Examples, Troubleshooting Guide
+- **Accuracy**: All documentation verified against actual code and API responses
+- **Organization**: Detailed content moved to docs/ directory, README streamlined
+
 ### Validation Enhancements
-- **Concurrent Snapshot Check**: Prevents migration when EBS snapshots are in progress (fixes `ConcurrentSnapshotLimitExceeded` errors)
-- **Complete Validation Chain**: All checks properly integrated (shovel plugin, Khepri, snapshots, etc.)
+- **Concurrent Snapshot Check**: Prevents migration when EBS snapshots are in progress
+- **Complete Validation Chain**: All checks properly integrated
 
 ### Error Handling Improvements
 - **Shovel Creation Retry**: Retries up to 10 times on exceptions (handles transient `noproc` errors)
 - **Shovel Cleanup Safety**: Uses `case catch` to handle badmatch and other cleanup exceptions gracefully
-- **Reduced Log Verbosity**: Exception logs show summary counts instead of full error lists
-- **Bad Key Fixes**: Removed dead code and fixed map access errors in validation handlers
+- **Reduced Log Verbosity**: Per-queue messages moved to DEBUG level
 
-### Configuration Flexibility
-- **Message Count Verification**: Separate tolerances for over-delivery (5%) and under-delivery (2%)
-- **Shovel Prefetch**: Configurable prefetch count for different message sizes
-- **Worker Pool Maximum**: Increased to 32 (still capped at scheduler count for stability)
-
-### Performance Validation
-- **Testing Data**: Validated on m7g.large (2 vCPU) with 500-1000 queues
-- **Optimal Workers**: Performance scales linearly up to scheduler count
-- **Stability Limits**: Exceeding scheduler count causes network saturation and partitions
-
-This codebase represents a production-ready, enterprise-grade solution for RabbitMQ queue migration with comprehensive safety features, detailed progress tracking, robust error handling, automatic rollback capabilities, and extensive testing infrastructure.
+This codebase represents a production-ready solution for RabbitMQ queue migration with comprehensive safety features, detailed progress tracking, robust error handling, and extensive testing infrastructure.
