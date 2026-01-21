@@ -24,8 +24,6 @@
     start_migration_on_node/7
 ]).
 
-%% TODO - single instance brokers should not see anything migration related.
-
 %% Public API
 start(OptsMap) when is_map(OptsMap) ->
     try
@@ -1251,7 +1249,6 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
 
     NewResource = Resource#resource{name = NewQName},
 
-    %% TODO: Figure out feature compat and migration path
     NewArgs = convert_args(amqqueue:get_arguments(Q)),
 
     NewQ =
@@ -1280,11 +1277,23 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
         ]
     ),
 
-    %% TODO check binding result
-    _ = [
+    BindingResults = [
         rabbit_binding:add(B#binding{destination = NewResource}, <<"internaluser">>)
      || B <- FilteredBindings
     ],
+
+    FailedBindings = [R || R <- BindingResults, R =/= ok],
+
+    case FailedBindings of
+        [] ->
+            ?LOG_DEBUG("rqm: successfully created ~p bindings for ~ts", [
+                length(FilteredBindings), rabbit_misc:rs(Resource)
+            ]);
+        _ ->
+            ?LOG_ERROR("rqm: ~p binding(s) failed for ~ts: ~tp", [
+                length(FailedBindings), rabbit_misc:rs(Resource), FailedBindings
+            ])
+    end,
 
     ok = migrate_queue_messages(FinalResource, MigrationId, Q, NewQ, Phase),
 
