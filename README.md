@@ -182,18 +182,6 @@ make --file integration-test.mk integration-test
 
 See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
 
-## Limitations
-
-### Queue Limits
-- Maximum 500 queues per migration
-- Maximum 15,000 messages per queue
-- Configurable via safety checks
-
-### Not Supported
-- Exclusive queues (skipped)
-- Non-mirrored classic queues (skipped)
-- Queues without HA policies (skipped)
-
 ## Troubleshooting
 
 ### Migration Fails to Start
