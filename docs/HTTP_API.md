@@ -138,22 +138,38 @@ curl -u guest:guest -X POST \
 
 **Error Responses:**
 
-**409 Conflict** - Migration already in progress:
+**400 Bad Request** - Validation failed or invalid parameters:
+
+Shovel plugin not enabled:
 ```json
 {
-  "error": "Migration already in progress",
-  "current_migration_id": "..."
+  "error": "bad_request",
+  "reason": "rabbitmq_shovel plugin must be enabled for migration. Enable the plugin with: rabbitmq-plugins enable rabbitmq_shovel"
 }
 ```
 
-**400 Bad Request** - Validation failed:
+Unsuitable queues found (when skip mode not enabled):
 ```json
 {
-  "error": "Pre-migration validation failed",
-  "details": {
-    "check": "disk_space",
-    "reason": "Insufficient disk space"
-  }
+  "error": "bad_request",
+  "reason": "Found 5 queue(s) with issues (too many messages, too many bytes, or unsuitable arguments)",
+  "problematic_queue_count": 5
+}
+```
+
+Insufficient disk space:
+```json
+{
+  "error": "bad_request",
+  "reason": "Insufficient disk space for migration. Required: 5000MB, Available: 2000MB"
+}
+```
+
+Queue leaders imbalanced:
+```json
+{
+  "error": "bad_request",
+  "reason": "Queue leaders are imbalanced. Re-balance queue leaders before migration."
 }
 ```
 
@@ -176,7 +192,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 **Response (200 OK):**
 ```json
 {
-  "status": "cmq_qq_migration_in_progress",
+  "status": "in_progress",
   "migrations": [
     {
       "id": "ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz",
@@ -186,8 +202,11 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
       "completed_at": null,
       "total_queues": 10,
       "completed_queues": 5,
+      "skipped_queues": 0,
       "progress_percentage": 50,
-      "status": "in_progress"
+      "status": "in_progress",
+      "skip_unsuitable_queues": false,
+      "error": null
     },
     {
       "id": "...",
@@ -197,8 +216,11 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
       "completed_at": "2025-12-20 15:05:30",
       "total_queues": 20,
       "completed_queues": 20,
+      "skipped_queues": 0,
       "progress_percentage": 100,
-      "status": "completed"
+      "status": "completed",
+      "skip_unsuitable_queues": false,
+      "error": null
     }
   ]
 }
@@ -206,23 +228,28 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 
 **Response Fields:**
 - `status` - Overall system status:
-  - `cmq_qq_migration_not_running` - No active migration
-  - `cmq_qq_migration_in_progress` - Migration currently running
+  - `not_running` - No active migration
+  - `in_progress` - Migration currently running
 - `migrations` - Array of migration records (most recent first)
 
 **Migration Record Fields:**
 - `id` - Base64url-encoded migration identifier
 - `display_id` - Human-readable identifier with vhost, timestamp, and node
 - `vhost` - Virtual host
-- `started_at` - Start timestamp
+- `started_at` - Start timestamp (YYYY-MM-DD HH:MM:SS format, UTC)
 - `completed_at` - Completion timestamp (null if in progress)
 - `total_queues` - Total queues to migrate
 - `completed_queues` - Queues completed so far
+- `skipped_queues` - Queues skipped
 - `progress_percentage` - Progress (0-100)
-- `status` - Migration status:
+- `status` - Migration status (see values below)
+- `skip_unsuitable_queues` - Whether skip mode was enabled
+- `error` - Error details (null if no error)
+  - `pending` - Not started yet
   - `in_progress` - Currently migrating
   - `completed` - Successfully completed
   - `failed` - Migration failed
+  - `interrupted` - Migration was interrupted
   - `rollback_pending` - Requires rollback
   - `rollback_completed` - Rollback completed
 
@@ -257,29 +284,39 @@ curl -u guest:guest \
     "completed_at": null,
     "total_queues": 10,
     "completed_queues": 5,
+    "skipped_queues": 0,
     "progress_percentage": 50,
-    "status": "in_progress"
+    "status": "in_progress",
+    "skip_unsuitable_queues": false,
+    "error": null,
+    "snapshots": []
   },
   "queues": [
     {
-      "name": "my-queue",
-      "vhost": "/",
+      "resource": {
+        "name": "my-queue",
+        "vhost": "/"
+      },
       "status": "completed",
       "started_at": "2025-12-21 10:30:05",
       "completed_at": "2025-12-21 10:30:15",
       "total_messages": 1000,
       "migrated_messages": 1000,
-      "progress_percentage": 100
+      "progress_percentage": 100,
+      "error": null
     },
     {
-      "name": "another-queue",
-      "vhost": "/",
+      "resource": {
+        "name": "another-queue",
+        "vhost": "/"
+      },
       "status": "in_progress",
       "started_at": "2025-12-21 10:30:20",
       "completed_at": null,
       "total_messages": 5000,
       "migrated_messages": 2500,
-      "progress_percentage": 50
+      "progress_percentage": 50,
+      "error": null
     }
   ]
 }
@@ -290,8 +327,9 @@ curl -u guest:guest \
 - `queues` - Array of per-queue status records
 
 **Queue Status Fields:**
-- `name` - Queue name
-- `vhost` - Virtual host
+- `resource` - Queue resource object:
+  - `name` - Queue name
+  - `vhost` - Virtual host
 - `status` - Queue migration status:
   - `pending` - Not started yet
   - `in_progress` - Currently migrating
@@ -299,7 +337,6 @@ curl -u guest:guest \
   - `failed` - Migration failed
   - `skipped` - Skipped due to validation issues (when `skip_unsuitable_queues` is enabled)
   - `rollback_completed` - Rollback completed
-  - `rollback_failed` - Rollback failed
 - `started_at` - Queue migration start timestamp
 - `completed_at` - Queue migration completion timestamp (null if in progress)
 - `total_messages` - Total messages in queue at start

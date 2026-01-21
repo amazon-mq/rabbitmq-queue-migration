@@ -40,7 +40,7 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 rabbitmq-plugins enable rabbitmq_queue_migration
 ```
 
-Enable on all cluster nodes for consistent behavior.
+This plugin must be enabled on all cluster nodes for consistent behavior.
 
 ## Quick Start
 
@@ -105,6 +105,7 @@ curl -u guest:guest -X POST \
 ```
 
 > **Note:** When `queue_names` is specified, `batch_size` and `batch_order` are ignored. Non-existent or ineligible queues are logged as warnings and skipped. If all specified queues are non-existent or ineligible, the migration fails with HTTP 400.
+
 ### 3. Monitor Progress
 
 Check migration status:
@@ -124,7 +125,7 @@ curl -u guest:guest -X POST \
 
 In-flight queue migrations complete while remaining queues are skipped. The migration ends with status `interrupted`.
 
-See [HTTP_API.md](HTTP_API.md) for complete API reference.
+See [docs/HTTP_API.md](docs/HTTP_API.md) for complete API reference.
 
 ## Migration Process
 
@@ -142,7 +143,7 @@ The plugin performs comprehensive checks before starting migration:
 7. **Cluster Health**: Validates no partitions and all nodes are up
 
 **Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
-1. **Queue Synchronization**: Verifies all queue mirrors are synchronized
+1. **Queue Synchronization**: Verifies all mirrored classic queues are fully synchronized
 2. **Queue Suitability**: Confirms queues don't have unsuitable arguments (e.g., `reject-publish-dlx`)
 
 When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
@@ -337,7 +338,7 @@ Description: "RabbitMQ migration snapshot {ISO8601_timestamp} on {node_name}"
 
 **Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
 
-See [EC2_SETUP.md](EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
+See [docs/EC2_SETUP.md](docs/EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
 
 ### None Mode (Disabled)
 
@@ -378,7 +379,7 @@ echo "127.0.0.1 rmq2" | sudo tee -a /etc/hosts
 make --file integration-test.mk integration-test
 ```
 
-See [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) for detailed testing documentation.
+See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
 
 ## Limitations
 
@@ -455,10 +456,23 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
 
-- [HTTP_API.md](HTTP_API.md) - Complete HTTP API reference with examples
-- [INTEGRATION_TESTING.md](INTEGRATION_TESTING.md) - Integration testing guide
-- [AGENTS.md](AGENTS.md) - Comprehensive technical deep-dive and architecture
-- [EC2_SETUP.md](EC2_SETUP.md) - AWS EC2 and IAM configuration guide
+### Getting Started
+- [README.md](README.md) - Overview, installation, and quick start
+- [docs/HTTP_API.md](docs/HTTP_API.md) - Complete HTTP API reference
+- [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) - Practical API usage examples
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Configuration parameter reference
+
+### Feature Guides
+- [docs/SKIP_UNSUITABLE_QUEUES.md](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
+
+### Technical Documentation
+- [AGENTS.md](AGENTS.md) - Architecture and implementation details
+- [docs/VALIDATION_CHAIN.md](docs/VALIDATION_CHAIN.md) - Validation chain architecture
+
+### Testing and Deployment
+- [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) - Integration testing guide
+- [docs/EC2_SETUP.md](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
 
 ## Security
 

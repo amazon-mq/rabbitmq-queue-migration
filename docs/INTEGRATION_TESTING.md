@@ -236,4 +236,4 @@ Modify `test/integration/Makefile` or run the JAR directly with custom parameter
 
 - [README.md](../../README.md) - Plugin overview and quick start
 - [test/integration/README.md](test/integration/README.md) - Detailed test suite documentation
-- [HTTP_API.md](../../HTTP_API.md) - Complete API reference
+- [HTTP_API.md](HTTP_API.md) - Complete API reference
