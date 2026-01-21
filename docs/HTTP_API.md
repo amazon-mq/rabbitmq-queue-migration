@@ -646,7 +646,7 @@ done
 
 ## Error Handling
 
-### Common Error Scenarios
+### Error Scenarios
 
 **Migration Already Running:**
 ```json
