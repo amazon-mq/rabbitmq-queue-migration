@@ -158,29 +158,9 @@ See [Snapshots Guide](docs/SNAPSHOTS.md) for complete snapshot configuration and
 
 ## Testing
 
-### Unit Tests
+The plugin includes comprehensive unit tests and integration tests.
 
-Run the Erlang unit test suite:
-
-```bash
-make tests
-```
-
-### Integration Tests
-
-Run end-to-end integration tests with a 3-node Docker cluster:
-
-```bash
-# Add hostname aliases (required for cluster discovery)
-echo "127.0.0.1 rmq0" | sudo tee -a /etc/hosts
-echo "127.0.0.1 rmq1" | sudo tee -a /etc/hosts
-echo "127.0.0.1 rmq2" | sudo tee -a /etc/hosts
-
-# Run integration tests
-make --file integration-test.mk integration-test
-```
-
-See [Integration Testing](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
+See [Integration Testing](docs/INTEGRATION_TESTING.md) for test setup and execution instructions.
 
 ## Troubleshooting
 
