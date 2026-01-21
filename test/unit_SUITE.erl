@@ -59,7 +59,18 @@
     check_balance_test/1,
     estimate_queue_disk_usage_test/1,
     determine_insufficient_space_reason_test/1,
-    has_all_mirrors_synchronized_test/1
+    has_all_mirrors_synchronized_test/1,
+
+    % Queue naming tests
+    queue_naming_simple_test/1,
+    queue_naming_with_underscores_test/1,
+    queue_naming_with_hyphens_test/1,
+    queue_naming_with_dots_test/1,
+    queue_naming_multiple_underscores_test/1,
+    queue_naming_looks_like_temp_test/1,
+    queue_naming_empty_test/1,
+    queue_naming_long_name_test/1,
+    queue_naming_different_migration_ids_test/1
 ]).
 
 %% Test groups
@@ -71,7 +82,8 @@ all() ->
         {group, migration_id_tests},
         {group, padding_tests},
         {group, compatibility_tests},
-        {group, migration_checks}
+        {group, migration_checks},
+        {group, queue_naming}
     ].
 
 groups() ->
@@ -114,6 +126,17 @@ groups() ->
             estimate_queue_disk_usage_test,
             determine_insufficient_space_reason_test,
             has_all_mirrors_synchronized_test
+        ]},
+        {queue_naming, [parallel], [
+            queue_naming_simple_test,
+            queue_naming_with_underscores_test,
+            queue_naming_with_hyphens_test,
+            queue_naming_with_dots_test,
+            queue_naming_multiple_underscores_test,
+            queue_naming_looks_like_temp_test,
+            queue_naming_empty_test,
+            queue_naming_long_name_test,
+            queue_naming_different_migration_ids_test
         ]}
     ].
 
@@ -590,3 +613,112 @@ has_all_mirrors_synchronized_test(_Config) ->
     SyncPids4 = [pid1],
     SlavePids4 = [pid1],
     ?assertEqual(true, length(SyncPids4) =:= length(SlavePids4)).
+
+%%--------------------------------------------------------------------
+%% Queue Naming Tests
+%%--------------------------------------------------------------------
+
+queue_naming_simple_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"myqueue">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_myqueue">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_with_underscores_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"my_queue_name">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_my_queue_name">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_with_hyphens_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"my-queue-name">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_my-queue-name">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_with_dots_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"my.queue.name">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_my.queue.name">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_multiple_underscores_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"foo_bar_baz_qux">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_foo_bar_baz_qux">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_looks_like_temp_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"tmp_9999999999999_foo_bar">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_tmp_9999999999999_foo_bar">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_empty_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    Original = <<"">>,
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    ?assertEqual(<<"tmp_1737438787123_">>, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_long_name_test(_Config) ->
+    MigrationId = {1737438787123, 'rabbit@node1'},
+    % RabbitMQ queue names can be up to 255 characters
+    Original = binary:copy(<<"a">>, 200),
+
+    Temp = rqm_queue_naming:add_temp_prefix(Original, MigrationId),
+    Expected = <<"tmp_1737438787123_", Original/binary>>,
+    ?assertEqual(Expected, Temp),
+
+    Restored = rqm_queue_naming:remove_temp_prefix(Temp, MigrationId),
+    ?assertEqual(Original, Restored).
+
+queue_naming_different_migration_ids_test(_Config) ->
+    MigrationId1 = {1737438787123, 'rabbit@node1'},
+    MigrationId2 = {1737438999999, 'rabbit@node2'},
+    Original = <<"myqueue">>,
+
+    % Add prefix with first migration ID
+    Temp1 = rqm_queue_naming:add_temp_prefix(Original, MigrationId1),
+    ?assertEqual(<<"tmp_1737438787123_myqueue">>, Temp1),
+
+    % Add prefix with second migration ID
+    Temp2 = rqm_queue_naming:add_temp_prefix(Original, MigrationId2),
+    ?assertEqual(<<"tmp_1737438999999_myqueue">>, Temp2),
+
+    % Verify different temp names
+    ?assertNotEqual(Temp1, Temp2),
+
+    % Remove with correct migration IDs
+    Restored1 = rqm_queue_naming:remove_temp_prefix(Temp1, MigrationId1),
+    ?assertEqual(Original, Restored1),
+
+    Restored2 = rqm_queue_naming:remove_temp_prefix(Temp2, MigrationId2),
+    ?assertEqual(Original, Restored2).

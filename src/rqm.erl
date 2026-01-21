@@ -1118,16 +1118,11 @@ wait_for_migration(CPid, Ref, Retries0) ->
     end.
 
 migrate_to_tmp_qq(FinalResource, MigrationId, Q) ->
-    AddTmpPrefixFun = fun(Name) ->
-        <<"tmp_", Name/binary>>
-    end,
+    AddTmpPrefixFun = fun rqm_queue_naming:add_temp_prefix/2,
     migrate(FinalResource, MigrationId, Q, AddTmpPrefixFun, phase_one).
 
 tmp_qq_to_qq(FinalResource, MigrationId, Q) ->
-    RemoveTmpPrefixFun = fun(Name) ->
-        <<"tmp_", CleanName/binary>> = Name,
-        CleanName
-    end,
+    RemoveTmpPrefixFun = fun rqm_queue_naming:remove_temp_prefix/2,
     migrate(FinalResource, MigrationId, Q, RemoveTmpPrefixFun, phase_two).
 
 migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
@@ -1250,7 +1245,7 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
 migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
     Resource = amqqueue:get_name(Q),
     QName = Resource#resource.name,
-    NewQName = NameFun(QName),
+    NewQName = NameFun(QName, MigrationId),
 
     ?LOG_DEBUG("rqm: migrating ~tp to ~tp", [QName, NewQName]),
 
