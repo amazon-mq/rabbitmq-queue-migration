@@ -184,40 +184,12 @@ See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for detailed test
 
 ## Troubleshooting
 
-### Migration Fails to Start
+For common issues and solutions, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
-**Check validation errors:**
-```bash
-curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
-```
-
-Common issues:
-- `rabbitmq_shovel` plugin not enabled
-- Khepri database enabled (must be disabled)
-- Queue leaders not balanced
-- Insufficient disk space
-
-### Migration Stuck
-
-**Check migration status:**
-```bash
-curl -u guest:guest http://localhost:15672/api/queue-migration/status
-```
-
-**Check RabbitMQ logs:**
-```bash
-# Look for migration progress and errors
-tail -f /var/log/rabbitmq/rabbit@hostname.log | grep rqm
-```
-
-### Rollback Required
-
-If migration fails and enters `rollback_pending` state, manual intervention is required:
-
-1. Check migration status to get snapshot IDs
-2. Stop RabbitMQ on all nodes
-3. Restore from snapshots (EBS or tar)
-4. Restart RabbitMQ cluster
+Quick checks:
+- **Migration fails to start:** Run compatibility check to identify issues
+- **Migration stuck:** Check status and broker logs
+- **Rollback required:** Manual cleanup needed (automatic rollback not implemented)
 
 ## Web UI
 

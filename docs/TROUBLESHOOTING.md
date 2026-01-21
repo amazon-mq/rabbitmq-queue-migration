@@ -11,8 +11,7 @@ This guide covers common issues, error messages, and solutions when using the Ra
 1. [Pre-Migration Issues](#pre-migration-issues)
 2. [Migration Failures](#migration-failures)
 3. [Performance Issues](#performance-issues)
-4. [Message Count Discrepancies](#message-count-discrepancies)
-5. [Rollback and Recovery](#rollback-and-recovery)
+4. [Rollback and Recovery](#rollback-and-recovery)
 
 ---
 
@@ -289,11 +288,11 @@ rabbitmq-plugins enable rabbitmq_shovel
 
 ---
 
-### Queue Migration Aborted
+### Queue Migration Failed
 
-**Error:** `migration_aborted` in queue status
+**Status:** `failed` in queue status
 
-**Cause:** Individual queue migration failed
+**Cause:** Individual queue migration encountered an error
 
 **Diagnosis:**
 ```bash
@@ -304,36 +303,18 @@ curl -u guest:guest \
 # Check error field for specific queue
 ```
 
-**Common Abort Reasons:**
+**Common Failure Reasons:**
 
-#### 1. Message Count Mismatch
+#### 1. Shovel Transfer Failed
 
-**Error:** `message_count_mismatch`
-
-**Cause:** Destination queue has different message count than expected
-
-**Tolerance Configuration:**
-```erlang
-% In rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 5.0   % Allow 5% extra
-queue_migration.message_count_under_tolerance_percent = 2.0  % Allow 2% missing
-```
-
-**Solution:**
-- Verify no active publishers/consumers during migration
-- Increase tolerance if acceptable
-- Check for message duplication issues
-
-#### 2. Shovel Transfer Failed
-
-**Error:** `shovel_transfer_failed`
+**Error:** Shovel encountered error during message transfer
 
 **Cause:** Shovel encountered error during message transfer
 
 **Solution:**
 - Check shovel logs for specific error
 - Verify destination queue is healthy
-- May need to delete and retry migration
+- May need to interrupt and retry migration
 
 ---
 
@@ -341,12 +322,13 @@ queue_migration.message_count_under_tolerance_percent = 2.0  % Allow 2% missing
 
 **Symptom:** Migration status shows "interrupted"
 
-**Cause:** User manually interrupted migration or system issue
+**Cause:** User manually interrupted migration via the interrupt endpoint
 
 **What Happens:**
 - Queues actively migrating complete normally
 - Queues not yet started are marked "skipped" with reason "interrupted"
 - Original classic queues remain for skipped queues
+- Completed queues remain as quorum queues
 - Completed queues remain as quorum queues
 
 **Recovery:**
@@ -418,50 +400,6 @@ vm_memory_high_watermark.relative = 0.6
 
 ---
 
-## Message Count Discrepancies
-
-### More Messages in Destination
-
-**Symptom:** Destination queue has more messages than source
-
-**Example:** Source: 300, Destination: 306
-
-**Possible Causes:**
-1. Messages in-flight during count
-2. Shovel prefetch counting
-3. Timing of count collection
-
-**Current Mitigation:**
-- Configurable tolerance (default 5% over allowed)
-- Migration succeeds if within tolerance
-
-**Investigation:**
-- Under active investigation
-- May be related to shovel `ack-mode: on-confirm` behavior
-- Not a data loss issue - extra messages are valid
-
-**Workaround:**
-If tolerance too strict, increase:
-```erlang
-queue_migration.message_count_over_tolerance_percent = 10.0
-```
-
----
-
-### Fewer Messages in Destination
-
-**Symptom:** Destination queue has fewer messages than source
-
-**Cause:** Usually indicates actual message loss
-
-**Solution:**
-- **Do not increase under-tolerance without investigation**
-- Check logs for shovel errors
-- Verify no consumers on destination queue
-- May indicate serious issue - report if reproducible
-
----
-
 ## Rollback and Recovery
 
 ### After Failed Migration
@@ -522,23 +460,6 @@ rabbitmqctl list_consumers
 # Would need manual intervention to delete quorum queues
 # and restore traffic to classic queues
 ```
-
----
-
-### Node Failure During Migration
-
-**Scenario:** RabbitMQ node crashes during migration
-
-**Impact:**
-- Migration process stops
-- Shovels may be lost
-- Worker processes terminated
-
-**Recovery:**
-1. Restart failed node
-2. Check migration status
-3. Interrupt current migration if stuck
-4. Start new migration - idempotency handles partial completion
 
 ---
 
