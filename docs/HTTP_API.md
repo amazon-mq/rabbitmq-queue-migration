@@ -646,7 +646,7 @@ done
 
 ## Error Handling
 
-### Common Error Scenarios
+### Error Scenarios
 
 **Migration Already Running:**
 ```json
@@ -774,6 +774,6 @@ curl -s -u guest:guest \
 
 ## See Also
 
-- [README.md](README.md) - Plugin overview and quick start
-- [AGENTS.md](AGENTS.md) - Technical architecture and implementation details
-- [test/integration/README.md](test/integration/README.md) - Integration testing guide
+- [README](README.md) - Plugin overview and quick start
+- [AGENTS](AGENTS.md) - Technical architecture and implementation details
+- [test/integration/README](test/integration/README.md) - Integration testing guide

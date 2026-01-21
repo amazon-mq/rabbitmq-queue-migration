@@ -2,7 +2,7 @@
 
 **Last Updated:** January 21, 2026
 
-This guide covers common issues, error messages, and solutions when using the RabbitMQ Queue Migration Plugin.
+This guide covers potential issues, error messages, and solutions when using the RabbitMQ Queue Migration Plugin.
 
 ---
 
@@ -11,9 +11,7 @@ This guide covers common issues, error messages, and solutions when using the Ra
 1. [Pre-Migration Issues](#pre-migration-issues)
 2. [Migration Failures](#migration-failures)
 3. [Performance Issues](#performance-issues)
-4. [Message Count Discrepancies](#message-count-discrepancies)
-5. [Rollback and Recovery](#rollback-and-recovery)
-6. [Configuration Tuning](#configuration-tuning)
+4. [Rollback and Recovery](#rollback-and-recovery)
 
 ---
 
@@ -23,7 +21,7 @@ This guide covers common issues, error messages, and solutions when using the Ra
 
 **Symptom:** Compatibility check returns errors before migration can start
 
-**Common Causes and Solutions:**
+**Possible Causes and Solutions:**
 
 #### 1. Shovel Plugin Not Enabled
 
@@ -255,7 +253,7 @@ tail -f /var/log/rabbitmq/rabbit@<node>.log | grep rqm
 curl -u guest:guest http://localhost:15672/api/shovels
 ```
 
-**Common Causes:**
+**Possible Causes:**
 
 #### 1. Shovel Creation Failed
 
@@ -290,11 +288,11 @@ rabbitmq-plugins enable rabbitmq_shovel
 
 ---
 
-### Queue Migration Aborted
+### Queue Migration Failed
 
-**Error:** `migration_aborted` in queue status
+**Status:** `failed` in queue status
 
-**Cause:** Individual queue migration failed
+**Cause:** Individual queue migration encountered an error
 
 **Diagnosis:**
 ```bash
@@ -305,36 +303,16 @@ curl -u guest:guest \
 # Check error field for specific queue
 ```
 
-**Common Abort Reasons:**
+**Possible Failure Reasons:**
 
-#### 1. Message Count Mismatch
-
-**Error:** `message_count_mismatch`
-
-**Cause:** Destination queue has different message count than expected
-
-**Tolerance Configuration:**
-```erlang
-% In rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 5.0   % Allow 5% extra
-queue_migration.message_count_under_tolerance_percent = 2.0  % Allow 2% missing
-```
-
-**Solution:**
-- Verify no active publishers/consumers during migration
-- Increase tolerance if acceptable
-- Check for message duplication issues
-
-#### 2. Shovel Transfer Failed
-
-**Error:** `shovel_transfer_failed`
+#### 1. Shovel Transfer Failed
 
 **Cause:** Shovel encountered error during message transfer
 
 **Solution:**
 - Check shovel logs for specific error
 - Verify destination queue is healthy
-- May need to delete and retry migration
+- May need to interrupt and retry migration
 
 ---
 
@@ -342,12 +320,13 @@ queue_migration.message_count_under_tolerance_percent = 2.0  % Allow 2% missing
 
 **Symptom:** Migration status shows "interrupted"
 
-**Cause:** User manually interrupted migration or system issue
+**Cause:** User manually interrupted migration via the interrupt endpoint
 
 **What Happens:**
 - Queues actively migrating complete normally
 - Queues not yet started are marked "skipped" with reason "interrupted"
 - Original classic queues remain for skipped queues
+- Completed queues remain as quorum queues
 - Completed queues remain as quorum queues
 
 **Recovery:**
@@ -362,35 +341,13 @@ curl -u guest:guest -X POST \
 
 ## Performance Issues
 
-### Migration Too Slow
+### Migration Taking Longer Than Expected
 
-**Symptom:** Migration taking longer than expected
+**Symptom:** Migration duration is longer than desired
 
-**Diagnosis:**
-```bash
-# Check shovel throughput
-curl -u guest:guest http://localhost:15672/api/shovels
+**Solution:**
 
-# Check system resources
-top
-iostat
-```
-
-**Tuning Options:**
-
-#### 1. Adjust Shovel Prefetch
-
-```erlang
-% For small messages (< 1KB)
-queue_migration.shovel_prefetch_count = 512  % Default: 128
-
-% For large messages (> 100KB)
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-```
-
-#### 2. Use Batch Migration
-
-Migrate in smaller batches to reduce resource pressure:
+Use batch migration to control migration scope:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -398,24 +355,20 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
+This allows you to:
+- Migrate in smaller increments
+- Spread migration across multiple maintenance windows
+- Reduce resource pressure on the cluster
+
 ---
 
 ### High Memory Usage
 
 **Symptom:** Memory alarms triggered during migration
 
-**Cause:** Too many messages in flight, large message sizes
-
 **Solution:**
 
-#### 1. Reduce Shovel Prefetch
-
-```erlang
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-```
-
-#### 2. Migrate in Smaller Batches
-
+Migrate in smaller batches to reduce concurrent resource usage:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -423,8 +376,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-#### 3. Increase Memory Limit (if possible)
-
+If memory alarms persist, increase the memory limit:
 ```erlang
 % In rabbitmq.conf
 vm_memory_high_watermark.relative = 0.6
@@ -434,67 +386,25 @@ vm_memory_high_watermark.relative = 0.6
 
 ### High Disk I/O
 
-**Symptom:** Slow migration, high disk wait times
+**Symptom:** Slow migration with high disk wait times
 
 **Cause:** Quorum queues writing to disk, snapshots being created
 
-**Solution:**
-- Use faster storage (SSD recommended)
+**Recommendations:**
+- Use SSD storage for RabbitMQ data
 - Ensure sufficient disk I/O capacity
 - Migrate during low-traffic periods
-- Consider migrating in smaller batches
-
----
-
-## Message Count Discrepancies
-
-### More Messages in Destination
-
-**Symptom:** Destination queue has more messages than source
-
-**Example:** Source: 300, Destination: 306
-
-**Possible Causes:**
-1. Messages in-flight during count
-2. Shovel prefetch counting
-3. Timing of count collection
-
-**Current Mitigation:**
-- Configurable tolerance (default 5% over allowed)
-- Migration succeeds if within tolerance
-
-**Investigation:**
-- Under active investigation
-- May be related to shovel `ack-mode: on-confirm` behavior
-- Not a data loss issue - extra messages are valid
-
-**Workaround:**
-If tolerance too strict, increase:
-```erlang
-queue_migration.message_count_over_tolerance_percent = 10.0
-```
-
----
-
-### Fewer Messages in Destination
-
-**Symptom:** Destination queue has fewer messages than source
-
-**Cause:** Usually indicates actual message loss
-
-**Solution:**
-- **Do not increase under-tolerance without investigation**
-- Check logs for shovel errors
-- Verify no consumers on destination queue
-- May indicate serious issue - report if reproducible
+- Use batch migration to reduce concurrent disk operations
 
 ---
 
 ## Rollback and Recovery
 
+**Note:** Migration failures requiring rollback are rare. The plugin's comprehensive pre-migration validation prevents most issues before migration starts.
+
 ### After Failed Migration
 
-**Scenario:** Migration failed with status `rollback_pending`
+**Scenario:** Migration failed with status `rollback_pending` (rare edge case)
 
 **What Happens:**
 - Migration status set to `rollback_pending`
@@ -504,33 +414,26 @@ queue_migration.message_count_over_tolerance_percent = 10.0
 - Classic queues remain with original data
 
 **Current State:**
-- Automatic rollback is not implemented
+- Automatic rollback is not implemented in this plugin
 - Manual intervention required to clean up
 
-**Manual Recovery Steps:**
+**Manual Recovery:**
 
-1. **Verify classic queues still have data:**
-```bash
-rabbitmqctl list_queues name type messages | grep classic
-```
+Since automatic rollback is not implemented in this plugin, the safest recovery method is to restore from snapshots:
 
-2. **Delete destination quorum queues manually:**
-```bash
-# For each failed queue, delete the corresponding quorum queue
-rabbitmqctl delete_queue <queue_name>.quorum
-```
-
-3. **Verify bindings and listeners on classic queues:**
-```bash
-rabbitmqctl list_bindings
-rabbitmqctl list_consumers
-```
-
-4. **Fix the issue that caused failure** (disk space, configuration, etc.)
-
+1. **Stop RabbitMQ on all nodes**
+2. **Restore from snapshots** (EBS or tar - see [Snapshots Guide](SNAPSHOTS.md))
+3. **Restart RabbitMQ cluster**
+4. **Fix the issue that caused failure**
 5. **Start new migration when ready**
 
-**Note:** Automatic rollback is planned for future release but not currently implemented.
+**Why snapshot restore is recommended:**
+- Migration state is complex (some queues completed, some failed at different phases)
+- Failed queues may have temporary queues with `tmp_<timestamp>_` prefix
+- Classic queues may have been deleted during phase 1
+- Manual cleanup is error-prone and risks data loss
+
+**Note:** Automatic rollback is a feature of Amazon MQ for RabbitMQ and is not planned for this open-source plugin. For tar snapshot restoration, see `priv/tools/restore_snapshot_test.sh` as a starting point.
 
 ---
 
@@ -541,84 +444,24 @@ rabbitmqctl list_consumers
 **Status:** Migration shows mix of "completed" and "failed" queues
 
 **Recovery:**
-```bash
-# Option 1: Keep successful migrations, fix failed queues
-# Fix issues with failed queues, then start new migration
-# Idempotency ensures already-migrated queues are skipped
 
-# Option 2: Rollback everything (not currently supported)
-# Would need manual intervention to delete quorum queues
-# and restore traffic to classic queues
-```
+**Option 1: Keep successful migrations, continue with remaining queues**
 
----
+If only a few queues failed:
+1. Investigate the failure cause (check error field in queue status)
+2. Fix the underlying issue
+3. Start a new migration - idempotency ensures already-migrated queues are skipped
 
-### Node Failure During Migration
+**Note:** Failed queues may be in inconsistent state (classic queue deleted, temporary quorum queue exists). Starting a new migration will attempt to migrate these queues again.
 
-**Scenario:** RabbitMQ node crashes during migration
+**Option 2: Full rollback to pre-migration state**
 
-**Impact:**
-- Migration process stops
-- Shovels may be lost
-- Worker processes terminated
+Restore from snapshots (only reliable method):
+1. Stop RabbitMQ on all nodes
+2. Restore from snapshots (EBS or tar)
+3. Restart RabbitMQ cluster
 
-**Recovery:**
-1. Restart failed node
-2. Check migration status
-3. Interrupt current migration if stuck
-4. Start new migration - idempotency handles partial completion
-
----
-
-## Configuration Tuning
-
-### For Small Messages (< 1KB)
-
-**Goal:** Maximize throughput
-
-```erlang
-% rabbitmq.conf
-queue_migration.worker_pool_max = 24  % Default: 32
-queue_migration.shovel_prefetch_count = 512  % Default: 128
-```
-
----
-
-### For Large Messages (> 100KB)
-
-**Goal:** Minimize memory usage
-
-```erlang
-% rabbitmq.conf
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-queue_migration.worker_pool_max = 8  % Reduce concurrent migrations
-```
-
----
-
-### For Strict Data Integrity
-
-**Goal:** No message count discrepancies allowed
-
-```erlang
-% rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 0.0
-queue_migration.message_count_under_tolerance_percent = 0.0
-```
-
-**Warning:** May cause migrations to fail due to timing issues
-
----
-
-### For Lenient Migration (Development)
-
-**Goal:** Allow migration to succeed despite minor discrepancies
-
-```erlang
-% rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 10.0
-queue_migration.message_count_under_tolerance_percent = 5.0
-```
+**Warning:** Manual cleanup of failed queues is not recommended due to complex migration state.
 
 ---
 

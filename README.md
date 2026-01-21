@@ -34,6 +34,14 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
+## Web UI
+
+The plugin extends the RabbitMQ Management UI with:
+- **Queue Migration** tab in Admin section
+- Real-time progress monitoring
+- Migration history
+- Per-queue status details
+
 ## Installation
 
 ```shell
@@ -125,354 +133,77 @@ curl -u guest:guest -X POST \
 
 In-flight queue migrations complete while remaining queues are skipped. The migration ends with status `interrupted`.
 
-See [docs/HTTP_API.md](docs/HTTP_API.md) for complete API reference.
+See [HTTP API](docs/HTTP_API.md) for complete API reference.
 
 ## Migration Process
 
-### Pre-Migration Validation
+The plugin uses a two-phase migration process to safely convert classic queues to quorum queues:
 
-The plugin performs comprehensive checks before starting migration:
+1. **Phase 1:** Classic → Temporary Quorum (with `tmp_<timestamp>_` prefix)
+2. **Phase 2:** Temporary → Final Quorum (original name)
 
-**System-Level Checks** (always block migration):
-1. **Plugin Requirements**: Validates `rabbitmq_shovel` is enabled and Khepri is disabled
-2. **Configuration**: Checks `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
-3. **Queue Balance**: Ensures queue leaders are balanced across nodes
-4. **Disk Space**: Estimates required disk space and verifies availability
-5. **System Health**: Checks for active alarms and memory pressure
-6. **Snapshot Availability**: Verifies no concurrent EBS snapshots in progress
-7. **Cluster Health**: Validates no partitions and all nodes are up
+This approach ensures no name conflicts and allows safe rollback if issues occur. Empty queues use a fast path that skips the two-phase process.
 
-**Queue-Level Checks** (can be skipped with `skip_unsuitable_queues` option):
-1. **Queue Synchronization**: Verifies all mirrored classic queues are fully synchronized
-2. **Queue Suitability**: Confirms queues don't have unsuitable arguments (e.g., `reject-publish-dlx`)
+**Important:** Migration suspends non-HTTP listeners broker-wide and closes all client connections. Plan migration windows accordingly.
 
-When `skip_unsuitable_queues` is enabled, queues that fail queue-level checks are skipped during migration instead of blocking the entire process.
-
-### Two-Phase Migration
-
-**Phase 1: Classic → Temporary Quorum**
-1. Create temporary quorum queue with `tmp_` prefix
-2. Copy all bindings from classic to temporary queue
-3. Migrate messages one-by-one
-4. Delete original classic queue
-
-**Phase 2: Temporary → Final Quorum**
-1. Create final quorum queue with original name
-2. Copy all bindings from temporary to final queue
-3. Migrate messages from temporary to final queue
-4. Delete temporary queue
-
-### Connection Handling During Migration
-
-**Pre-Migration Preparation:**
-- Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended broker-wide
-- All existing client connections are closed
-- HTTP API remains available for monitoring migration progress
-
-**During Migration:**
-- Clients cannot connect to the broker (non-HTTP protocols)
-- HTTP API remains accessible for monitoring
-- Migration progress can be monitored via HTTP API
-
-**Post-Migration:**
-- All listeners are restored automatically
-- Clients can reconnect to the broker
-- Migrated queues are now quorum queues with preserved bindings and messages
-
-**Important:** The connection suspension affects the entire broker, not just the vhost being migrated. Plan migration windows accordingly.
-
-### Queue Eligibility
-
-A queue is eligible for migration if:
-- Queue type is `rabbit_classic_queue`
-- Queue has HA policy applied (mirrored)
-- Queue is not exclusive
-
-### Automatic Argument Conversion
-
-The plugin automatically converts or removes queue arguments during migration:
-
-| Classic Queue Argument | Quorum Queue Equivalent | Notes |
-|------------------------|-------------------------|-------|
-| `x-queue-type: classic` | `x-queue-type: quorum` | Required conversion |
-| `x-max-priority` | *removed* | Not supported in quorum queues |
-| `x-queue-mode` | *removed* | Lazy mode doesn't apply |
-| `x-queue-master-locator` | *removed* | Classic queue specific |
-| `x-queue-version` | *removed* | Classic queue specific |
-
-**Important:** Queues with `x-overflow: reject-publish-dlx` are **not eligible** for migration. This argument is unsuitable with quorum queues and will cause the compatibility check to fail. Quorum queues support `drop-head` and `reject-publish`, but `reject-publish` does not provide dead lettering like `reject-publish-dlx` does in classic queues.
+See [Migration Guide](docs/MIGRATION_GUIDE.md) for complete details on the migration process, validation checks, queue eligibility, and argument conversion.
 
 ## Configuration
 
-### Using `rabbitmq.conf` (Recommended)
+The plugin provides extensive configuration options for tuning performance, disk space management, and message count verification.
 
-```ini
-queue_migration.snapshot_mode = ebs
-queue_migration.ebs_volume_device = /dev/sdh
-queue_migration.cleanup_snapshots_on_success = true
-queue_migration.worker_pool_max = 32
-queue_migration.max_queues_for_migration = 10000
-queue_migration.max_migration_duration_ms = 2700000
-queue_migration.min_disk_space_buffer = 524288000
-queue_migration.disk_usage_peak_multiplier = 2.0
-queue_migration.max_memory_usage_percent = 40
-queue_migration.message_count_over_tolerance_percent = 5.0
-queue_migration.message_count_under_tolerance_percent = 0.0
-queue_migration.shovel_prefetch_count = 128
-```
-
-### Using `advanced.config`
-
-The plugin also supports configuration via `advanced.config`:
-
-```erlang
-[
-  {rabbitmq_queue_migration, [
-    %% Progress update frequency (messages between database updates)
-    %% Range: 1-4096, Default: 10
-    {progress_update_frequency, 10},
-
-    %% Worker pool size (capped at scheduler count for stability)
-    %% Range: 1-32, Default: 32
-    {worker_pool_max, 32},
-
-    %% Maximum queues per migration
-    %% Default: 500
-    {max_queues_for_migration, 500},
-
-    %% Minimum free disk space buffer (bytes)
-    %% Default: 524288000 (500MiB)
-    {min_disk_space_buffer, 524288000},
-
-    %% Peak disk usage multiplier for migration estimation
-    %% Default: 2.0
-    {disk_usage_peak_multiplier, 2.0},
-
-    %% Maximum memory usage percentage
-    %% Range: 1-100, Default: 40
-    {max_memory_usage_percent, 40},
-
-    %% Message count verification tolerances
-    %% Over-delivery tolerance (extra messages), Default: 5.0%
-    {message_count_over_tolerance_percent, 5.0},
-    %% Under-delivery tolerance (missing messages), Default: 0.0%
-    {message_count_under_tolerance_percent, 0.0},
-
-    %% Shovel prefetch count for message transfer
-    %% Default: 1024
-    {shovel_prefetch_count, 1024},
-
-    %% Snapshot mode: ebs (production), tar (testing/development), or none (disabled)
-    %% Default: ebs
-    {snapshot_mode, ebs},
-
-    %% EBS volume device path (for EBS snapshots)
-    %% Default: "/dev/sdh"
-    {ebs_volume_device, "/dev/sdh"},
-
-    %% Cleanup snapshots on successful migration
-    %% Default: true
-    {cleanup_snapshots_on_success, true}
-  ]}
-].
-```
-
-**Note:** Most users should not need to change these defaults. They are tuned for typical production workloads based on extensive testing with 500-1000 queues on m7g.large instances.
+See [Configuration Reference](docs/CONFIGURATION.md) for complete configuration reference including all parameters, defaults, and tuning examples.
 
 ## Snapshot Support
 
-The plugin creates snapshots before migration to enable rollback in case of failure. Two modes are supported:
+The plugin creates snapshots before migration to enable rollback if issues occur. Three modes are supported:
 
-### Tar Mode (Development/Testing)
+- **EBS Mode** (default) - AWS EBS snapshots for production
+- **Tar Mode** - Tar archives for development/testing
+- **None Mode** - Disabled (snapshots handled externally)
 
-Creates tar.gz archives of the RabbitMQ data directory. Use this mode for
-development and testing environments.
-
-**Configuration** (in `rabbitmq.conf`):
-```ini
-queue_migration.snapshot_mode = tar
-```
-
-Or in `advanced.config`:
-```erlang
-{snapshot_mode, tar}
-```
-
-**Snapshot Location:**
-```
-/tmp/rabbitmq_migration_snapshots/{ISO8601_timestamp}/{node_name}.tar.gz
-```
-
-**Example:**
-```
-/tmp/rabbitmq_migration_snapshots/2025-12-21T17:30:00Z/rabbit@node1.tar.gz
-```
-
-**Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
-
-### EBS Mode (Production - Default)
-
-Creates real AWS EBS snapshots using the EC2 API. This is the default mode
-for production deployments.
-
-**Configuration** (optional, these are the defaults):
-```erlang
-{snapshot_mode, ebs},
-{ebs_volume_device, "/dev/sdh"}
-```
-
-**Requirements:**
-- RabbitMQ data directory must be on an EBS volume
-- EBS volume must be attached at the configured device path (default: `/dev/sdh`)
-- EC2 instance must have IAM permissions:
-  - `ec2:CreateSnapshot`
-  - `ec2:DescribeVolumes`
-  - `ec2:DescribeSnapshots`
-  - `ec2:CreateTags`
-- AWS credentials configured (EC2 instance role recommended)
-
-**Snapshot Naming:**
-```
-Description: "RabbitMQ migration snapshot {ISO8601_timestamp} on {node_name}"
-```
-
-**Cleanup:** Controlled by `cleanup_snapshots_on_success` setting (default: `true`).
-
-See [docs/EC2_SETUP.md](docs/EC2_SETUP.md) for detailed IAM role configuration and setup instructions.
-
-### None Mode (Disabled)
-
-Disables snapshot creation entirely. Use this mode when snapshots are not
-needed or are handled externally.
-
-**Configuration** (in `rabbitmq.conf`):
-```ini
-queue_migration.snapshot_mode = none
-```
-
-Or in `advanced.config`:
-```erlang
-{snapshot_mode, none}
-```
+See [Snapshots Guide](docs/SNAPSHOTS.md) for complete snapshot configuration and [EC2 Setup](docs/EC2_SETUP.md) for AWS IAM setup.
 
 ## Testing
 
-### Unit Tests
+The plugin includes comprehensive unit tests and integration tests.
 
-Run the Erlang unit test suite:
-
-```bash
-make tests
-```
-
-### Integration Tests
-
-Run end-to-end integration tests with a 3-node Docker cluster:
-
-```bash
-# Add hostname aliases (required for cluster discovery)
-echo "127.0.0.1 rmq0" | sudo tee -a /etc/hosts
-echo "127.0.0.1 rmq1" | sudo tee -a /etc/hosts
-echo "127.0.0.1 rmq2" | sudo tee -a /etc/hosts
-
-# Run integration tests
-make --file integration-test.mk integration-test
-```
-
-See [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) for detailed testing documentation.
-
-## Limitations
-
-### Queue Limits
-- Maximum 500 queues per migration
-- Maximum 15,000 messages per queue
-- Configurable via safety checks
-
-### Not Supported
-- Exclusive queues (skipped)
-- Non-mirrored classic queues (skipped)
-- Queues without HA policies (skipped)
+See [Integration Testing](docs/INTEGRATION_TESTING.md) for test setup and execution instructions.
 
 ## Troubleshooting
 
-### Migration Fails to Start
+For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
 
-**Check validation errors:**
-```bash
-curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
-```
-
-Common issues:
-- `rabbitmq_shovel` plugin not enabled
-- Khepri database enabled (must be disabled)
-- Queue leaders not balanced
-- Insufficient disk space
-
-### Migration Stuck
-
-**Check migration status:**
-```bash
-curl -u guest:guest http://localhost:15672/api/queue-migration/status
-```
-
-**Check RabbitMQ logs:**
-```bash
-# Look for migration progress and errors
-tail -f /var/log/rabbitmq/rabbit@hostname.log | grep rqm
-```
-
-### Rollback Required
-
-If migration fails and enters `rollback_pending` state, manual intervention is required:
-
-1. Check migration status to get snapshot IDs
-2. Stop RabbitMQ on all nodes
-3. Restore from snapshots (EBS or tar)
-4. Restart RabbitMQ cluster
-
-## Performance
-
-### Typical Migration Rates
-- **Small queues** (empty or few messages): 3-4 queues per minute
-- **Large queues** (thousands of messages): Depends on message size and queue depth
-- **Parallel processing**: Multiple queues migrate simultaneously
-
-### Resource Usage
-- **Memory**: Moderate increase during migration
-- **Disk**: Requires 2.5x current queue data size
-- **CPU**: Scales with worker pool size
-
-## Web UI
-
-The plugin extends the RabbitMQ Management UI with:
-- **Queue Migration** tab in Admin section
-- Real-time progress monitoring
-- Migration history
-- Per-queue status details
+Quick checks:
+- **Migration fails to start:** Run compatibility check to identify issues
+- **Migration stuck:** Check status and broker logs
+- **Rollback required:** Manual cleanup needed (automatic rollback not implemented)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See [CONTRIBUTING](CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
 
 ### Getting Started
-- [README.md](README.md) - Overview, installation, and quick start
-- [docs/HTTP_API.md](docs/HTTP_API.md) - Complete HTTP API reference
-- [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md) - Practical API usage examples
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - Configuration parameter reference
+- [README](README.md) - Overview, installation, and quick start
+- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration process and validation
+- [Snapshots Guide](docs/SNAPSHOTS.md) - Snapshot modes and configuration
+- [HTTP API](docs/HTTP_API.md) - Complete HTTP API reference
+- [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
+- [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
 
 ### Feature Guides
-- [docs/SKIP_UNSUITABLE_QUEUES.md](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Troubleshooting guidance
 
 ### Technical Documentation
-- [AGENTS.md](AGENTS.md) - Architecture and implementation details
-- [docs/VALIDATION_CHAIN.md](docs/VALIDATION_CHAIN.md) - Validation chain architecture
+- [AGENTS](AGENTS.md) - Architecture and implementation details
+- [Validation Chain](docs/VALIDATION_CHAIN.md) - Validation chain architecture
 
 ### Testing and Deployment
-- [docs/INTEGRATION_TESTING.md](docs/INTEGRATION_TESTING.md) - Integration testing guide
-- [docs/EC2_SETUP.md](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
+- [Integration Testing](docs/INTEGRATION_TESTING.md) - Integration testing guide
+- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
 
 ## Security
 
