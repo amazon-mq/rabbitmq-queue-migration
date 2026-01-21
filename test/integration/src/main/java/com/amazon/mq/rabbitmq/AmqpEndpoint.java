@@ -30,6 +30,6 @@ public class AmqpEndpoint {
     }
 
     public String getVirtualHost() {
-        return "/"; // TODO constants?
+        return "/";
     }
 }
