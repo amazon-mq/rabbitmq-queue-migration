@@ -417,28 +417,21 @@ vm_memory_high_watermark.relative = 0.6
 - Automatic rollback is not implemented
 - Manual intervention required to clean up
 
-**Manual Recovery Steps:**
+**Manual Recovery:**
 
-1. **Verify classic queues still have data:**
-```bash
-rabbitmqctl list_queues name type messages | grep classic
-```
+Since automatic rollback is not implemented, the safest recovery method is to restore from snapshots:
 
-2. **Delete destination quorum queues manually:**
-```bash
-# For each failed queue, delete the corresponding quorum queue
-rabbitmqctl delete_queue <queue_name>.quorum
-```
-
-3. **Verify bindings and listeners on classic queues:**
-```bash
-rabbitmqctl list_bindings
-rabbitmqctl list_consumers
-```
-
-4. **Fix the issue that caused failure** (disk space, configuration, etc.)
-
+1. **Stop RabbitMQ on all nodes**
+2. **Restore from snapshots** (EBS or tar - see [Snapshots Guide](SNAPSHOTS.md))
+3. **Restart RabbitMQ cluster**
+4. **Fix the issue that caused failure**
 5. **Start new migration when ready**
+
+**Why snapshot restore is recommended:**
+- Migration state is complex (some queues completed, some failed at different phases)
+- Failed queues may have temporary queues with `tmp_<timestamp>_` prefix
+- Classic queues may have been deleted during phase 1
+- Manual cleanup is error-prone and risks data loss
 
 **Note:** Automatic rollback is planned for future release but not currently implemented.
 
@@ -451,15 +444,24 @@ rabbitmqctl list_consumers
 **Status:** Migration shows mix of "completed" and "failed" queues
 
 **Recovery:**
-```bash
-# Option 1: Keep successful migrations, fix failed queues
-# Fix issues with failed queues, then start new migration
-# Idempotency ensures already-migrated queues are skipped
 
-# Option 2: Rollback everything (not currently supported)
-# Would need manual intervention to delete quorum queues
-# and restore traffic to classic queues
-```
+**Option 1: Keep successful migrations, continue with remaining queues**
+
+If only a few queues failed:
+1. Investigate the failure cause (check error field in queue status)
+2. Fix the underlying issue
+3. Start a new migration - idempotency ensures already-migrated queues are skipped
+
+**Note:** Failed queues may be in inconsistent state (classic queue deleted, temporary quorum queue exists). Starting a new migration will attempt to migrate these queues again.
+
+**Option 2: Full rollback to pre-migration state**
+
+Restore from snapshots (only reliable method):
+1. Stop RabbitMQ on all nodes
+2. Restore from snapshots (EBS or tar)
+3. Restart RabbitMQ cluster
+
+**Warning:** Manual cleanup of failed queues is not recommended due to complex migration state.
 
 ---
 
