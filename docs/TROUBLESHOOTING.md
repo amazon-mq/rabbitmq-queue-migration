@@ -13,7 +13,6 @@ This guide covers common issues, error messages, and solutions when using the Ra
 3. [Performance Issues](#performance-issues)
 4. [Message Count Discrepancies](#message-count-discrepancies)
 5. [Rollback and Recovery](#rollback-and-recovery)
-6. [Configuration Tuning](#configuration-tuning)
 
 ---
 
@@ -362,35 +361,13 @@ curl -u guest:guest -X POST \
 
 ## Performance Issues
 
-### Migration Too Slow
+### Migration Taking Longer Than Expected
 
-**Symptom:** Migration taking longer than expected
+**Symptom:** Migration duration is longer than desired
 
-**Diagnosis:**
-```bash
-# Check shovel throughput
-curl -u guest:guest http://localhost:15672/api/shovels
+**Solution:**
 
-# Check system resources
-top
-iostat
-```
-
-**Tuning Options:**
-
-#### 1. Adjust Shovel Prefetch
-
-```erlang
-% For small messages (< 1KB)
-queue_migration.shovel_prefetch_count = 512  % Default: 128
-
-% For large messages (> 100KB)
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-```
-
-#### 2. Use Batch Migration
-
-Migrate in smaller batches to reduce resource pressure:
+Use batch migration to control migration scope:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -398,24 +375,20 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
+This allows you to:
+- Migrate in smaller increments
+- Spread migration across multiple maintenance windows
+- Reduce resource pressure on the cluster
+
 ---
 
 ### High Memory Usage
 
 **Symptom:** Memory alarms triggered during migration
 
-**Cause:** Too many messages in flight, large message sizes
-
 **Solution:**
 
-#### 1. Reduce Shovel Prefetch
-
-```erlang
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-```
-
-#### 2. Migrate in Smaller Batches
-
+Migrate in smaller batches to reduce concurrent resource usage:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -423,8 +396,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-#### 3. Increase Memory Limit (if possible)
-
+If memory alarms persist, increase the memory limit:
 ```erlang
 % In rabbitmq.conf
 vm_memory_high_watermark.relative = 0.6
@@ -434,15 +406,15 @@ vm_memory_high_watermark.relative = 0.6
 
 ### High Disk I/O
 
-**Symptom:** Slow migration, high disk wait times
+**Symptom:** Slow migration with high disk wait times
 
 **Cause:** Quorum queues writing to disk, snapshots being created
 
-**Solution:**
-- Use faster storage (SSD recommended)
+**Recommendations:**
+- Use SSD storage for RabbitMQ data
 - Ensure sufficient disk I/O capacity
 - Migrate during low-traffic periods
-- Consider migrating in smaller batches
+- Use batch migration to reduce concurrent disk operations
 
 ---
 
@@ -567,58 +539,6 @@ rabbitmqctl list_consumers
 2. Check migration status
 3. Interrupt current migration if stuck
 4. Start new migration - idempotency handles partial completion
-
----
-
-## Configuration Tuning
-
-### For Small Messages (< 1KB)
-
-**Goal:** Maximize throughput
-
-```erlang
-% rabbitmq.conf
-queue_migration.worker_pool_max = 24  % Default: 32
-queue_migration.shovel_prefetch_count = 512  % Default: 128
-```
-
----
-
-### For Large Messages (> 100KB)
-
-**Goal:** Minimize memory usage
-
-```erlang
-% rabbitmq.conf
-queue_migration.shovel_prefetch_count = 64  % Default: 128
-queue_migration.worker_pool_max = 8  % Reduce concurrent migrations
-```
-
----
-
-### For Strict Data Integrity
-
-**Goal:** No message count discrepancies allowed
-
-```erlang
-% rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 0.0
-queue_migration.message_count_under_tolerance_percent = 0.0
-```
-
-**Warning:** May cause migrations to fail due to timing issues
-
----
-
-### For Lenient Migration (Development)
-
-**Goal:** Allow migration to succeed despite minor discrepancies
-
-```erlang
-% rabbitmq.conf
-queue_migration.message_count_over_tolerance_percent = 10.0
-queue_migration.message_count_under_tolerance_percent = 5.0
-```
 
 ---
 

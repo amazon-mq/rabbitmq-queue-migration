@@ -27,16 +27,7 @@ queue_migration.shovel_prefetch_count = 256
 **Range:** 1-32  
 **Description:** Maximum number of concurrent queue migrations per node
 
-**Usage:**
-```erlang
-queue_migration.worker_pool_max = 24
-```
-
-**Tuning:**
-- Higher values = faster migration (if CPU available)
-- Lower values = reduced resource usage
-- Actual pool size = `min(schedulers, worker_pool_max)`
-- Maximum allowed: 32
+**Note:** The default value is optimized for typical production workloads. Actual pool size is `min(schedulers, worker_pool_max)`.
 
 ---
 
@@ -91,14 +82,7 @@ queue_migration.message_count_under_tolerance_percent = 2.0
 **Description:** Number of messages to prefetch during shovel transfer
 
 **Usage:**
-```erlang
-queue_migration.shovel_prefetch_count = 256
-```
-
-**Tuning:**
-- Small messages (< 1KB): Increase to 512-1024 for throughput
-- Large messages (> 100KB): Decrease to 64-128 to reduce memory
-- Default 128 works well for most workloads
+**Note:** The default value is optimized for typical production workloads.
 
 ---
 
@@ -109,11 +93,6 @@ queue_migration.shovel_prefetch_count = 256
 **Type:** Positive integer (bytes)  
 **Default:** 524288000 (500 MB)  
 **Description:** Minimum free disk space buffer required for migration
-
-**Usage:**
-```erlang
-queue_migration.min_disk_space_buffer = 1073741824  % 1 GB
-```
 
 ---
 
@@ -196,10 +175,7 @@ queue_migration.max_migration_duration_ms = 3600000  % 1 hour
 queue_migration.progress_update_frequency = 100
 ```
 
-**Tuning:**
-- Lower values = more frequent updates, more overhead
-- Higher values = less frequent updates, less overhead
-- Default 10 provides good balance
+**Note:** The default value provides good balance between update frequency and overhead.
 
 ---
 

@@ -297,18 +297,6 @@ If migration fails and enters `rollback_pending` state, manual intervention is r
 3. Restore from snapshots (EBS or tar)
 4. Restart RabbitMQ cluster
 
-## Performance
-
-### Typical Migration Rates
-- **Small queues** (empty or few messages): 3-4 queues per minute
-- **Large queues** (thousands of messages): Depends on message size and queue depth
-- **Parallel processing**: Multiple queues migrate simultaneously
-
-### Resource Usage
-- **Memory**: Moderate increase during migration
-- **Disk**: Requires 2.5x current queue data size
-- **CPU**: Scales with worker pool size
-
 ## Web UI
 
 The plugin extends the RabbitMQ Management UI with:
