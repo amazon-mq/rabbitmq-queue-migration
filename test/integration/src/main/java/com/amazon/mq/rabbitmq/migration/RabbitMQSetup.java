@@ -180,7 +180,7 @@ public class RabbitMQSetup {
 
         // Create topic exchanges for flexible routing
         for (int i = 0; i < exchangeCount; i++) {
-            String exchangeName = String.format("test.exchange.%d", i);
+            String exchangeName = String.format("%s%d", config.getExchangePrefix(), i);
             getNextChannel().exchangeDeclare(exchangeName, BuiltinExchangeType.TOPIC, true, false, null);
             logger.debug("Created exchange: {}", exchangeName);
         }
@@ -199,7 +199,7 @@ public class RabbitMQSetup {
         logger.info("Creating {} mirrored classic queues across {} nodes (round-robin)", queueCount, connections.length);
 
         for (int i = 0; i < queueCount; i++) {
-            String queueName = String.format("test.queue.%d", i);
+            String queueName = String.format("%s%d", config.getQueuePrefix(), i);
 
             // Round-robin across available channels
             int nodeIndex = i % channels.length;
@@ -248,7 +248,7 @@ public class RabbitMQSetup {
         int maxBytesPerQueue = 100 * 1024 * 1024; // 100MB - adjust based on migration checker limits
 
         for (int i = 0; i < unsuitableQueueCount; i++) {
-            String queueName = String.format("test.unsuitable.queue.%d", i);
+            String queueName = String.format("%s%d", config.getUnsuitableQueuePrefix(), i);
 
             // Round-robin across available channels for node distribution
             int nodeIndex = i % channels.length;
@@ -355,7 +355,7 @@ public class RabbitMQSetup {
         String[] unsuitableTypes = {"reject-publish-dlx", "too-many-messages", "too-many-bytes"};
 
         for (int i = 0; i < unsuitableQueueCount; i++) {
-            String queueName = String.format("test.unsuitable.queue.%d", i);
+            String queueName = String.format("%s%d", config.getUnsuitableQueuePrefix(), i);
             String unsuitableType = unsuitableTypes[i % unsuitableTypes.length];
 
             // Only generate tasks for queues that need messages
@@ -416,7 +416,7 @@ public class RabbitMQSetup {
             PolicyInfo policy = new PolicyInfo();
             policy.setVhost(config.getAmqpEndpoint(0).getVirtualHost());
             policy.setName("test-ha-policy");
-            policy.setPattern("^test.*\\.queue\\.[0-9]+$");
+            policy.setPattern("ha-all");
             policy.setApplyTo("queues");
             policy.setPriority(1);
 
@@ -432,7 +432,7 @@ public class RabbitMQSetup {
             logger.warn("Failed to create HA policy via HTTP API: {}", e.getMessage());
             logger.info("HA policy creation failed, but continuing with setup. Queues will not be mirrored.");
             logger.info("You can manually create the HA policy later using:");
-            logger.info("  rabbitmqctl set_policy test-ha-policy \"test\\.queue\\..*\" '{{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}}' --apply-to queues");
+            logger.info("  rabbitmqctl set_policy test-ha-policy \"ha-all\" '{{\"ha-mode\":\"all\",\"ha-sync-mode\":\"automatic\"}}' --apply-to queues");
         }
     }
 
@@ -447,7 +447,7 @@ public class RabbitMQSetup {
         int maxAttempts = 30; // 30 attempts with 1-second intervals = 30 seconds max per queue
 
         for (int i = 0; i < queueCount; i++) {
-            String queueName = String.format("test.queue.%d", i);
+            String queueName = String.format("%s%d", config.getQueuePrefix(), i);
             logger.debug("Checking synchronization for queue: {}", queueName);
 
             int attempt = 0;
@@ -538,12 +538,12 @@ public class RabbitMQSetup {
         int totalBindings = 0;
 
         for (int queueIndex = 0; queueIndex < queueCount; queueIndex++) {
-            String queueName = String.format("test.queue.%d", queueIndex);
+            String queueName = String.format("%s%d", config.getQueuePrefix(), queueIndex);
 
             for (int bindingIndex = 0; bindingIndex < bindingsPerQueue; bindingIndex++) {
                 // Distribute bindings across exchanges
                 int exchangeIndex = (queueIndex + bindingIndex) % exchangeCount;
-                String exchangeName = String.format("test.exchange.%d", exchangeIndex);
+                String exchangeName = String.format("%s%d", config.getExchangePrefix(), exchangeIndex);
 
                 // Generate routing key patterns
                 String routingKey = generateRoutingKeyPattern(queueIndex, bindingIndex);
@@ -682,7 +682,7 @@ public class RabbitMQSetup {
             }
             // Determine target queue and connection
             int targetQueueIndex = i % queueCount;
-            String queueName = String.format("test.queue.%d", targetQueueIndex);
+            String queueName = String.format("%s%d", config.getQueuePrefix(), targetQueueIndex);
             int connectionIndex = queueToConnectionMap.get(queueName);
             // Create and queue task
             PublishingTask task = new PublishingTask(queueName, messageSize, i);
@@ -715,7 +715,7 @@ public class RabbitMQSetup {
             // Get queue information
             List<QueueInfo> queues = getNextHttpClient().getQueues();
             List<QueueInfo> testQueues = queues.stream()
-                .filter(q -> q.getName().startsWith("test.queue."))
+                .filter(q -> q.getName().startsWith(config.getQueuePrefix()))
                 .toList();
 
             logger.info("Found {} test queues", testQueues.size());
@@ -738,7 +738,7 @@ public class RabbitMQSetup {
             // Get exchange information
             List<ExchangeInfo> exchanges = getNextHttpClient().getExchanges();
             long testExchanges = exchanges.stream()
-                .filter(e -> e.getName().startsWith("test."))
+                .filter(e -> e.getName().startsWith(config.getExchangePrefix()))
                 .count();
 
             logger.info("Test exchanges: {}", testExchanges);
@@ -746,7 +746,7 @@ public class RabbitMQSetup {
             // Get binding information
             List<BindingInfo> bindings = getNextHttpClient().getBindings();
             long testBindings = bindings.stream()
-                .filter(b -> b.getSource().startsWith("test.") || b.getDestination().startsWith("test."))
+                .filter(b -> b.getSource().startsWith(config.getExchangePrefix()) || b.getDestination().startsWith(config.getQueuePrefix()))
                 .count();
 
             logger.info("Test bindings: {}", testBindings);
@@ -808,17 +808,17 @@ public class RabbitMQSetup {
             // Get the complete statistics (no need to wait for stabilization since we use publisher confirms)
             List<QueueInfo> queues = getNextHttpClient().getQueues();
             List<QueueInfo> testQueues = queues.stream()
-                .filter(q -> q.getName().startsWith("test.queue."))
+                .filter(q -> q.getName().startsWith(config.getQueuePrefix()))
                 .toList();
 
             List<ExchangeInfo> exchanges = getNextHttpClient().getExchanges();
             long testExchanges = exchanges.stream()
-                .filter(e -> e.getName().startsWith("test."))
+                .filter(e -> e.getName().startsWith(config.getExchangePrefix()))
                 .count();
 
             List<BindingInfo> bindings = getNextHttpClient().getBindings();
             long testBindings = bindings.stream()
-                .filter(b -> b.getSource().startsWith("test.") || b.getDestination().startsWith("test."))
+                .filter(b -> b.getSource().startsWith(config.getExchangePrefix()) || b.getDestination().startsWith(config.getQueuePrefix()))
                 .count();
 
             // Use the configured message count (represents confirmed published messages)

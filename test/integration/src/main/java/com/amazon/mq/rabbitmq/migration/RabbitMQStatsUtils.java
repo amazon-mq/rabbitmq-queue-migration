@@ -22,11 +22,12 @@ public class RabbitMQStatsUtils {
      *
      * @param httpClient The RabbitMQ HTTP client to use for API calls
      * @param vhost The virtual host to query queues from
+     * @param queuePrefix The prefix to filter queues by
      * @param context Description of the context for logging (e.g., "pre-migration", "post-migration")
      * @return The final stabilized message count
      * @throws Exception if there's an error communicating with RabbitMQ
      */
-    public static long waitForTestQueueStatsToStabilize(Client httpClient, String vhost, String context) throws Exception {
+    public static long waitForTestQueueStatsToStabilize(Client httpClient, String vhost, String queuePrefix, String context) throws Exception {
         logger.info("Waiting for RabbitMQ stats to stabilize{}...",
             context != null && !context.isEmpty() ? " for " + context : "");
 
@@ -46,7 +47,7 @@ public class RabbitMQStatsUtils {
             try {
                 List<QueueInfo> queues = httpClient.getQueues(vhost);
                 currentCount = queues.stream()
-                    .filter(q -> q.getName().startsWith("test.queue."))
+                    .filter(q -> q.getName().startsWith(queuePrefix))
                     .mapToLong(QueueInfo::getMessagesReady)
                     .sum();
 

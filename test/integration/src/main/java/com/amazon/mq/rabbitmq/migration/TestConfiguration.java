@@ -24,6 +24,9 @@ public class TestConfiguration {
     private int unsuitableQueueCount = 0; // Number of unsuitable queues to create for testing
 
     private String virtualHost = getDefaultVirtualHost();
+    private String queuePrefix = "test.queue.";
+    private String unsuitableQueuePrefix = "test.unsuitable.queue.";
+    private String exchangePrefix = "test.exchange.";
 
     /**
      * Get the default virtual host used when no specific vhost is configured.
@@ -207,4 +210,15 @@ public class TestConfiguration {
 
     public String getVirtualHost() { return virtualHost; }
     public void setVirtualHost(String virtualHost) { this.virtualHost = virtualHost; }
+
+    public String getQueuePrefix() { return queuePrefix; }
+    public void setQueuePrefix(String queuePrefix) { this.queuePrefix = queuePrefix; }
+
+    public String getUnsuitableQueuePrefix() { return unsuitableQueuePrefix; }
+    public void setUnsuitableQueuePrefix(String unsuitableQueuePrefix) {
+        this.unsuitableQueuePrefix = unsuitableQueuePrefix;
+    }
+
+    public String getExchangePrefix() { return exchangePrefix; }
+    public void setExchangePrefix(String exchangePrefix) { this.exchangePrefix = exchangePrefix; }
 }

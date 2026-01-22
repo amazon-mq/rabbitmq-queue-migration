@@ -142,7 +142,7 @@ public class EndToEndMigrationTest {
 
         // Wait for stats to stabilize and get queue information using utility
         Client httpClient = config.createHttpClient();
-        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), "pre-migration");
+        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), config.getQueuePrefix(), "pre-migration");
         List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
 
         // Filter test queues and collect stats
@@ -152,7 +152,7 @@ public class EndToEndMigrationTest {
         int quorumQueueCount = 0;
 
         for (QueueInfo queue : queues) {
-            if (queue.getName().startsWith("test.queue.")) {
+            if (queue.getName().startsWith(config.getQueuePrefix())) {
                 testQueueCount++;
                 totalMessages += queue.getMessagesReady();
 
@@ -472,7 +472,7 @@ public class EndToEndMigrationTest {
 
         // Wait for post-migration stats to stabilize
         Client httpClient = config.createHttpClient();
-        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), "post-migration");
+        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), config.getQueuePrefix(), "post-migration");
 
         // Collect post-migration stats
         List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
@@ -483,7 +483,7 @@ public class EndToEndMigrationTest {
         int quorumQueueCount = 0;
 
         for (QueueInfo queue : queues) {
-            if (queue.getName().startsWith("test.queue.")) {
+            if (queue.getName().startsWith(config.getQueuePrefix())) {
                 testQueueCount++;
                 totalMessages += queue.getMessagesReady();
 

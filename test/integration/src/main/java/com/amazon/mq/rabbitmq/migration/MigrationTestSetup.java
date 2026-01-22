@@ -184,7 +184,7 @@ public class MigrationTestSetup {
                 }
             } else if (arg.startsWith("--unsuitable-queue-count=")) {
                 try {
-                    int unsuitableQueueCount = Integer.parseInt(arg.substring(27));
+                    int unsuitableQueueCount = Integer.parseInt(arg.substring(25));
                     config.setUnsuitableQueueCount(unsuitableQueueCount);
                 } catch (NumberFormatException e) {
                     logger.error("Invalid unsuitable queue count: {}", arg);
@@ -241,6 +241,12 @@ public class MigrationTestSetup {
                     printUsage();
                     System.exit(1);
                 }
+            } else if (arg.startsWith("--queue-prefix=")) {
+                config.setQueuePrefix(arg.substring(15));
+            } else if (arg.startsWith("--unsuitable-queue-prefix=")) {
+                config.setUnsuitableQueuePrefix(arg.substring(26));
+            } else if (arg.startsWith("--exchange-prefix=")) {
+                config.setExchangePrefix(arg.substring(18));
             } else if (arg.equals("--help") || arg.equals("-h")) {
                 printUsage();
                 System.exit(0);
@@ -266,6 +272,9 @@ public class MigrationTestSetup {
         System.out.println("  --migration-timeout=N      Migration timeout in seconds (default: 300, for end-to-end mode)");
         System.out.println("  --unsuitable-queue-count=N  Number of unsuitable queues to create for testing (default: 0)");
         System.out.println("                                Creates queues with reject-publish-dlx, too many messages, etc.");
+        System.out.println("  --queue-prefix=PREFIX      Prefix for queue names (default: test.queue.)");
+        System.out.println("  --unsuitable-queue-prefix=PREFIX  Prefix for unsuitable queue names (default: test.unsuitable.queue.)");
+        System.out.println("  --exchange-prefix=PREFIX   Prefix for exchange names (default: test.exchange.)");
         System.out.println();
         System.out.println("Message Configuration:");
         System.out.println("  --message-distribution=X,Y,Z   Message size distribution percentages (must sum to 100)");
