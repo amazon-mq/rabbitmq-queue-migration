@@ -7,9 +7,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
@@ -25,12 +27,18 @@ public class QueueMigrationClient {
 
     private final String baseUrl;
     private final String authHeader;
+    private final String vhost;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
     public QueueMigrationClient(String host, int port, String username, String password) {
+        this(host, port, username, password, TestConfiguration.getDefaultVirtualHost());
+    }
+
+    public QueueMigrationClient(String host, int port, String username, String password, String vhost) {
         this.baseUrl = String.format("http://%s:%d/api", host, port);
         this.authHeader = "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
+        this.vhost = vhost;
         this.httpClient = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
@@ -81,11 +89,14 @@ public class QueueMigrationClient {
 
         String requestBody = objectMapper.writeValueAsString(options);
 
-        logger.info("Starting queue migration with options: {}", requestBody);
+        logger.info("Starting queue migration for vhost '{}' with options: {}", vhost, requestBody);
 
-        logger.info("Building HTTP request to: {}/queue-migration/start", baseUrl);
+        String encodedVhost = URLEncoder.encode(vhost, StandardCharsets.UTF_8);
+        String endpoint = baseUrl + "/queue-migration/start/" + encodedVhost;
+
+        logger.info("Building HTTP request to: {}", endpoint);
         HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/queue-migration/start"))
+            .uri(URI.create(endpoint))
             .header("Authorization", authHeader)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))

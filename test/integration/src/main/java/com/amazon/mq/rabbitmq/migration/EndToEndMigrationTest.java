@@ -88,7 +88,8 @@ public class EndToEndMigrationTest {
             config.getHttpHost(),
             config.getHttpPort(),
             "guest",
-            "guest"
+            "guest",
+            config.getVirtualHost()
         );
     }
 
@@ -141,8 +142,8 @@ public class EndToEndMigrationTest {
 
         // Wait for stats to stabilize and get queue information using utility
         Client httpClient = config.createHttpClient();
-        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, "pre-migration");
-        List<QueueInfo> queues = httpClient.getQueues("/");
+        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), "pre-migration");
+        List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
 
         // Filter test queues and collect stats
         int testQueueCount = 0;
@@ -364,7 +365,7 @@ public class EndToEndMigrationTest {
         try {
             Client httpClient = config.createHttpClient();
             // Do a simple aliveness test
-            return httpClient.alivenessTest("/");
+            return httpClient.alivenessTest(config.getVirtualHost());
         } catch (Exception e) {
             logger.warn("❌ HTTP API check error: {}", e.getMessage());
             return false;
@@ -471,10 +472,10 @@ public class EndToEndMigrationTest {
 
         // Wait for post-migration stats to stabilize
         Client httpClient = config.createHttpClient();
-        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, "post-migration");
+        RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), "post-migration");
 
         // Collect post-migration stats
-        List<QueueInfo> queues = httpClient.getQueues("/");
+        List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
 
         int testQueueCount = 0;
         long totalMessages = 0;

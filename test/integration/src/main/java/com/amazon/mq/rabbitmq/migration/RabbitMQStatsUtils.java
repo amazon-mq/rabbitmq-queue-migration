@@ -21,11 +21,12 @@ public class RabbitMQStatsUtils {
      * remains exactly the same between consecutive checks.
      *
      * @param httpClient The RabbitMQ HTTP client to use for API calls
+     * @param vhost The virtual host to query queues from
      * @param context Description of the context for logging (e.g., "pre-migration", "post-migration")
      * @return The final stabilized message count
      * @throws Exception if there's an error communicating with RabbitMQ
      */
-    public static long waitForTestQueueStatsToStabilize(Client httpClient, String context) throws Exception {
+    public static long waitForTestQueueStatsToStabilize(Client httpClient, String vhost, String context) throws Exception {
         logger.info("Waiting for RabbitMQ stats to stabilize{}...",
             context != null && !context.isEmpty() ? " for " + context : "");
 
@@ -43,7 +44,7 @@ public class RabbitMQStatsUtils {
             }
 
             try {
-                List<QueueInfo> queues = httpClient.getQueues("/");
+                List<QueueInfo> queues = httpClient.getQueues(vhost);
                 currentCount = queues.stream()
                     .filter(q -> q.getName().startsWith("test.queue."))
                     .mapToLong(QueueInfo::getMessagesReady)
@@ -71,16 +72,5 @@ public class RabbitMQStatsUtils {
 
         logger.warn("Stats stability timeout reached after {} seconds", maxAttempts * sleepDurationSeconds);
         return currentCount;
-    }
-
-    /**
-     * Wait for test queue message counts to stabilize with no context.
-     *
-     * @param httpClient The RabbitMQ HTTP client to use for API calls
-     * @return The final stabilized message count
-     * @throws Exception if there's an error communicating with RabbitMQ
-     */
-    public static long waitForTestQueueStatsToStabilize(Client httpClient) throws Exception {
-        return waitForTestQueueStatsToStabilize(httpClient, null);
     }
 }

@@ -29,4 +29,8 @@ public class PublishingConfiguration {
     public int getNodeCount() {
         return clusterTopology.getAllNodes().size();
     }
+
+    public String getVirtualHost() {
+        return clusterTopology.getAmqpEndpoint(0).getVirtualHost();
+    }
 }

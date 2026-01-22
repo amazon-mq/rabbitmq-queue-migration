@@ -23,6 +23,20 @@ public class TestConfiguration {
     private boolean skipSetup = false; // Skip setup in end-to-end mode
     private int unsuitableQueueCount = 0; // Number of unsuitable queues to create for testing
 
+    private String virtualHost = getDefaultVirtualHost();
+
+    /**
+     * Get the default virtual host used when no specific vhost is configured.
+     * @return the default virtual host "/"
+     */
+    public static String getDefaultVirtualHost() {
+        return "/";
+    }
+
+    public static boolean isDefaultVirtualHost(String vhost) {
+        return getDefaultVirtualHost().equals(vhost);
+    }
+
     // Message size configuration (in bytes)
     private int smallMessageSize = 1024;      // 1KiB
     private int mediumMessageSize = 102400;   // 100KiB
@@ -190,4 +204,7 @@ public class TestConfiguration {
     public void setQuorumQueueCount(int quorumQueueCount) {
         this.quorumQueueCount = Math.max(0, quorumQueueCount);
     }
+
+    public String getVirtualHost() { return virtualHost; }
+    public void setVirtualHost(String virtualHost) { this.virtualHost = virtualHost; }
 }

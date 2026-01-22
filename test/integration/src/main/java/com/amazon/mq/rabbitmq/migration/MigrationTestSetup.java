@@ -3,6 +3,9 @@ package com.amazon.mq.rabbitmq.migration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.amazon.mq.rabbitmq.ClusterTopology;
+import com.rabbitmq.http.client.Client;
+import com.rabbitmq.http.client.domain.VhostInfo;
+import com.rabbitmq.http.client.domain.UserPermissions;
 
 import java.util.Arrays;
 import java.util.List;
@@ -80,6 +83,7 @@ public class MigrationTestSetup {
     public static TestConfiguration parseArguments(String[] args) {
         String hostname = "localhost";
         int port = 15672;
+        String vhost = TestConfiguration.getDefaultVirtualHost();
 
         // Check for help first, then get hostname and port
         for (String arg : args) {
@@ -89,7 +93,7 @@ public class MigrationTestSetup {
             }
         }
 
-        // Parse hostname/port from args to update config
+        // Parse hostname/port/vhost from args to update config
         for (String testArg : args) {
             if (testArg.startsWith("--hostname=")) {
                 hostname = testArg.substring(11);
@@ -99,12 +103,20 @@ public class MigrationTestSetup {
                 } catch (NumberFormatException e) {
                     // Use default port
                 }
+            } else if (testArg.startsWith("--vhost=")) {
+                vhost = testArg.substring(8);
             }
         }
 
         // Initialize config with defaults
-        ClusterTopology topology = new ClusterTopology(hostname, port);
+        ClusterTopology topology = new ClusterTopology(hostname, port, "guest", "guest", vhost);
         TestConfiguration config = new TestConfiguration(topology);
+        config.setVirtualHost(vhost);
+
+        // Create vhost if it doesn't exist (only for non-default vhosts)
+        if (!TestConfiguration.isDefaultVirtualHost(vhost)) {
+            ensureVhostExists(topology, vhost);
+        }
 
         // Check for test-connection next
         for (String arg : args) {
@@ -264,6 +276,7 @@ public class MigrationTestSetup {
         System.out.println("Connection Options:");
         System.out.println("  --hostname=HOST            RabbitMQ management API hostname (default: localhost)");
         System.out.println("  --port=PORT                RabbitMQ management API port (default: 15672)");
+        System.out.println("  --vhost=NAME               Virtual host for all operations (default: /)");
         System.out.println("                             ClusterTopology will automatically discover all cluster nodes");
         System.out.println();
         System.out.println("Test Options:");
@@ -316,5 +329,36 @@ public class MigrationTestSetup {
 
         System.out.println("=== Setup Complete - Ready for Migration Testing ===");
         System.out.println();
+    }
+
+    private static void ensureVhostExists(ClusterTopology topology, String vhost) {
+        try {
+            Client httpClient = topology.createHttpClient();
+
+            // Check if vhost already exists
+            List<com.rabbitmq.http.client.domain.VhostInfo> vhosts = httpClient.getVhosts();
+            boolean vhostExists = vhosts.stream()
+                .anyMatch(v -> vhost.equals(v.getName()));
+
+            if (!vhostExists) {
+                logger.info("Creating virtual host '{}'", vhost);
+                httpClient.createVhost(vhost);
+                logger.info("✅ Virtual host '{}' created successfully", vhost);
+            } else {
+                logger.info("Virtual host '{}' already exists", vhost);
+            }
+
+            // Grant full permissions to guest user
+            logger.info("Setting permissions for guest user on vhost '{}'", vhost);
+            com.rabbitmq.http.client.domain.UserPermissions permissions =
+                new com.rabbitmq.http.client.domain.UserPermissions(".*", ".*", ".*");
+            httpClient.updatePermissions(vhost, "guest", permissions);
+            logger.info("✅ Guest user granted full permissions on vhost '{}'", vhost);
+
+        } catch (Exception e) {
+            logger.error("Failed to create virtual host '{}': {}", vhost, e.getMessage());
+            System.err.println("Error: Failed to create virtual host '" + vhost + "': " + e.getMessage());
+            System.exit(1);
+        }
     }
 }
