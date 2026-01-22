@@ -29,6 +29,7 @@ public class TestConfiguration {
     private String exchangePrefix = "test.exchange.";
     private boolean skipUnsuitableQueues = false;
     private Integer batchSize = null; // null means "all"
+    private String batchOrder = "smallest_first";
 
     /**
      * Get the default virtual host used when no specific vhost is configured.
@@ -229,4 +230,7 @@ public class TestConfiguration {
 
     public Integer getBatchSize() { return batchSize; }
     public void setBatchSize(Integer batchSize) { this.batchSize = batchSize; }
+
+    public String getBatchOrder() { return batchOrder; }
+    public void setBatchOrder(String batchOrder) { this.batchOrder = batchOrder; }
 }

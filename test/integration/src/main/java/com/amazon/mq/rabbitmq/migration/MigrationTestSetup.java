@@ -262,6 +262,14 @@ public class MigrationTestSetup {
                     logger.error("Invalid batch size: {}", arg);
                     System.exit(1);
                 }
+            } else if (arg.startsWith("--batch-order=")) {
+                String order = arg.substring(14);
+                if (order.equals("smallest_first") || order.equals("largest_first")) {
+                    config.setBatchOrder(order);
+                } else {
+                    logger.error("Invalid batch order: {} (must be smallest_first or largest_first)", order);
+                    System.exit(1);
+                }
             } else if (arg.equals("--help") || arg.equals("-h")) {
                 printUsage();
                 System.exit(0);
@@ -309,6 +317,7 @@ public class MigrationTestSetup {
         System.out.println("  --skip-setup               Skip setup phase in end-to-end mode");
         System.out.println("  --skip-unsuitable-queues   Skip unsuitable queues during migration");
         System.out.println("  --batch-size=N             Number of queues to migrate per batch (default: all)");
+        System.out.println("  --batch-order=ORDER        Order to migrate queues: smallest_first or largest_first");
         System.out.println("  --enable-ttl               Enable TTL on queues (disabled by default)");
         System.out.println("  --ttl-hours=HOURS          Set TTL duration in hours (default: 1, enables TTL)");
         System.out.println("  --enable-max-length        Enable max-length on queues (disabled by default)");

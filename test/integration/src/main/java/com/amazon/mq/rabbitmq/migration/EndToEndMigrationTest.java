@@ -52,7 +52,7 @@ public class EndToEndMigrationTest {
             logger.info("=== Phase 3: Triggering queue migration ===");
             QueueMigrationClient migrationClient = createMigrationClient(config);
             QueueMigrationClient.MigrationResponse migrationResponse = migrationClient.startMigration(
-                config.isSkipUnsuitableQueues(), config.getBatchSize(), null);
+                config.isSkipUnsuitableQueues(), config.getBatchSize(), config.getBatchOrder());
             logger.info("Migration start response: {}", migrationResponse);
 
             // Phase 4: Wait for migration to start, then monitor progress
@@ -518,19 +518,30 @@ public class EndToEndMigrationTest {
             logger.info("✅ Message count validation passed: {}", totalMessages);
         }
 
-        // Check that all queues are now quorum queues
-        if (quorumQueueCount != testQueueCount) {
-            logger.error("❌ Not all queues are quorum queues: {} quorum, {} classic, {} total",
-                quorumQueueCount, classicQueueCount, testQueueCount);
-            validationPassed = false;
-        } else {
-            logger.info("✅ All {} queues are now quorum queues", quorumQueueCount);
+        // Calculate expected quorum count based on batch size
+        int expectedQuorumCount = testQueueCount;
+        if (config.getBatchSize() != null && config.getBatchSize() < testQueueCount) {
+            expectedQuorumCount = config.getBatchSize();
+            logger.info("Batch migration mode: expecting {} queues migrated (batch_size={})",
+                expectedQuorumCount, config.getBatchSize());
         }
 
-        // Check that no classic queues remain
-        if (classicQueueCount > 0) {
-            logger.error("❌ Classic queues still exist: {}", classicQueueCount);
+        // Check that expected number of queues are now quorum queues
+        if (quorumQueueCount != expectedQuorumCount) {
+            logger.error("❌ Quorum queue count mismatch: expected {}, found {} quorum, {} classic, {} total",
+                expectedQuorumCount, quorumQueueCount, classicQueueCount, testQueueCount);
             validationPassed = false;
+        } else {
+            logger.info("✅ Quorum queue count validation passed: {} quorum queues", quorumQueueCount);
+        }
+
+        // Check that remaining classic queues match expectation
+        int expectedClassicCount = testQueueCount - expectedQuorumCount;
+        if (classicQueueCount != expectedClassicCount) {
+            logger.error("❌ Classic queue count mismatch: expected {}, found {}", expectedClassicCount, classicQueueCount);
+            validationPassed = false;
+        } else if (classicQueueCount > 0) {
+            logger.info("✅ Classic queue count as expected: {} (batch migration)", classicQueueCount);
         } else {
             logger.info("✅ No classic queues remain");
         }
@@ -540,7 +551,7 @@ public class EndToEndMigrationTest {
 
         // Generate migration summary
         printMigrationSummary(preMigrationStats, testQueueCount, totalMessages,
-            classicQueueCount, quorumQueueCount, migrationDurationSeconds);
+            classicQueueCount, quorumQueueCount, migrationDurationSeconds, expectedQuorumCount);
 
         if (!validationPassed) {
             throw new RuntimeException("Migration validation failed");
@@ -551,7 +562,7 @@ public class EndToEndMigrationTest {
 
     private static void printMigrationSummary(PreMigrationStats preMigrationStats,
             int postQueueCount, long postTotalMessages, int postClassicCount, int postQuorumCount,
-            long migrationDurationSeconds) {
+            long migrationDurationSeconds, int expectedQuorumCount) {
 
         System.out.println();
         System.out.println("=== MIGRATION TEST SUMMARY ===");
@@ -563,15 +574,16 @@ public class EndToEndMigrationTest {
         System.out.println("  Remaining classic:     " + postClassicCount);
         System.out.println("  Messages preserved:    " + postTotalMessages + "/" + preMigrationStats.totalMessages);
 
-        // Calculate success rate
-        int successRate = preMigrationStats.classicQueueCount > 0 ?
-            ((preMigrationStats.classicQueueCount - postClassicCount) * 100 / preMigrationStats.classicQueueCount) : 100;
+        // Calculate success rate based on expected migrations
+        int successRate = expectedQuorumCount > 0 ? (postQuorumCount * 100 / expectedQuorumCount) : 100;
         System.out.println("  Migration success rate: " + successRate + "%");
+
+        boolean allValidationsPassed = postQuorumCount == expectedQuorumCount &&
+            postTotalMessages == preMigrationStats.totalMessages;
 
         System.out.println();
         System.out.println("=== MIGRATION COMPLETE - " +
-            (successRate == 100 && postTotalMessages == preMigrationStats.totalMessages ?
-             "ALL VALIDATIONS PASSED" : "VALIDATION ISSUES DETECTED") + " ===");
+            (allValidationsPassed ? "ALL VALIDATIONS PASSED" : "VALIDATION ISSUES DETECTED") + " ===");
         System.out.println();
     }
 
