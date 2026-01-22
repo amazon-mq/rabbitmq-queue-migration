@@ -71,3 +71,21 @@ integration-already-quorum: package
 	java -jar $(JAR) already-quorum-test \
 		--hostname=localhost \
 		--port=15672
+
+# formatting
+
+GJF_JAR := $(CURDIR)/target/google-java-format.jar
+
+$(GJF_JAR):
+	@mkdir -p $(CURDIR)/target
+	gh release download --repo google/google-java-format \
+		--pattern '*-all-deps.jar' \
+		--output $(GJF_JAR)
+
+.PHONY: format format-check
+
+format: $(GJF_JAR)
+	java -jar $(GJF_JAR) --replace $(SRCS)
+
+format-check: $(GJF_JAR)
+	java -jar $(GJF_JAR) --dry-run --set-exit-if-changed $(SRCS)
