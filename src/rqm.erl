@@ -12,7 +12,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Shovel completion stability check iterations
--define(SHOVEL_STABILITY_ITERATIONS, 10).
+-define(SHOVEL_STABILITY_ITERATIONS, 15).
 
 -export([
     start/1,
