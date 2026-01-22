@@ -2,11 +2,15 @@ package com.amazon.mq.rabbitmq.migration;
 
 import com.amazon.mq.rabbitmq.AmqpEndpoint;
 import com.rabbitmq.http.client.Client;
+import com.rabbitmq.http.client.domain.BindingInfo;
+import com.rabbitmq.http.client.domain.Definitions;
+import com.rabbitmq.http.client.domain.ExchangeInfo;
 import com.rabbitmq.http.client.domain.QueueInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Complete end-to-end migration test that sets up RabbitMQ environment
@@ -46,6 +50,12 @@ public class EndToEndMigrationTest {
 
             // Phase 2: Collect pre-migration statistics
             logger.info("=== Phase 2: Collecting pre-migration statistics ===");
+            Client httpClient = config.createHttpClient();
+            Definitions preMigrationDefs = httpClient.getDefinitions();
+            logger.info("Captured pre-migration definitions: {} queues, {} exchanges, {} bindings",
+                preMigrationDefs.getQueues().size(),
+                preMigrationDefs.getExchanges().size(),
+                preMigrationDefs.getBindings().size());
             PreMigrationStats preMigrationStats = collectPreMigrationStats(config);
 
             // Phase 3: Trigger migration
@@ -70,7 +80,7 @@ public class EndToEndMigrationTest {
             // Phase 5: Validate migration results
             logger.info("=== Phase 5: Validating migration results ===");
             if (migrationSuccess) {
-                validateMigrationResults(config, preMigrationStats, migrationStartTime);
+                validateMigrationResults(config, preMigrationStats, preMigrationDefs, migrationStartTime);
                 logger.info("✅ Complete end-to-end migration test finished successfully!");
             } else {
                 logger.error("❌ Migration test failed - migration did not complete successfully");
@@ -468,12 +478,15 @@ public class EndToEndMigrationTest {
     }
 
     private static void validateMigrationResults(TestConfiguration config, PreMigrationStats preMigrationStats,
-                                               long migrationStartTime) throws Exception {
+                                               Definitions preMigrationDefs, long migrationStartTime) throws Exception {
         logger.info("Validating migration results...");
 
         // Wait for post-migration stats to stabilize
         Client httpClient = config.createHttpClient();
         RabbitMQStatsUtils.waitForTestQueueStatsToStabilize(httpClient, config.getVirtualHost(), config.getQueuePrefix(), "post-migration");
+
+        // Capture post-migration definitions for topology validation
+        Definitions postMigrationDefs = httpClient.getDefinitions();
 
         // Collect post-migration stats
         List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
@@ -546,6 +559,12 @@ public class EndToEndMigrationTest {
             logger.info("✅ No classic queues remain");
         }
 
+        // Validate topology (exchanges, bindings, queue properties)
+        logger.info("Validating topology preservation...");
+        validationPassed &= validateExchanges(preMigrationDefs, postMigrationDefs, config.getExchangePrefix());
+        validationPassed &= validateBindings(preMigrationDefs, postMigrationDefs, config.getExchangePrefix(), config.getQueuePrefix());
+        validationPassed &= validateQueueProperties(preMigrationDefs, postMigrationDefs, config.getQueuePrefix());
+
         // Calculate migration duration
         long migrationDurationSeconds = (System.currentTimeMillis() - migrationStartTime) / 1000;
 
@@ -608,5 +627,224 @@ public class EndToEndMigrationTest {
             return String.format("PreMigrationStats{queues=%d, messages=%d, classic=%d, quorum=%d}",
                 queueCount, totalMessages, classicQueueCount, quorumQueueCount);
         }
+    }
+
+    /**
+     * Validate that all test exchanges are preserved post-migration
+     */
+    private static boolean validateExchanges(Definitions preMigrationDefs, Definitions postMigrationDefs, String exchangePrefix) {
+        logger.info("Validating exchanges...");
+
+        List<ExchangeInfo> preExchanges = preMigrationDefs.getExchanges().stream()
+            .filter(e -> e.getName().startsWith(exchangePrefix))
+            .toList();
+
+        List<ExchangeInfo> postExchanges = postMigrationDefs.getExchanges().stream()
+            .filter(e -> e.getName().startsWith(exchangePrefix))
+            .toList();
+
+        boolean passed = true;
+
+        if (preExchanges.size() != postExchanges.size()) {
+            logger.error("❌ Exchange count mismatch: expected {}, found {}",
+                preExchanges.size(), postExchanges.size());
+            passed = false;
+        }
+
+        for (ExchangeInfo preExchange : preExchanges) {
+            ExchangeInfo postExchange = postExchanges.stream()
+                .filter(e -> e.getName().equals(preExchange.getName()))
+                .findFirst()
+                .orElse(null);
+
+            if (postExchange == null) {
+                logger.error("❌ Exchange missing: {}", preExchange.getName());
+                passed = false;
+                continue;
+            }
+
+            if (!preExchange.getType().equals(postExchange.getType())) {
+                logger.error("❌ Exchange {} type mismatch: expected {}, found {}",
+                    preExchange.getName(), preExchange.getType(), postExchange.getType());
+                passed = false;
+            }
+
+            if (preExchange.isDurable() != postExchange.isDurable()) {
+                logger.error("❌ Exchange {} durable flag mismatch: expected {}, found {}",
+                    preExchange.getName(), preExchange.isDurable(), postExchange.isDurable());
+                passed = false;
+            }
+
+            if (preExchange.isAutoDelete() != postExchange.isAutoDelete()) {
+                logger.error("❌ Exchange {} auto-delete flag mismatch: expected {}, found {}",
+                    preExchange.getName(), preExchange.isAutoDelete(), postExchange.isAutoDelete());
+                passed = false;
+            }
+        }
+
+        if (passed) {
+            logger.info("✅ Exchange validation passed: {} exchanges verified", preExchanges.size());
+        }
+
+        return passed;
+    }
+
+    /**
+     * Validate that all test bindings are preserved post-migration
+     */
+    private static boolean validateBindings(Definitions preMigrationDefs, Definitions postMigrationDefs,
+                                           String exchangePrefix, String queuePrefix) {
+        logger.info("Validating bindings...");
+
+        List<BindingInfo> preBindings = preMigrationDefs.getBindings().stream()
+            .filter(b -> b.getSource().startsWith(exchangePrefix) || b.getDestination().startsWith(queuePrefix))
+            .toList();
+
+        List<BindingInfo> postBindings = postMigrationDefs.getBindings().stream()
+            .filter(b -> b.getSource().startsWith(exchangePrefix) || b.getDestination().startsWith(queuePrefix))
+            .toList();
+
+        boolean passed = true;
+
+        if (preBindings.size() != postBindings.size()) {
+            logger.error("❌ Binding count mismatch: expected {}, found {}",
+                preBindings.size(), postBindings.size());
+            passed = false;
+        }
+
+        for (BindingInfo preBinding : preBindings) {
+            BindingInfo postBinding = postBindings.stream()
+                .filter(b -> b.getSource().equals(preBinding.getSource()) &&
+                           b.getDestination().equals(preBinding.getDestination()) &&
+                           b.getRoutingKey().equals(preBinding.getRoutingKey()))
+                .findFirst()
+                .orElse(null);
+
+            if (postBinding == null) {
+                logger.error("❌ Binding missing: {} -> {} (key: {})",
+                    preBinding.getSource(), preBinding.getDestination(), preBinding.getRoutingKey());
+                passed = false;
+                continue;
+            }
+
+            Map<String, Object> preArgs = preBinding.getArguments();
+            Map<String, Object> postArgs = postBinding.getArguments();
+
+            if ((preArgs == null || preArgs.isEmpty()) && (postArgs == null || postArgs.isEmpty())) {
+                continue;
+            }
+
+            if ((preArgs == null || preArgs.isEmpty()) != (postArgs == null || postArgs.isEmpty())) {
+                logger.error("❌ Binding {} -> {} arguments mismatch: one has arguments, other doesn't",
+                    preBinding.getSource(), preBinding.getDestination());
+                passed = false;
+                continue;
+            }
+
+            if (!preArgs.equals(postArgs)) {
+                logger.error("❌ Binding {} -> {} arguments differ: expected {}, found {}",
+                    preBinding.getSource(), preBinding.getDestination(), preArgs, postArgs);
+                passed = false;
+            }
+        }
+
+        if (passed) {
+            logger.info("✅ Binding validation passed: {} bindings verified", preBindings.size());
+        }
+
+        return passed;
+    }
+
+    /**
+     * Validate that queue properties are preserved post-migration
+     */
+    private static boolean validateQueueProperties(Definitions preMigrationDefs, Definitions postMigrationDefs, String queuePrefix) {
+        logger.info("Validating queue properties...");
+
+        List<QueueInfo> preQueues = preMigrationDefs.getQueues().stream()
+            .filter(q -> q.getName().startsWith(queuePrefix))
+            .toList();
+
+        List<QueueInfo> postQueues = postMigrationDefs.getQueues().stream()
+            .filter(q -> q.getName().startsWith(queuePrefix))
+            .toList();
+
+        boolean passed = true;
+
+        List<String> sharedArguments = List.of(
+            "x-message-ttl",
+            "x-max-length",
+            "x-max-length-bytes",
+            "x-expires",
+            "x-dead-letter-exchange",
+            "x-dead-letter-routing-key",
+            "x-overflow"
+        );
+
+        for (QueueInfo preQueue : preQueues) {
+            QueueInfo postQueue = postQueues.stream()
+                .filter(q -> q.getName().equals(preQueue.getName()))
+                .findFirst()
+                .orElse(null);
+
+            if (postQueue == null) {
+                logger.error("❌ Queue missing in post-migration: {}", preQueue.getName());
+                passed = false;
+                continue;
+            }
+
+            Map<String, Object> preArgs = preQueue.getArguments();
+            Map<String, Object> postArgs = postQueue.getArguments();
+
+            if (preArgs != null && preArgs.containsKey("x-max-priority")) {
+                if (postArgs == null || !postArgs.containsKey("x-max-priority")) {
+                    logger.warn("⚠️ Queue {} lost x-max-priority during migration (expected for quorum queues)",
+                        preQueue.getName());
+                }
+            }
+
+            for (String argName : sharedArguments) {
+                Object preValue = preArgs != null ? preArgs.get(argName) : null;
+                Object postValue = postArgs != null ? postArgs.get(argName) : null;
+
+                if (preValue == null && postValue == null) {
+                    continue;
+                }
+
+                if (preValue == null || postValue == null) {
+                    logger.error("❌ Queue {} argument {} mismatch: pre={}, post={}",
+                        preQueue.getName(), argName, preValue, postValue);
+                    passed = false;
+                    continue;
+                }
+
+                if (!argumentValuesEqual(preValue, postValue)) {
+                    logger.error("❌ Queue {} argument {} mismatch: pre={}, post={}",
+                        preQueue.getName(), argName, preValue, postValue);
+                    passed = false;
+                }
+            }
+        }
+
+        if (passed) {
+            logger.info("✅ Queue properties validation passed: {} queues verified", preQueues.size());
+        }
+
+        return passed;
+    }
+
+    /**
+     * Compare argument values, handling numeric type differences
+     */
+    private static boolean argumentValuesEqual(Object value1, Object value2) {
+        if (value1.equals(value2)) {
+            return true;
+        }
+
+        if (value1 instanceof Number && value2 instanceof Number) {
+            return ((Number) value1).longValue() == ((Number) value2).longValue();
+        }
+
+        return false;
     }
 }
