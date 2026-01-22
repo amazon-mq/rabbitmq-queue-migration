@@ -153,7 +153,30 @@ rabbitmqctl clear_policy <policy_name>
 
 ---
 
-### 5. `interrupted`
+### 5. `message_ttl`
+
+**Cause:** Queue has `x-message-ttl` argument or `message-ttl` policy
+
+**Why Unsuitable:** Messages could expire during the migration process, causing message count mismatches that fail verification
+
+**Resolution:**
+
+**Option A:** Remove the TTL setting temporarily
+```bash
+# If set via policy, remove or modify the policy:
+rabbitmqctl clear_policy <policy_name>
+
+# If set via queue argument, delete and recreate queue without x-message-ttl
+# Then migrate, then reapply TTL to the quorum queue
+```
+
+**Option B:** Drain the queue before migration (let consumers process all messages)
+
+**Option C:** Accept that queue cannot be migrated and handle separately
+
+---
+
+### 6. `interrupted`
 
 **Cause:** Migration was manually interrupted
 

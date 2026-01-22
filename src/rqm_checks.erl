@@ -605,6 +605,9 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
     % Check for queue expiry issues
     QueueExpiresIssues = collect_queue_expires_issues(AllClassicQueues),
 
+    % Check for message TTL issues
+    MessageTtlIssues = collect_message_ttl_issues(AllClassicQueues),
+
     % For remaining checks, only consider mirrored classic queues
     MirroredClassicQueues = lists:filter(fun rqm_util:has_ha_policy/1, AllClassicQueues),
     MirroredQueueCount = length(MirroredClassicQueues),
@@ -630,7 +633,7 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
         end,
 
     % Combine all issues
-    RejectPublishDlxIssues ++ QueueExpiresIssues ++ TooManyQueuesIssues.
+    RejectPublishDlxIssues ++ QueueExpiresIssues ++ MessageTtlIssues ++ TooManyQueuesIssues.
 
 %% @doc Collect reject-publish-dlx issues from queues
 -spec collect_reject_publish_dlx_issues([rabbit_types:amqqueue()]) -> list().
@@ -685,6 +688,43 @@ has_expires_policy(Queue) ->
     case rabbit_policy:effective_definition(Queue) of
         Policies when is_list(Policies) ->
             proplists:lookup(<<"expires">>, Policies) =/= none;
+        _ ->
+            false
+    end.
+
+%% @doc Collect message TTL issues from queues
+%% Queues with x-message-ttl argument or message-ttl policy are unsuitable because
+%% messages could expire during the migration process, causing count mismatches
+-spec collect_message_ttl_issues([rabbit_types:amqqueue()]) -> list().
+collect_message_ttl_issues(Queues) ->
+    lists:filtermap(
+        fun(Queue) ->
+            Args = amqqueue:get_arguments(Queue),
+            HasTtlArg = rabbit_misc:table_lookup(Args, <<"x-message-ttl">>) =/= undefined,
+            HasTtlPolicy = has_message_ttl_policy(Queue),
+            case HasTtlArg orelse HasTtlPolicy of
+                true ->
+                    {true, #unsuitable_queue{
+                        resource = amqqueue:get_name(Queue),
+                        reason = message_ttl,
+                        details = #{
+                            has_ttl_arg => HasTtlArg,
+                            has_ttl_policy => HasTtlPolicy
+                        }
+                    }};
+                false ->
+                    false
+            end
+        end,
+        Queues
+    ).
+
+%% @doc Check if queue has message-ttl policy
+-spec has_message_ttl_policy(rabbit_types:amqqueue()) -> boolean().
+has_message_ttl_policy(Queue) ->
+    case rabbit_policy:effective_definition(Queue) of
+        Policies when is_list(Policies) ->
+            proplists:lookup(<<"message-ttl">>, Policies) =/= none;
         _ ->
             false
     end.
