@@ -11,6 +11,9 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+%% Shovel completion stability check iterations
+-define(SHOVEL_STABILITY_ITERATIONS, 10).
+
 -export([
     start/1,
     validate_migration/1,
@@ -1436,8 +1439,10 @@ wait_for_shovel_completion_stable(
             {ok, SrcCount} = rqm_db:get_message_count(SrcQueue),
             {ok, DestCount} = rqm_db:get_message_count(DestQueue),
 
-            % Keep last 8 destination counts for stability check
-            NewHistory = [DestCount | lists:sublist(DestCountHistory, 7)],
+            % Keep last N destination counts for stability check
+            NewHistory = [
+                DestCount | lists:sublist(DestCountHistory, ?SHOVEL_STABILITY_ITERATIONS - 1)
+            ],
 
             ExpectedTotal = maps:get(expected_total, PreMigrationCounts),
 
@@ -1491,8 +1496,8 @@ check_shovel_completion_by_stability(_ExpectedTotal, 0, DestCount, DestCountHist
     % Even when source is empty, wait for destination count stability
     % to handle race conditions with quorum queue count updates
     case length(DestCountHistory) of
-        N when N >= 8 ->
-            % Check if destination count has been stable for 8 iterations
+        N when N >= ?SHOVEL_STABILITY_ITERATIONS ->
+            % Check if destination count has been stable for N iterations
             case lists:all(fun(Count) -> Count =:= DestCount end, DestCountHistory) of
                 true ->
                     % Source empty AND destination stable - transfer complete
