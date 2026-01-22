@@ -194,10 +194,13 @@ public class EndToEndMigrationTest {
     int lastProgress = -1;
     int checkCount = 0;
     boolean migrationFound = false;
+    int interruptedStableCount = 0;
+    int lastCompletedQueues = -1;
 
     while (true) {
       checkCount++;
       long currentTime = System.currentTimeMillis();
+      ;
       long elapsed = (currentTime - startTime) / 1000;
 
       QueueMigrationClient.MigrationStatusResponse statusResponse =
@@ -248,6 +251,24 @@ public class EndToEndMigrationTest {
           logger.error("Migration info: {}", migration);
           verifyListenersRestored(config);
           return false;
+        } else if (migration.isInterrupted()) {
+          // Wait for in-flight queues to finish (completedQueues stops changing)
+          int currentCompleted = migration.getCompletedQueues();
+          if (currentCompleted == lastCompletedQueues) {
+            interruptedStableCount++;
+            if (interruptedStableCount >= 3) {
+              logger.info("✅ Migration interrupted, in-flight queues finished");
+              logger.info(
+                  "Final result: {}/{} queues migrated before interrupt",
+                  migration.getCompletedQueues(),
+                  migration.getTotalQueues());
+              verifyListenersRestored(config);
+              return true;
+            }
+          } else {
+            interruptedStableCount = 0;
+            lastCompletedQueues = currentCompleted;
+          }
         }
       } else {
         if ((checkCount % 20) == 0) {
