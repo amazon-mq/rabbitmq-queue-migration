@@ -24,10 +24,11 @@ public class TestConfiguration {
     private int unsuitableQueueCount = 0; // Number of unsuitable queues to create for testing
 
     private String virtualHost = getDefaultVirtualHost();
-    private String queuePrefix = "test.queue.";
-    private String unsuitableQueuePrefix = "test.unsuitable.queue.";
+    private String queuePrefix = "test.queue.ha-all.";
+    private String unsuitableQueuePrefix = "test.unsuitable.queue.ha-all.";
     private String exchangePrefix = "test.exchange.";
     private boolean skipUnsuitableQueues = false;
+    private Integer batchSize = null; // null means "all"
 
     /**
      * Get the default virtual host used when no specific vhost is configured.
@@ -225,4 +226,7 @@ public class TestConfiguration {
 
     public boolean isSkipUnsuitableQueues() { return skipUnsuitableQueues; }
     public void setSkipUnsuitableQueues(boolean skipUnsuitableQueues) { this.skipUnsuitableQueues = skipUnsuitableQueues; }
+
+    public Integer getBatchSize() { return batchSize; }
+    public void setBatchSize(Integer batchSize) { this.batchSize = batchSize; }
 }

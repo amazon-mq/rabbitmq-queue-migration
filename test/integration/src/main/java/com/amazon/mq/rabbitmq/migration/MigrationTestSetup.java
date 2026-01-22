@@ -249,6 +249,19 @@ public class MigrationTestSetup {
                 config.setExchangePrefix(arg.substring(18));
             } else if (arg.equals("--skip-unsuitable-queues")) {
                 config.setSkipUnsuitableQueues(true);
+            } else if (arg.startsWith("--batch-size=")) {
+                try {
+                    int batchSize = Integer.parseInt(arg.substring(13));
+                    if (batchSize > 0) {
+                        config.setBatchSize(batchSize);
+                    } else {
+                        logger.error("Batch size must be positive: {}", batchSize);
+                        System.exit(1);
+                    }
+                } catch (NumberFormatException e) {
+                    logger.error("Invalid batch size: {}", arg);
+                    System.exit(1);
+                }
             } else if (arg.equals("--help") || arg.equals("-h")) {
                 printUsage();
                 System.exit(0);
@@ -274,8 +287,8 @@ public class MigrationTestSetup {
         System.out.println("  --migration-timeout=N      Migration timeout in seconds (default: 300, for end-to-end mode)");
         System.out.println("  --unsuitable-queue-count=N  Number of unsuitable queues to create for testing (default: 0)");
         System.out.println("                                Creates queues with reject-publish-dlx, too many messages, etc.");
-        System.out.println("  --queue-prefix=PREFIX      Prefix for queue names (default: test.queue.)");
-        System.out.println("  --unsuitable-queue-prefix=PREFIX  Prefix for unsuitable queue names (default: test.unsuitable.queue.)");
+        System.out.println("  --queue-prefix=PREFIX      Prefix for queue names (default: test.queue.ha-all.)");
+        System.out.println("  --unsuitable-queue-prefix=PREFIX  Prefix for unsuitable queue names (default: test.unsuitable.queue.ha-all.)");
         System.out.println("  --exchange-prefix=PREFIX   Prefix for exchange names (default: test.exchange.)");
         System.out.println();
         System.out.println("Message Configuration:");
@@ -295,6 +308,7 @@ public class MigrationTestSetup {
         System.out.println("  --skip-cleanup             Skip cleanup phase in end-to-end mode");
         System.out.println("  --skip-setup               Skip setup phase in end-to-end mode");
         System.out.println("  --skip-unsuitable-queues   Skip unsuitable queues during migration");
+        System.out.println("  --batch-size=N             Number of queues to migrate per batch (default: all)");
         System.out.println("  --enable-ttl               Enable TTL on queues (disabled by default)");
         System.out.println("  --ttl-hours=HOURS          Set TTL duration in hours (default: 1, enables TTL)");
         System.out.println("  --enable-max-length        Enable max-length on queues (disabled by default)");
