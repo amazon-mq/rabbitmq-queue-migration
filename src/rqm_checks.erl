@@ -602,6 +602,9 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
     % Check for reject-publish-dlx issues
     RejectPublishDlxIssues = collect_reject_publish_dlx_issues(AllClassicQueues),
 
+    % Check for queue expiry issues
+    QueueExpiresIssues = collect_queue_expires_issues(AllClassicQueues),
+
     % For remaining checks, only consider mirrored classic queues
     MirroredClassicQueues = lists:filter(fun rqm_util:has_ha_policy/1, AllClassicQueues),
     MirroredQueueCount = length(MirroredClassicQueues),
@@ -627,7 +630,7 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
         end,
 
     % Combine all issues
-    RejectPublishDlxIssues ++ TooManyQueuesIssues.
+    RejectPublishDlxIssues ++ QueueExpiresIssues ++ TooManyQueuesIssues.
 
 %% @doc Collect reject-publish-dlx issues from queues
 -spec collect_reject_publish_dlx_issues([rabbit_types:amqqueue()]) -> list().
@@ -649,7 +652,43 @@ collect_reject_publish_dlx_issues(Queues) ->
         Queues
     ).
 
-%% @doc Collect message count and byte limit issues from mirrored queues
+%% @doc Collect queue expires issues from queues
+%% Queues with x-expires argument or expires policy are unsuitable because
+%% the queue could expire and be deleted during the migration process
+-spec collect_queue_expires_issues([rabbit_types:amqqueue()]) -> list().
+collect_queue_expires_issues(Queues) ->
+    lists:filtermap(
+        fun(Queue) ->
+            Args = amqqueue:get_arguments(Queue),
+            HasExpiresArg = rabbit_misc:table_lookup(Args, <<"x-expires">>) =/= undefined,
+            HasExpiresPolicy = has_expires_policy(Queue),
+            case HasExpiresArg orelse HasExpiresPolicy of
+                true ->
+                    {true, #unsuitable_queue{
+                        resource = amqqueue:get_name(Queue),
+                        reason = queue_expires,
+                        details = #{
+                            has_expires_arg => HasExpiresArg,
+                            has_expires_policy => HasExpiresPolicy
+                        }
+                    }};
+                false ->
+                    false
+            end
+        end,
+        Queues
+    ).
+
+%% @doc Check if queue has expires policy
+-spec has_expires_policy(rabbit_types:amqqueue()) -> boolean().
+has_expires_policy(Queue) ->
+    case rabbit_policy:effective_definition(Queue) of
+        Policies when is_list(Policies) ->
+            proplists:lookup(<<"expires">>, Policies) =/= none;
+        _ ->
+            false
+    end.
+
 %% @doc Run all system-level migration readiness checks
 %% Returns list of all check results (both passed and failed)
 -spec check_system_migration_readiness(rabbit_types:vhost()) -> [map()].

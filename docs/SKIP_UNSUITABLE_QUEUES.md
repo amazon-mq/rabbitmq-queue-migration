@@ -131,7 +131,29 @@ rabbitmqctl set_policy overflow-policy "^<queue_pattern>$" \
 
 ---
 
-### 4. `interrupted`
+### 4. `queue_expires`
+
+**Cause:** Queue has `x-expires` argument or `expires` policy
+
+**Why Unsuitable:** The queue could expire and be deleted during the migration process, causing migration failure
+
+**Resolution:**
+
+**Option A:** Remove the expires setting
+```bash
+# If set via policy, remove or modify the policy:
+rabbitmqctl clear_policy <policy_name>
+
+# If set via queue argument, delete and recreate queue without x-expires
+```
+
+**Option B:** Drain the queue and let it expire naturally before migration
+
+**Option C:** Accept that queue cannot be migrated (it will expire eventually anyway)
+
+---
+
+### 5. `interrupted`
 
 **Cause:** Migration was manually interrupted
 
