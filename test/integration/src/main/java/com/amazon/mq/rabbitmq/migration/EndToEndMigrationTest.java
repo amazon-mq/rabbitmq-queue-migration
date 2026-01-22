@@ -567,14 +567,20 @@ public class EndToEndMigrationTest {
       logger.info("✅ Message count validation passed: {}", totalMessages);
     }
 
-    // Calculate expected quorum count based on batch size
-    int expectedQuorumCount = testQueueCount;
-    if (config.getBatchSize() != null && config.getBatchSize() < testQueueCount) {
+    // Calculate expected quorum count based on batch size and unsuitable queues
+    int unsuitableCount = config.getUnsuitableQueueCount();
+    int migratableQueueCount = testQueueCount - unsuitableCount;
+    int expectedQuorumCount = migratableQueueCount;
+    if (config.getBatchSize() != null && config.getBatchSize() < migratableQueueCount) {
       expectedQuorumCount = config.getBatchSize();
       logger.info(
           "Batch migration mode: expecting {} queues migrated (batch_size={})",
           expectedQuorumCount,
           config.getBatchSize());
+    }
+    if (unsuitableCount > 0) {
+      logger.info(
+          "Unsuitable queues configured: {} queues expected to remain classic", unsuitableCount);
     }
 
     // Check that expected number of queues are now quorum queues
@@ -590,7 +596,7 @@ public class EndToEndMigrationTest {
       logger.info("✅ Quorum queue count validation passed: {} quorum queues", quorumQueueCount);
     }
 
-    // Check that remaining classic queues match expectation
+    // Check that remaining classic queues match expectation (unmigrated batch + unsuitable)
     int expectedClassicCount = testQueueCount - expectedQuorumCount;
     if (classicQueueCount != expectedClassicCount) {
       logger.error(
