@@ -5,12 +5,14 @@ public class AmqpEndpoint {
     private int port;
     private String username;
     private String password;
+    private String virtualHost;
 
-    public AmqpEndpoint(String hostname, int port, String username, String password) {
+    public AmqpEndpoint(String hostname, int port, String username, String password, String virtualHost) {
         this.hostname = hostname;
         this.port = port;
         this.username = username;
         this.password = password;
+        this.virtualHost = virtualHost;
     }
 
     public String getHostname() {
@@ -30,6 +32,6 @@ public class AmqpEndpoint {
     }
 
     public String getVirtualHost() {
-        return "/";
+        return this.virtualHost;
     }
 }

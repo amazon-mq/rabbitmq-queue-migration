@@ -62,13 +62,14 @@ public class CleanupEnvironment {
             config.getClusterTopology().getHttpHost(),
             config.getClusterTopology().getHttpPort(),
             "guest",
-            "guest"
+            "guest",
+            config.getVirtualHost()
         );
 
         // Step 1: Delete all non-default virtual hosts
         deleteNonDefaultVirtualHosts(httpClient);
 
-        // Step 2: Delete all queues from default virtual host
+        // Step 2: Delete all queues from the default virtual host
         deleteAllQueuesFromDefaultVhost(httpClient);
 
         // Step 3: Close all remaining connections
@@ -82,7 +83,7 @@ public class CleanupEnvironment {
         Thread.sleep(6000);
 
         // Step 6: Verify clean state
-        verifyCleanState(httpClient);
+        verifyCleanState(httpClient, config);
 
         logger.info("✅ Previous test artifacts cleanup completed");
     }
@@ -95,7 +96,7 @@ public class CleanupEnvironment {
             boolean foundNonDefault = false;
 
             for (VhostInfo vhost : vhosts) {
-                if (!"/".equals(vhost.getName())) {
+                if (!TestConfiguration.isDefaultVirtualHost(vhost.getName())) {
                     foundNonDefault = true;
                     try {
                         logger.info("Deleting vhost: {}", vhost.getName());
@@ -119,20 +120,24 @@ public class CleanupEnvironment {
     }
 
     private static void deleteAllQueuesFromDefaultVhost(Client httpClient) {
-        logger.info("Deleting all queues from default virtual host (/)...");
+        // Note: there's no need to delete queues from non-default virtual hosts
+        // since those are deleted by deleteNonDefaultVirtualHosts.
+        final String vhost = TestConfiguration.getDefaultVirtualHost();
+
+        logger.info("Deleting all queues from the default ({}) virtual host...", vhost);
 
         try {
-            List<QueueInfo> queues = httpClient.getQueues("/");
+            List<QueueInfo> queues = httpClient.getQueues(vhost);
 
-            if (queues.isEmpty()) {
-                logger.info("No queues to delete from default virtual host");
+            if (queues == null || queues.isEmpty()) {
+                logger.info("No queues to delete from virtual host");
                 return;
             }
 
             for (QueueInfo queue : queues) {
                 try {
                     logger.info("Deleting queue: {}", queue.getName());
-                    httpClient.deleteQueue("/", queue.getName());
+                    httpClient.deleteQueue(vhost, queue.getName());
                 } catch (Exception e) {
                     logger.error("Failed to delete queue '{}': {}", queue.getName(), e.getMessage());
                     // Continue with next queue
@@ -197,7 +202,7 @@ public class CleanupEnvironment {
         }
     }
 
-    private static void verifyCleanState(Client httpClient) {
+    private static void verifyCleanState(Client httpClient, TestConfiguration config) {
         logger.info("Clean state verification:");
 
         try {
@@ -205,9 +210,10 @@ public class CleanupEnvironment {
             List<VhostInfo> vhosts = httpClient.getVhosts();
             logger.info("  Virtual hosts: {} (should be 1 - default only)", vhosts.size());
 
-            // Count queues in default vhost
-            List<QueueInfo> queues = httpClient.getQueues("/");
-            logger.info("  Queues in /: {} (should be 0)", queues.size());
+            // Count queues in configured vhost
+            List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
+            int queueCount = (queues != null) ? queues.size() : 0;
+            logger.info("  Queues in {}: {} (should be 0)", config.getVirtualHost(), queueCount);
 
             // Count active connections
             List<ConnectionInfo> connections = httpClient.getConnections();

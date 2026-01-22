@@ -23,6 +23,26 @@ public class TestConfiguration {
     private boolean skipSetup = false; // Skip setup in end-to-end mode
     private int unsuitableQueueCount = 0; // Number of unsuitable queues to create for testing
 
+    private String virtualHost = getDefaultVirtualHost();
+    private String queuePrefix = "test.queue.ha-all.";
+    private String unsuitableQueuePrefix = "test.unsuitable.queue.ha-all.";
+    private String exchangePrefix = "test.exchange.";
+    private boolean skipUnsuitableQueues = false;
+    private Integer batchSize = null; // null means "all"
+    private String batchOrder = "smallest_first";
+
+    /**
+     * Get the default virtual host used when no specific vhost is configured.
+     * @return the default virtual host "/"
+     */
+    public static String getDefaultVirtualHost() {
+        return "/";
+    }
+
+    public static boolean isDefaultVirtualHost(String vhost) {
+        return getDefaultVirtualHost().equals(vhost);
+    }
+
     // Message size configuration (in bytes)
     private int smallMessageSize = 1024;      // 1KiB
     private int mediumMessageSize = 102400;   // 100KiB
@@ -190,4 +210,27 @@ public class TestConfiguration {
     public void setQuorumQueueCount(int quorumQueueCount) {
         this.quorumQueueCount = Math.max(0, quorumQueueCount);
     }
+
+    public String getVirtualHost() { return virtualHost; }
+    public void setVirtualHost(String virtualHost) { this.virtualHost = virtualHost; }
+
+    public String getQueuePrefix() { return queuePrefix; }
+    public void setQueuePrefix(String queuePrefix) { this.queuePrefix = queuePrefix; }
+
+    public String getUnsuitableQueuePrefix() { return unsuitableQueuePrefix; }
+    public void setUnsuitableQueuePrefix(String unsuitableQueuePrefix) {
+        this.unsuitableQueuePrefix = unsuitableQueuePrefix;
+    }
+
+    public String getExchangePrefix() { return exchangePrefix; }
+    public void setExchangePrefix(String exchangePrefix) { this.exchangePrefix = exchangePrefix; }
+
+    public boolean isSkipUnsuitableQueues() { return skipUnsuitableQueues; }
+    public void setSkipUnsuitableQueues(boolean skipUnsuitableQueues) { this.skipUnsuitableQueues = skipUnsuitableQueues; }
+
+    public Integer getBatchSize() { return batchSize; }
+    public void setBatchSize(Integer batchSize) { this.batchSize = batchSize; }
+
+    public String getBatchOrder() { return batchOrder; }
+    public void setBatchOrder(String batchOrder) { this.batchOrder = batchOrder; }
 }

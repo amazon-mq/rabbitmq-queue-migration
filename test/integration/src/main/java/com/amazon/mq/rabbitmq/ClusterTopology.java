@@ -20,6 +20,7 @@ public class ClusterTopology {
     private final int port;
     private final String username;
     private final String password;
+    private final String virtualHost;
     private final Client httpClient;
 
     private List<AmqpEndpoint> amqpEndpoints = new ArrayList<>();
@@ -28,14 +29,15 @@ public class ClusterTopology {
     private boolean initialized = false;
 
     public ClusterTopology(String hostname, int port) {
-        this(hostname, port, "guest", "guest");
+        this(hostname, port, "guest", "guest", "/");
     }
 
-    public ClusterTopology(String hostname, int port, String username, String password) {
+    public ClusterTopology(String hostname, int port, String username, String password, String virtualHost) {
         this.hostname = hostname;
         this.port = port;
         this.username = username;
         this.password = password;
+        this.virtualHost = virtualHost;
 
         try {
             // Add /api/ suffix for RabbitMQ HTTP API compatibility
@@ -84,7 +86,7 @@ public class ClusterTopology {
                 int httpPort = httpPorts.getOrDefault(nodeName, 15672); // Default HTTP port
 
                 brokerNodes.put(nodeName, new BrokerNode(nodeName, nodeHostname, amqpPort, httpPort));
-                amqpEndpoints.add(new AmqpEndpoint(nodeHostname, amqpPort, this.username, this.password));
+                amqpEndpoints.add(new AmqpEndpoint(nodeHostname, amqpPort, this.username, this.password, this.virtualHost));
                 httpEndpoints.add(new HttpEndpoint(nodeHostname, httpPort, this.username, this.password));
             });
 
@@ -163,6 +165,10 @@ public class ClusterTopology {
 
     public String getPassword() {
         return password;
+    }
+
+    public String getVirtualHost() {
+        return virtualHost;
     }
 
     public int getNodeCount() {

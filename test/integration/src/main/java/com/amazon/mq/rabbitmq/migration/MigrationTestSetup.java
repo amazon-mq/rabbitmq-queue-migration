@@ -3,6 +3,9 @@ package com.amazon.mq.rabbitmq.migration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.amazon.mq.rabbitmq.ClusterTopology;
+import com.rabbitmq.http.client.Client;
+import com.rabbitmq.http.client.domain.VhostInfo;
+import com.rabbitmq.http.client.domain.UserPermissions;
 
 import java.util.Arrays;
 import java.util.List;
@@ -80,6 +83,7 @@ public class MigrationTestSetup {
     public static TestConfiguration parseArguments(String[] args) {
         String hostname = "localhost";
         int port = 15672;
+        String vhost = TestConfiguration.getDefaultVirtualHost();
 
         // Check for help first, then get hostname and port
         for (String arg : args) {
@@ -89,7 +93,7 @@ public class MigrationTestSetup {
             }
         }
 
-        // Parse hostname/port from args to update config
+        // Parse hostname/port/vhost from args to update config
         for (String testArg : args) {
             if (testArg.startsWith("--hostname=")) {
                 hostname = testArg.substring(11);
@@ -99,12 +103,20 @@ public class MigrationTestSetup {
                 } catch (NumberFormatException e) {
                     // Use default port
                 }
+            } else if (testArg.startsWith("--vhost=")) {
+                vhost = testArg.substring(8);
             }
         }
 
         // Initialize config with defaults
-        ClusterTopology topology = new ClusterTopology(hostname, port);
+        ClusterTopology topology = new ClusterTopology(hostname, port, "guest", "guest", vhost);
         TestConfiguration config = new TestConfiguration(topology);
+        config.setVirtualHost(vhost);
+
+        // Create vhost if it doesn't exist (only for non-default vhosts)
+        if (!TestConfiguration.isDefaultVirtualHost(vhost)) {
+            ensureVhostExists(topology, vhost);
+        }
 
         // Check for test-connection next
         for (String arg : args) {
@@ -172,7 +184,7 @@ public class MigrationTestSetup {
                 }
             } else if (arg.startsWith("--unsuitable-queue-count=")) {
                 try {
-                    int unsuitableQueueCount = Integer.parseInt(arg.substring(27));
+                    int unsuitableQueueCount = Integer.parseInt(arg.substring(25));
                     config.setUnsuitableQueueCount(unsuitableQueueCount);
                 } catch (NumberFormatException e) {
                     logger.error("Invalid unsuitable queue count: {}", arg);
@@ -229,6 +241,35 @@ public class MigrationTestSetup {
                     printUsage();
                     System.exit(1);
                 }
+            } else if (arg.startsWith("--queue-prefix=")) {
+                config.setQueuePrefix(arg.substring(15));
+            } else if (arg.startsWith("--unsuitable-queue-prefix=")) {
+                config.setUnsuitableQueuePrefix(arg.substring(26));
+            } else if (arg.startsWith("--exchange-prefix=")) {
+                config.setExchangePrefix(arg.substring(18));
+            } else if (arg.equals("--skip-unsuitable-queues")) {
+                config.setSkipUnsuitableQueues(true);
+            } else if (arg.startsWith("--batch-size=")) {
+                try {
+                    int batchSize = Integer.parseInt(arg.substring(13));
+                    if (batchSize > 0) {
+                        config.setBatchSize(batchSize);
+                    } else {
+                        logger.error("Batch size must be positive: {}", batchSize);
+                        System.exit(1);
+                    }
+                } catch (NumberFormatException e) {
+                    logger.error("Invalid batch size: {}", arg);
+                    System.exit(1);
+                }
+            } else if (arg.startsWith("--batch-order=")) {
+                String order = arg.substring(14);
+                if (order.equals("smallest_first") || order.equals("largest_first")) {
+                    config.setBatchOrder(order);
+                } else {
+                    logger.error("Invalid batch order: {} (must be smallest_first or largest_first)", order);
+                    System.exit(1);
+                }
             } else if (arg.equals("--help") || arg.equals("-h")) {
                 printUsage();
                 System.exit(0);
@@ -254,6 +295,9 @@ public class MigrationTestSetup {
         System.out.println("  --migration-timeout=N      Migration timeout in seconds (default: 300, for end-to-end mode)");
         System.out.println("  --unsuitable-queue-count=N  Number of unsuitable queues to create for testing (default: 0)");
         System.out.println("                                Creates queues with reject-publish-dlx, too many messages, etc.");
+        System.out.println("  --queue-prefix=PREFIX      Prefix for queue names (default: test.queue.ha-all.)");
+        System.out.println("  --unsuitable-queue-prefix=PREFIX  Prefix for unsuitable queue names (default: test.unsuitable.queue.ha-all.)");
+        System.out.println("  --exchange-prefix=PREFIX   Prefix for exchange names (default: test.exchange.)");
         System.out.println();
         System.out.println("Message Configuration:");
         System.out.println("  --message-distribution=X,Y,Z   Message size distribution percentages (must sum to 100)");
@@ -264,12 +308,16 @@ public class MigrationTestSetup {
         System.out.println("Connection Options:");
         System.out.println("  --hostname=HOST            RabbitMQ management API hostname (default: localhost)");
         System.out.println("  --port=PORT                RabbitMQ management API port (default: 15672)");
+        System.out.println("  --vhost=NAME               Virtual host for all operations (default: /)");
         System.out.println("                             ClusterTopology will automatically discover all cluster nodes");
         System.out.println();
         System.out.println("Test Options:");
         System.out.println("  --no-ha                    Disable HA/mirroring");
         System.out.println("  --skip-cleanup             Skip cleanup phase in end-to-end mode");
         System.out.println("  --skip-setup               Skip setup phase in end-to-end mode");
+        System.out.println("  --skip-unsuitable-queues   Skip unsuitable queues during migration");
+        System.out.println("  --batch-size=N             Number of queues to migrate per batch (default: all)");
+        System.out.println("  --batch-order=ORDER        Order to migrate queues: smallest_first or largest_first");
         System.out.println("  --enable-ttl               Enable TTL on queues (disabled by default)");
         System.out.println("  --ttl-hours=HOURS          Set TTL duration in hours (default: 1, enables TTL)");
         System.out.println("  --enable-max-length        Enable max-length on queues (disabled by default)");
@@ -316,5 +364,36 @@ public class MigrationTestSetup {
 
         System.out.println("=== Setup Complete - Ready for Migration Testing ===");
         System.out.println();
+    }
+
+    private static void ensureVhostExists(ClusterTopology topology, String vhost) {
+        try {
+            Client httpClient = topology.createHttpClient();
+
+            // Check if vhost already exists
+            List<com.rabbitmq.http.client.domain.VhostInfo> vhosts = httpClient.getVhosts();
+            boolean vhostExists = vhosts.stream()
+                .anyMatch(v -> vhost.equals(v.getName()));
+
+            if (!vhostExists) {
+                logger.info("Creating virtual host '{}'", vhost);
+                httpClient.createVhost(vhost);
+                logger.info("✅ Virtual host '{}' created successfully", vhost);
+            } else {
+                logger.info("Virtual host '{}' already exists", vhost);
+            }
+
+            // Grant full permissions to guest user
+            logger.info("Setting permissions for guest user on vhost '{}'", vhost);
+            com.rabbitmq.http.client.domain.UserPermissions permissions =
+                new com.rabbitmq.http.client.domain.UserPermissions(".*", ".*", ".*");
+            httpClient.updatePermissions(vhost, "guest", permissions);
+            logger.info("✅ Guest user granted full permissions on vhost '{}'", vhost);
+
+        } catch (Exception e) {
+            logger.error("Failed to create virtual host '{}': {}", vhost, e.getMessage());
+            System.err.println("Error: Failed to create virtual host '" + vhost + "': " + e.getMessage());
+            System.exit(1);
+        }
     }
 }

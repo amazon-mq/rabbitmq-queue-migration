@@ -152,7 +152,7 @@ public class MultiThreadedPublisher {
                 factory.setPort(brokerNode.getAmqpPort());
                 factory.setUsername(username);
                 factory.setPassword(password);
-                factory.setVirtualHost("/"); // Default virtual host
+                factory.setVirtualHost(config.getVirtualHost());
 
                 Connection connection = factory.newConnection();
                 Channel channel = connection.createChannel();
@@ -182,7 +182,7 @@ public class MultiThreadedPublisher {
 
             // Get queue information to discover leaders
             Client httpClient = config.getClusterTopology().createHttpClient();
-            List<QueueInfo> queues = httpClient.getQueues("/");
+            List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
             Map<String, String> queueLeaders = new HashMap<>();
 
             for (String queueName : queueNames) {
