@@ -27,6 +27,7 @@ public class TestConfiguration {
     private String queuePrefix = "test.queue.";
     private String unsuitableQueuePrefix = "test.unsuitable.queue.";
     private String exchangePrefix = "test.exchange.";
+    private boolean skipUnsuitableQueues = false;
 
     /**
      * Get the default virtual host used when no specific vhost is configured.
@@ -221,4 +222,7 @@ public class TestConfiguration {
 
     public String getExchangePrefix() { return exchangePrefix; }
     public void setExchangePrefix(String exchangePrefix) { this.exchangePrefix = exchangePrefix; }
+
+    public boolean isSkipUnsuitableQueues() { return skipUnsuitableQueues; }
+    public void setSkipUnsuitableQueues(boolean skipUnsuitableQueues) { this.skipUnsuitableQueues = skipUnsuitableQueues; }
 }

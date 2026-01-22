@@ -247,6 +247,8 @@ public class MigrationTestSetup {
                 config.setUnsuitableQueuePrefix(arg.substring(26));
             } else if (arg.startsWith("--exchange-prefix=")) {
                 config.setExchangePrefix(arg.substring(18));
+            } else if (arg.equals("--skip-unsuitable-queues")) {
+                config.setSkipUnsuitableQueues(true);
             } else if (arg.equals("--help") || arg.equals("-h")) {
                 printUsage();
                 System.exit(0);
@@ -292,6 +294,7 @@ public class MigrationTestSetup {
         System.out.println("  --no-ha                    Disable HA/mirroring");
         System.out.println("  --skip-cleanup             Skip cleanup phase in end-to-end mode");
         System.out.println("  --skip-setup               Skip setup phase in end-to-end mode");
+        System.out.println("  --skip-unsuitable-queues   Skip unsuitable queues during migration");
         System.out.println("  --enable-ttl               Enable TTL on queues (disabled by default)");
         System.out.println("  --ttl-hours=HOURS          Set TTL duration in hours (default: 1, enables TTL)");
         System.out.println("  --enable-max-length        Enable max-length on queues (disabled by default)");

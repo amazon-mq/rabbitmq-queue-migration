@@ -51,7 +51,8 @@ public class EndToEndMigrationTest {
             // Phase 3: Trigger migration
             logger.info("=== Phase 3: Triggering queue migration ===");
             QueueMigrationClient migrationClient = createMigrationClient(config);
-            QueueMigrationClient.MigrationResponse migrationResponse = migrationClient.startMigration();
+            QueueMigrationClient.MigrationResponse migrationResponse = migrationClient.startMigration(
+                config.isSkipUnsuitableQueues());
             logger.info("Migration start response: {}", migrationResponse);
 
             // Phase 4: Wait for migration to start, then monitor progress
