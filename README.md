@@ -34,6 +34,18 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
+## Getting Started
+
+- [README](README.md) - This document! Overview, installation, and quick start
+- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration process and validation
+- [Snapshots Guide](docs/SNAPSHOTS.md) - Snapshot modes and configuration
+- [HTTP API](docs/HTTP_API.md) - Complete HTTP API reference
+- [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
+- [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
+- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration if EBS snapshots are used
+
+See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
+
 ## ⚠️ Important: Per-Message TTL Limitation
 
 **This plugin CANNOT detect per-message TTL set by publishers.**
@@ -214,28 +226,6 @@ Quick checks:
 ## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md) for contribution guidelines.
-
-## Documentation
-
-### Getting Started
-- [README](README.md) - Overview, installation, and quick start
-- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration process and validation
-- [Snapshots Guide](docs/SNAPSHOTS.md) - Snapshot modes and configuration
-- [HTTP API](docs/HTTP_API.md) - Complete HTTP API reference
-- [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
-- [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
-
-### Feature Guides
-- [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md) - Skip unsuitable queues feature guide
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Troubleshooting guidance
-
-### Technical Documentation
-- [AGENTS](AGENTS.md) - Architecture and implementation details
-- [Validation Chain](docs/VALIDATION_CHAIN.md) - Validation chain architecture
-
-### Testing and Deployment
-- [Integration Testing](docs/INTEGRATION_TESTING.md) - Integration testing guide
-- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration
 
 ## Security
 
