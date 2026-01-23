@@ -16,7 +16,7 @@
 
 %% Migration record operations
 -export([
-    create_migration/5,
+    create_migration/6,
     update_migration_status/2,
     update_migration_failed/2,
     update_migration_completed/2,
@@ -83,9 +83,9 @@ get_message_count(Resource) when is_record(Resource, resource) ->
 %% Migration record operations
 
 %% @doc Create a new migration record
--spec create_migration(term(), binary(), erlang:timestamp(), boolean(), non_neg_integer()) ->
+-spec create_migration(term(), binary(), erlang:timestamp(), boolean(), non_neg_integer(), undefined | float()) ->
     {ok, #queue_migration{}}.
-create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount) ->
+create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount, Tolerance) ->
     MigrationRecord = #queue_migration{
         id = MigrationId,
         vhost = VHost,
@@ -96,7 +96,8 @@ create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCou
         skipped_queues = SkippedCount,
         status = in_progress,
         snapshots = [],
-        skip_unsuitable_queues = SkipUnsuitableQueues
+        skip_unsuitable_queues = SkipUnsuitableQueues,
+        tolerance = Tolerance
     },
     mnesia:dirty_write(MigrationRecord),
     {ok, MigrationRecord}.
@@ -437,7 +438,7 @@ get_migration_status() ->
     Migrations = get_all_migrations(),
     [
         {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-            SkipUnsuitableQueues,
+            SkipUnsuitableQueues, Tolerance,
             Error}
      || #queue_migration{
             id = Id,
@@ -449,6 +450,7 @@ get_migration_status() ->
             skipped_queues = SkippedQueues,
             status = Status,
             skip_unsuitable_queues = SkipUnsuitableQueues,
+            tolerance = Tolerance,
             error = Error
         } <- Migrations
     ].

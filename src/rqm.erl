@@ -71,6 +71,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
+    Tolerance = maps:get(tolerance, OptsMap, undefined),
     #migration_opts{
         vhost = VHost,
         mode = Mode,
@@ -78,7 +79,8 @@ build_migration_opts(Mode, OptsMap) ->
         batch_size = BatchSize,
         batch_order = BatchOrder,
         queue_names = QueueNames,
-        migration_id = MigrationId
+        migration_id = MigrationId,
+        tolerance = Tolerance
     }.
 
 pre_migration_validation(shovel_plugin, Opts) ->
@@ -287,7 +289,8 @@ start_with_lock(
         vhost = VHost,
         skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
-        migration_id = MigrationId
+        migration_id = MigrationId,
+        tolerance = Tolerance
     } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
@@ -297,7 +300,8 @@ start_with_lock(
         VHost,
         os:timestamp(),
         SkipUnsuitableQueues,
-        SkippedCount
+        SkippedCount,
+        Tolerance
     ),
     try
         {ok, PreparationState} = pre_migration_preparation(Nodes, VHost),
@@ -1584,16 +1588,16 @@ check_message_count_tolerance(
     ActualTotal,
     FinalResource,
     DestFinalCount,
-    #migration_opts{} = Opts
+    #migration_opts{tolerance = Tolerance} = Opts
 ) when
     LostMessages < 0
 ->
     % Over-delivery: ActualTotal > ExpectedTotal
     Diff = abs(LostMessages),
-    TolerancePercent = rqm_config:message_count_over_tolerance_percent(),
-    Tolerance = round(ExpectedTotal * TolerancePercent / 100.0),
+    TolerancePercent = get_tolerance_percent(Tolerance, over),
+    ToleranceValue = round(ExpectedTotal * TolerancePercent / 100.0),
     check_within_tolerance(
-        Diff =< Tolerance,
+        Diff =< ToleranceValue,
         over,
         TolerancePercent,
         ExpectedTotal,
@@ -1609,16 +1613,16 @@ check_message_count_tolerance(
     ActualTotal,
     FinalResource,
     DestFinalCount,
-    #migration_opts{} = Opts
+    #migration_opts{tolerance = Tolerance} = Opts
 ) when
     LostMessages > 0
 ->
     % Under-delivery: ActualTotal < ExpectedTotal
     Diff = abs(LostMessages),
-    TolerancePercent = rqm_config:message_count_under_tolerance_percent(),
-    Tolerance = round(ExpectedTotal * TolerancePercent / 100.0),
+    TolerancePercent = get_tolerance_percent(Tolerance, under),
+    ToleranceValue = round(ExpectedTotal * TolerancePercent / 100.0),
     check_within_tolerance(
-        Diff =< Tolerance,
+        Diff =< ToleranceValue,
         under,
         TolerancePercent,
         ExpectedTotal,
@@ -1628,6 +1632,13 @@ check_message_count_tolerance(
         DestFinalCount,
         Opts
     ).
+
+get_tolerance_percent(undefined, over) ->
+    rqm_config:message_count_over_tolerance_percent();
+get_tolerance_percent(undefined, under) ->
+    rqm_config:message_count_under_tolerance_percent();
+get_tolerance_percent(Tolerance, _Direction) when is_float(Tolerance) ->
+    Tolerance.
 
 check_within_tolerance(
     true,
