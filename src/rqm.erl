@@ -18,8 +18,6 @@
     start/1,
     validate_migration/1,
     status/0,
-    get_migration_status/0,
-    get_queue_migration_status/1,
     get_rollback_pending_migration_json/0,
     start_migration_preparation_on_node/2,
     start_post_migration_restore_on_node/3,
@@ -1728,12 +1726,6 @@ ensure_no_local_connections() ->
         _ ->
             true
     end.
-
-get_migration_status() ->
-    rqm_db:get_migration_status().
-
-get_queue_migration_status(MigrationId) ->
-    rqm_db:get_queue_migration_status(MigrationId).
 
 %% @doc Get rollback pending migration as JSON string for HOTW workflow
 %% Returns {ok, JsonBinary} if rollback_pending migration exists, {error, not_found} otherwise

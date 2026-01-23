@@ -49,6 +49,7 @@
 -export([
     get_migration_status/0,
     get_queue_migration_status/1,
+    queue_migration_exists/1,
     get_rollback_pending_migration/0
 ]).
 
@@ -435,40 +436,20 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
         }
     ].
 get_migration_status() ->
-    Migrations = get_all_migrations(),
-    [
-        {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-            SkipUnsuitableQueues, Tolerance,
-            Error}
-     || #queue_migration{
-            id = Id,
-            vhost = VHost,
-            started_at = StartedAt,
-            completed_at = CompletedAt,
-            total_queues = TotalQueues,
-            completed_queues = CompletedQueues,
-            skipped_queues = SkippedQueues,
-            status = Status,
-            skip_unsuitable_queues = SkipUnsuitableQueues,
-            tolerance = Tolerance,
-            error = Error
-        } <- Migrations
-    ].
+    get_all_migrations().
+
+-spec queue_migration_exists(term()) -> boolean().
+queue_migration_exists(MigrationId) ->
+    case get_migration(MigrationId) of
+        {error, not_found} ->
+            false;
+        {ok, _Migration} ->
+            true
+    end.
 
 %% @doc Get detailed status of a specific migration
 -spec get_queue_migration_status(term()) ->
-    {ok,
-        {#queue_migration{}, [
-            {
-                #resource{},
-                erlang:timestamp() | undefined,
-                erlang:timestamp() | undefined,
-                non_neg_integer(),
-                non_neg_integer(),
-                atom(),
-                term()
-            }
-        ]}}
+    {ok, {#queue_migration{}, [#queue_migration_status{}]}}
     | {error, migration_not_found}.
 get_queue_migration_status(MigrationId) ->
     case get_migration(MigrationId) of
@@ -476,21 +457,7 @@ get_queue_migration_status(MigrationId) ->
             {error, migration_not_found};
         {ok, Migration} ->
             QueueStatuses = get_queue_statuses_for_migration(MigrationId),
-
-            QueueDetails = [
-                {Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs, Status, Error}
-             || #queue_migration_status{
-                    queue_resource = Resource,
-                    started_at = StartedAt,
-                    completed_at = CompletedAt,
-                    total_messages = TotalMsgs,
-                    migrated_messages = MigratedMsgs,
-                    status = Status,
-                    error = Error
-                } <- QueueStatuses
-            ],
-
-            {ok, {Migration, QueueDetails}}
+            {ok, {Migration, QueueStatuses}}
     end.
 
 %% Check if migration has a specific status

@@ -58,11 +58,11 @@ resource_exists(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
     case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
         {ok, MigrationId} ->
-            case rqm:get_queue_migration_status(MigrationId) of
-                {ok, _} ->
+            case rqm_db:queue_migration_exists(MigrationId) of
+                true ->
                     State = {migration_id, MigrationId},
                     {true, ReqData, {status_detail, Context#context{impl = State}}};
-                {error, _} ->
+                _ ->
                     {false, ReqData, {status_detail, Context}}
             end;
         error ->
@@ -87,7 +87,7 @@ to_json(ReqData, {rollback_pending, Context}) ->
     end;
 to_json(ReqData, {status_list, Context}) ->
     {ok, Status} = rqm:status(),
-    Migrations = rqm:get_migration_status(),
+    Migrations = rqm_db:get_migration_status(),
     MigrationData = [migration_to_json(M) || M <- Migrations],
     Json = rabbit_json:encode(#{
         status => Status,
@@ -95,10 +95,10 @@ to_json(ReqData, {status_list, Context}) ->
     }),
     {Json, ReqData, {status_list, Context}};
 to_json(ReqData, {status_detail, #context{impl = {migration_id, MigrationId}}} = Context) ->
-    {ok, {Migration, QueueDetails}} = rqm:get_queue_migration_status(MigrationId),
+    {ok, {Migration, QueueStatuses}} = rqm_db:get_queue_migration_status(MigrationId),
     Json = rabbit_json:encode(#{
         migration => migration_to_json_detail(Migration),
-        queues => [queue_status_to_json(Q) || Q <- QueueDetails]
+        queues => [queue_status_to_json(Q) || Q <- QueueStatuses]
     }),
     {Json, ReqData, {status_detail, Context}};
 to_json(ReqData, {interrupt, Context}) ->
@@ -319,10 +319,19 @@ accept_interrupt(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
             not_found_reply(ReqData, {EndpointType, Context})
     end.
 
-migration_to_json(
-    {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-        SkipUnsuitableQueues, Tolerance, Error}
-) ->
+migration_to_json(#queue_migration{
+    id = Id,
+    vhost = VHost,
+    started_at = StartedAt,
+    completed_at = CompletedAt,
+    total_queues = TotalQueues,
+    completed_queues = CompletedQueues,
+    skipped_queues = SkippedQueues,
+    status = Status,
+    skip_unsuitable_queues = SkipUnsuitableQueues,
+    tolerance = Tolerance,
+    error = Error
+}) ->
     #{
         id => rqm_util:format_migration_id(Id),
         display_id => format_display_id(Id, VHost, StartedAt),
@@ -370,7 +379,15 @@ migration_to_json_detail(#queue_migration{
         error => format_error(Error)
     }.
 
-queue_status_to_json({Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs, Status, Error}) ->
+queue_status_to_json(#queue_migration_status{
+    queue_resource = Resource,
+    started_at = StartedAt,
+    completed_at = CompletedAt,
+    total_messages = TotalMsgs,
+    migrated_messages = MigratedMsgs,
+    status = Status,
+    error = Error
+}) ->
     #{
         resource => format_resource(Resource),
         started_at => format_timestamp(StartedAt),
