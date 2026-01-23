@@ -729,8 +729,19 @@ wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, IsInter
             wait_for_per_queue_migration_results(
                 Gatherer, TotalQueueCount - 1, IsError, true, Acc1
             );
-        Error ->
-            Acc1 = [Error | Acc0],
+        {value, {error, _, _} = Val} ->
+            Acc1 = [Val | Acc0],
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
+            );
+        {value, {aborted, _, _} = Val} ->
+            Acc1 = [Val | Acc0],
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
+            );
+        Other ->
+            ?LOG_WARNING("rqm: unexpected gatherer result: ~tp", [Other]),
+            Acc1 = [Other | Acc0],
             wait_for_per_queue_migration_results(
                 Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
             )
@@ -1746,16 +1757,18 @@ format_migration_id({Timestamp, _Node}) ->
 %% Format error for storage in migration record
 format_migration_error(_Class, {migration_failed_rollback_pending, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    FirstError = format_first_error(Errors),
     iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.", [
-            ErrorCount, AbortedCount
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~s", [
+            ErrorCount, AbortedCount, FirstError
         ])
     );
 format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    FirstError = format_first_error(Errors),
     iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.", [
-            ErrorCount, AbortedCount
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~s", [
+            ErrorCount, AbortedCount, FirstError
         ])
     );
 format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reason) ->
@@ -1843,6 +1856,31 @@ count_errors_and_aborted(Errors) ->
     ErrorCount = length([E || E <- Errors, element(1, E) =:= error]),
     AbortedCount = length([A || A <- Errors, element(1, A) =:= aborted]),
     {ErrorCount, AbortedCount}.
+
+%% Helper function to format the first error for display
+format_first_error(Errors) ->
+    case [E || E <- Errors, element(1, E) =:= error] of
+        [] -> "";
+        [{error, Resource, {_Class, Reason, _Stack}} | _] ->
+            QueueName = case Resource of
+                #resource{name = Name} -> Name;
+                _ -> <<"unknown">>
+            end,
+            ReasonStr = format_error_reason(Reason),
+            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr]);
+        [{error, Resource, Reason} | _] ->
+            QueueName = case Resource of
+                #resource{name = Name} -> Name;
+                _ -> <<"unknown">>
+            end,
+            ReasonStr = format_error_reason(Reason),
+            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr])
+    end.
+
+format_error_reason({message_count_mismatch, Expected, Actual, Diff}) ->
+    io_lib:format("message count mismatch (expected: ~p, actual: ~p, diff: ~p)", [Expected, Actual, Diff]);
+format_error_reason(Reason) ->
+    io_lib:format("~tp", [Reason]).
 
 %% @doc Prepare the RabbitMQ node connections for migration
 %% 1. Suspend non-HTTP listeners (blocks AMQP connections, keeps HTTP API available)
