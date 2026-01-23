@@ -14,6 +14,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -758,7 +759,7 @@ public class RabbitMQSetup {
       int connectionIndex = queueToConnectionMap.get(queueName);
       // Determine if this message should have per-message TTL
       Long expirationMs = null;
-      if (ttlPercent > 0 && (i % 100) < ttlPercent) {
+      if (ttlPercent > 0 && ThreadLocalRandom.current().nextInt(100) < ttlPercent) {
         expirationMs = ttlMs;
         ttlMessageCount++;
       }
