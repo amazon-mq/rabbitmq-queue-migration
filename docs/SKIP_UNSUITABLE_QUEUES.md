@@ -176,6 +176,26 @@ rabbitmqctl clear_policy <policy_name>
 
 ---
 
+## ⚠️ Important: Per-Message TTL Limitation
+
+**This plugin can only detect queue-level TTL settings (`x-message-ttl` argument or `message-ttl` policy). It CANNOT detect per-message TTL.**
+
+Publishers can set TTL on individual messages using the `expiration` message property. See [Per-Message TTL in Publishers](https://www.rabbitmq.com/docs/3.13/ttl#per-message-ttl-in-publishers) in the RabbitMQ documentation.
+
+**Why this matters:**
+
+If your publishers set per-message TTL and messages expire during migration, the migration will fail with `message_count_mismatch`. The plugin verifies that the destination queue has the same message count as the source - if messages expire during transfer, this verification fails.
+
+**Before migrating, verify that:**
+
+1. Your publishers do NOT set the `expiration` property on messages, OR
+2. The queue is drained before migration, OR  
+3. Per-message TTL values are long enough that messages won't expire during migration
+
+**There is no way for this plugin to detect per-message TTL** - it is set by publishers on each message and is not visible at the queue level.
+
+---
+
 ### 6. `interrupted`
 
 **Cause:** Migration was manually interrupted
