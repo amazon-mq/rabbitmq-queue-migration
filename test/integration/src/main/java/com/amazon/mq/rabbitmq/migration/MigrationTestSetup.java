@@ -362,7 +362,8 @@ public class MigrationTestSetup {
     System.out.println(
         "  --enable-max-priority      Enable priority on queues (disabled by default)");
     System.out.println(
-        "  --per-message-ttl-percent=N  Percentage of messages with per-message TTL (0-100, default: 0)");
+        "  --per-message-ttl-percent=N  Percentage of messages with per-message TTL (0-100,"
+            + " default: 0)");
     System.out.println(
         "  --per-message-ttl=N        Per-message TTL in seconds (default: 300 = 5 minutes)");
     System.out.println();

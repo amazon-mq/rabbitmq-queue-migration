@@ -77,13 +77,14 @@ public class EndToEndMigrationTest {
         System.exit(1);
       }
 
-      boolean migrationSuccess =
+      QueueMigrationClient.MigrationInfo finalMigration =
           monitorMigrationProgress(migrationClient, config.getMigrationTimeout(), config);
 
       // Phase 5: Validate migration results
       logger.info("=== Phase 5: Validating migration results ===");
-      if (migrationSuccess) {
-        validateMigrationResults(config, preMigrationStats, preMigrationDefs, migrationStartTime);
+      if (finalMigration != null) {
+        validateMigrationResults(
+            config, preMigrationStats, preMigrationDefs, migrationStartTime, finalMigration);
         logger.info("✅ Complete end-to-end migration test finished successfully!");
       } else {
         logger.error("❌ Migration test failed - migration did not complete successfully");
@@ -184,7 +185,7 @@ public class EndToEndMigrationTest {
     return stats;
   }
 
-  private static boolean monitorMigrationProgress(
+  private static QueueMigrationClient.MigrationInfo monitorMigrationProgress(
       QueueMigrationClient migrationClient, int timeoutSeconds, TestConfiguration config)
       throws Exception {
     logger.info("Monitoring migration progress (timeout: {}s)...", timeoutSeconds);
@@ -245,12 +246,12 @@ public class EndToEndMigrationTest {
               migration.getProgressPercentage());
 
           verifyListenersRestored(config);
-          return true;
+          return migration;
         } else if (migration.isFailed()) {
           logger.error("❌ Migration failed!");
           logger.error("Migration info: {}", migration);
           verifyListenersRestored(config);
-          return false;
+          return null;
         } else if (migration.isInterrupted()) {
           // Wait for in-flight queues to finish (completedQueues stops changing)
           int currentCompleted = migration.getCompletedQueues();
@@ -263,7 +264,7 @@ public class EndToEndMigrationTest {
                   migration.getCompletedQueues(),
                   migration.getTotalQueues());
               verifyListenersRestored(config);
-              return true;
+              return migration;
             }
           } else {
             interruptedStableCount = 0;
@@ -287,7 +288,7 @@ public class EndToEndMigrationTest {
         } else {
           logger.error("No migration was detected within timeout period");
         }
-        return false;
+        return null;
       }
 
       Thread.sleep(MONITORING_INTERVAL_SECONDS * 1000);
@@ -529,7 +530,8 @@ public class EndToEndMigrationTest {
       TestConfiguration config,
       PreMigrationStats preMigrationStats,
       Definitions preMigrationDefs,
-      long migrationStartTime)
+      long migrationStartTime,
+      QueueMigrationClient.MigrationInfo finalMigration)
       throws Exception {
     logger.info("Validating migration results...");
 
@@ -588,11 +590,18 @@ public class EndToEndMigrationTest {
       logger.info("✅ Message count validation passed: {}", totalMessages);
     }
 
-    // Calculate expected quorum count based on batch size and unsuitable queues
+    // Calculate expected quorum count based on batch size, unsuitable queues, and interruption
     int unsuitableCount = config.getUnsuitableQueueCount();
     int migratableQueueCount = testQueueCount - unsuitableCount;
     int expectedQuorumCount = migratableQueueCount;
-    if (config.getBatchSize() != null && config.getBatchSize() < migratableQueueCount) {
+    if (finalMigration.isInterrupted()) {
+      expectedQuorumCount = finalMigration.getCompletedQueues();
+      logger.info(
+          "Interrupted migration: expecting {} queues migrated (interrupted at {}/{})",
+          expectedQuorumCount,
+          finalMigration.getCompletedQueues(),
+          finalMigration.getTotalQueues());
+    } else if (config.getBatchSize() != null && config.getBatchSize() < migratableQueueCount) {
       expectedQuorumCount = config.getBatchSize();
       logger.info(
           "Batch migration mode: expecting {} queues migrated (batch_size={})",
