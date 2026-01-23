@@ -4,25 +4,14 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 
 ## Overview
 
-This plugin provides a safe, automated solution for migrating classic queues to quorum queues with:
-- Two-phase migration algorithm (classic → temporary quorum → final quorum)
-- Message-by-message transfer with progress tracking
-- Automatic binding preservation
-- Snapshot support for rollback capability
-- HTTP API for control and monitoring
-- Web UI integration with the RabbitMQ Management Plugin
+A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in RabbitMQ 3.13.x clusters.
 
-## Features
-
-- **Safe Migration**: Pre-migration validation checks ensure cluster readiness
-- **Progress Tracking**: Real-time progress monitoring via HTTP API
-- **Selective Migration**: Migrate specific queues by name via HTTP API
-- **Interruption Support**: Gracefully interrupt running migrations via HTTP API or management UI
-- **Distributed Execution**: Leverages all cluster nodes for parallel processing
-- **Rollback Support**: Tracks rollback state for failed migrations
-- **Snapshot Integration**: Creates EBS or tar-based snapshots before migration
-- **Web UI**: Management plugin integration for visual monitoring
-- **Default Queue Type:** The plugin automatically sets the vhost's default queue type to `quorum` upon successful migration completion.
+- Two-phase migration algorithm with message-by-message transfer
+- Automatic binding preservation and rollback support
+- Selective migration by queue name or batch size
+- EBS or tar-based snapshots before migration
+- HTTP API and Web UI for control and monitoring
+- Sets vhost default queue type to `quorum` on completion
 
 ## Prerequisites
 
