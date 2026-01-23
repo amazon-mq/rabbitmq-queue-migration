@@ -899,11 +899,6 @@ format_disk_space_error({insufficient_disk_space, Details}) ->
     ).
 
 %% Enhanced queue suitability error formatting
-format_queue_suitability_error({unsuitable_overflow_behavior, _Details}) ->
-    rqm_util:unicode_format(
-        "Some queues are unsuitable, see below",
-        []
-    );
 format_queue_suitability_error({unsuitable_queues, Details}) ->
     ProblematicQueues = maps:get(problematic_queues, Details),
     QueueCount = length(ProblematicQueues),

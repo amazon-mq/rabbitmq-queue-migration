@@ -80,11 +80,7 @@ create_snapshot(ebs, VHost) ->
 %% @doc Skip snapshot creation when mode is none
 create_snapshot(none, _VHost) ->
     ?LOG_DEBUG("rqm: snapshot mode is none, skipping snapshot creation"),
-    {ok, <<"none">>};
-%% @doc Fallback for invalid snapshot modes - defaults to tar
-create_snapshot(InvalidMode, VHost) ->
-    ?LOG_WARNING("rqm: invalid snapshot mode ~p, defaulting to tar", [InvalidMode]),
-    create_snapshot(tar, VHost).
+    {ok, <<"none">>}.
 
 %% @doc Check if there are any in-progress EBS snapshots for RabbitMQ volumes
 %% Returns ok if no snapshots in progress, {error, {snapshot_in_progress, Details}} otherwise
@@ -102,10 +98,7 @@ check_no_snapshots_in_progress(tar) ->
 check_no_snapshots_in_progress(none) ->
     ok;
 check_no_snapshots_in_progress(ebs) ->
-    check_ebs_snapshots_in_progress();
-check_no_snapshots_in_progress(InvalidMode) ->
-    ?LOG_WARNING("rqm: invalid snapshot mode ~p", [InvalidMode]),
-    ok.
+    check_ebs_snapshots_in_progress().
 
 check_ebs_snapshots_in_progress() ->
     {ok, Region} = rabbitmq_aws_config:region(),

@@ -313,7 +313,7 @@ filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->
                 end
              || Q <- FilteredQueues
             ],
-    [
+    _ = [
         ?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
      || QName <- SpecifiedButNotFound
     ],

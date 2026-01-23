@@ -182,9 +182,7 @@ extract_queue_suitability_issues(Queue, SuitabilityResult) ->
                         false
                 end,
                 ProblematicQueues
-            );
-        _ ->
-            []
+            )
     end.
 
 %% Helper function to extract vhost from queue
