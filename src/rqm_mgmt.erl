@@ -464,7 +464,8 @@ parse_all_options(Opts0, Json) ->
     Opts1 = parse_skip_unsuitable_queues(Json, Opts0),
     Opts2 = parse_batch_size(Json, Opts1),
     Opts3 = parse_batch_order(Json, Opts2),
-    parse_queue_names(Json, Opts3).
+    Opts4 = parse_queue_names(Json, Opts3),
+    parse_tolerance(Json, Opts4).
 
 parse_skip_unsuitable_queues(Json, Opts) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
@@ -496,6 +497,14 @@ parse_queue_names(Json, Opts) ->
         Names when is_list(Names) ->
             QueueNames = [rqm_util:to_unicode(N) || N <- Names],
             Opts#{queue_names => QueueNames};
+        _ ->
+            Opts
+    end.
+
+parse_tolerance(Json, Opts) ->
+    case maps:get(<<"tolerance">>, Json, undefined) of
+        V when is_number(V), V >= 0.0, V =< 100.0 ->
+            Opts#{tolerance => float(V)};
         _ ->
             Opts
     end.
