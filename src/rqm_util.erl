@@ -119,7 +119,7 @@ parse_migration_id(UrlEncoded) ->
 %% @doc Format string using io_lib:format and convert to Unicode binary
 %% This function combines io_lib:format/2 with unicode:characters_to_binary/1
 %% to ensure proper Unicode handling and consistent binary output
--spec to_unicode(string()) -> binary().
+-spec to_unicode(string() | binary()) -> binary().
 to_unicode(Arg) ->
     unicode:characters_to_binary(Arg).
 

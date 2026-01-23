@@ -325,7 +325,7 @@ handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
     {Results, BadNodes} = rpc:multicall(Nodes, rqm_util, resume_all_non_http_listeners, []),
     BadNodes =/= [] andalso
         ?LOG_WARNING("rqm: failed to restore listeners on nodes: ~tp", [BadNodes]),
-    [
+    _ = [
         ?LOG_WARNING("rqm: listener restoration returned error: ~tp", [Error])
      || {error, Error} <- Results
     ],
@@ -646,7 +646,7 @@ handle_migration_result({ok, _Results}, MigrationId, Start) ->
 handle_migration_result({interrupted, Results}, MigrationId, Start) ->
     ?LOG_INFO("rqm: migration ~s interrupted", [format_migration_id(MigrationId)]),
     InterruptedQueues = [Resource || {aborted, Resource, interrupted} <- Results],
-    [
+    _ = [
         rqm_db:create_skipped_queue_status(Resource, MigrationId, interrupted)
      || Resource <- InterruptedQueues
     ],
@@ -1729,9 +1729,7 @@ ensure_no_local_connections() ->
         [] ->
             true;
         [_ | _] ->
-            false;
-        _ ->
-            true
+            false
     end.
 
 %% @doc Get rollback pending migration as JSON string for HOTW workflow
@@ -1818,9 +1816,7 @@ compute_node_allocations(Nodes, BatchSize) when is_integer(BatchSize), BatchSize
         Remainder,
         Nodes
     ),
-    Allocations;
-compute_node_allocations(Nodes, 0) ->
-    [{Node, all} || Node <- Nodes].
+    Allocations.
 
 %% Helper function to sort queues by size and limit to batch count
 sort_and_limit_queues(Queues, _Limit, _BatchOrder, QueueNames) when is_list(QueueNames) ->
@@ -1997,7 +1993,7 @@ quiesce_and_flush_node(VHost) ->
     ?LOG_DEBUG("rqm: syncing filesystem"),
     case os:type() of
         {unix, _} ->
-            os:cmd("sync"),
+            _ = os:cmd("sync"),
             ok;
         _ ->
             % On non-Unix systems, we can't easily force a sync
