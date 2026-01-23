@@ -37,19 +37,9 @@ See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migratio
 
 ## ⚠️ Important: Per-Message TTL Limitation
 
-**This plugin CANNOT detect per-message TTL set by publishers.**
+**This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing message count differences.
 
-If your publishers set the `expiration` property on individual messages (see [Per-Message TTL in Publishers](https://www.rabbitmq.com/docs/3.13/ttl#per-message-ttl-in-publishers)), messages may expire during migration, causing message count differences between source and destination queues.
-
-The plugin detects and blocks migration for queues with:
-- `x-message-ttl` queue argument
-- `message-ttl` policy
-
-However, per-message TTL is set on each message by publishers and is **not visible at the queue level**.
-
-### Solution: Message Count Tolerance
-
-Use the `tolerance` parameter to allow migrations to succeed despite message count differences caused by TTL expiration:
+Use the `tolerance` parameter to allow acceptable message loss:
 
 ```bash
 curl -u guest:guest -X POST \
@@ -58,14 +48,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
-The tolerance is a **per-queue percentage** (0.0-100.0). A queue passes verification if the message count difference is within the tolerance. For example, with `tolerance: 10.0`, a queue with 100 source messages passes if the destination has 90-100 messages.
-
-**Recommendations:**
-- Set tolerance slightly higher than your expected message loss rate
-- If 5% of messages have short TTLs, use `tolerance: 10.0` for safety margin
-- Monitor migration logs for "within tolerance" warnings to verify expected behavior
-
-See [HTTP API](docs/HTTP_API.md#start-migration) for complete API reference.
+See [Per-Message TTL Limitation](docs/SKIP_UNSUITABLE_QUEUES.md#%EF%B8%8F-important-per-message-ttl-limitation) for details and recommendations.
 
 ## Web UI
 
