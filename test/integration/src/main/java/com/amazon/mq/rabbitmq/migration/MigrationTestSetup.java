@@ -266,6 +266,22 @@ public class MigrationTestSetup {
           logger.error("Invalid batch order: {} (must be smallest_first or largest_first)", order);
           System.exit(1);
         }
+      } else if (arg.startsWith("--per-message-ttl-percent=")) {
+        try {
+          int percent = Integer.parseInt(arg.substring(26));
+          config.setPerMessageTtlPercent(percent);
+        } catch (NumberFormatException e) {
+          logger.error("Invalid per-message TTL percent: {}", arg);
+          System.exit(1);
+        }
+      } else if (arg.startsWith("--per-message-ttl=")) {
+        try {
+          int seconds = Integer.parseInt(arg.substring(18));
+          config.setPerMessageTtlSeconds(seconds);
+        } catch (NumberFormatException e) {
+          logger.error("Invalid per-message TTL: {}", arg);
+          System.exit(1);
+        }
       } else if (arg.equals("--help") || arg.equals("-h")) {
         printUsage();
         System.exit(0);
@@ -345,6 +361,10 @@ public class MigrationTestSetup {
         "  --enable-max-length        Enable max-length on queues (disabled by default)");
     System.out.println(
         "  --enable-max-priority      Enable priority on queues (disabled by default)");
+    System.out.println(
+        "  --per-message-ttl-percent=N  Percentage of messages with per-message TTL (0-100, default: 0)");
+    System.out.println(
+        "  --per-message-ttl=N        Per-message TTL in seconds (default: 300 = 5 minutes)");
     System.out.println();
     System.out.println("Other Options:");
     System.out.println("  --test-connection          Test connections and exit");

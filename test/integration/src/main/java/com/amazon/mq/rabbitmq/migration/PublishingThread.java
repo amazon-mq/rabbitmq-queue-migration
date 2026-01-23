@@ -118,8 +118,12 @@ public class PublishingThread implements Runnable {
       threadPendingConfirmations.put(deliveryTag, System.currentTimeMillis());
     }
     // Publish message
-    AMQP.BasicProperties properties =
-        new AMQP.BasicProperties.Builder().headers(headers).deliveryMode(2).build();
+    AMQP.BasicProperties.Builder builder =
+        new AMQP.BasicProperties.Builder().headers(headers).deliveryMode(2);
+    if (task.expirationMs != null) {
+      builder.expiration(String.valueOf(task.expirationMs));
+    }
+    AMQP.BasicProperties properties = builder.build();
     channel.basicPublish("", task.queueName, properties, payload);
     globalPublishedCount.incrementAndGet();
   }

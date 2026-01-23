@@ -737,6 +737,10 @@ public class RabbitMQSetup {
 
   private void generatePublishingTasks(
       int totalMessages, int queueCount, BlockingQueue<PublishingTask>[] taskQueues) {
+    int ttlPercent = config.getPerMessageTtlPercent();
+    long ttlMs = config.getPerMessageTtlSeconds() * 1000L;
+    int ttlMessageCount = 0;
+
     for (int i = 0; i < totalMessages; i++) {
       // Select message size based on distribution
       MessageSize messageSize;
@@ -752,9 +756,22 @@ public class RabbitMQSetup {
       int targetQueueIndex = i % queueCount;
       String queueName = String.format("%s%d", config.getQueuePrefix(), targetQueueIndex);
       int connectionIndex = queueToConnectionMap.get(queueName);
+      // Determine if this message should have per-message TTL
+      Long expirationMs = null;
+      if (ttlPercent > 0 && (i % 100) < ttlPercent) {
+        expirationMs = ttlMs;
+        ttlMessageCount++;
+      }
       // Create and queue task
-      PublishingTask task = new PublishingTask(queueName, messageSize, i);
+      PublishingTask task = new PublishingTask(queueName, messageSize, i, expirationMs);
       taskQueues[connectionIndex].offer(task);
+    }
+
+    if (ttlMessageCount > 0) {
+      logger.info(
+          "Generated {} messages with per-message TTL of {} seconds",
+          ttlMessageCount,
+          config.getPerMessageTtlSeconds());
     }
   }
 
