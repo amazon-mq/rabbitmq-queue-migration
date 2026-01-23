@@ -180,12 +180,6 @@ The plugin creates snapshots before migration to enable rollback if issues occur
 
 See [Snapshots Guide](docs/SNAPSHOTS.md) for complete snapshot configuration and [EC2 Setup](docs/EC2_SETUP.md) for AWS IAM setup.
 
-## Testing
-
-The plugin includes comprehensive unit tests and integration tests.
-
-See [Integration Testing](docs/INTEGRATION_TESTING.md) for test setup and execution instructions.
-
 ## Troubleshooting
 
 For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
@@ -193,7 +187,7 @@ For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.m
 Quick checks:
 - **Migration fails to start:** Run compatibility check to identify issues
 - **Migration stuck:** Check status and broker logs
-- **Rollback required:** Manual cleanup needed (automatic rollback not implemented)
+- **Rollback required:** Manual cleanup needed (automatic rollback available on Amazon MQ only)
 
 ## Contributing
 
