@@ -18,12 +18,10 @@
     start/1,
     validate_migration/1,
     status/0,
-    get_migration_status/0,
-    get_queue_migration_status/1,
     get_rollback_pending_migration_json/0,
     start_migration_preparation_on_node/2,
     start_post_migration_restore_on_node/3,
-    start_migration_on_node/7
+    start_migration_on_node/4
 ]).
 
 %% Public API
@@ -71,6 +69,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
+    Tolerance = maps:get(tolerance, OptsMap, undefined),
     #migration_opts{
         vhost = VHost,
         mode = Mode,
@@ -78,7 +77,8 @@ build_migration_opts(Mode, OptsMap) ->
         batch_size = BatchSize,
         batch_order = BatchOrder,
         queue_names = QueueNames,
-        migration_id = MigrationId
+        migration_id = MigrationId,
+        tolerance = Tolerance
     }.
 
 pre_migration_validation(shovel_plugin, Opts) ->
@@ -287,7 +287,8 @@ start_with_lock(
         vhost = VHost,
         skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
-        migration_id = MigrationId
+        migration_id = MigrationId,
+        tolerance = Tolerance
     } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
@@ -297,7 +298,8 @@ start_with_lock(
         VHost,
         os:timestamp(),
         SkipUnsuitableQueues,
-        SkippedCount
+        SkippedCount,
+        Tolerance
     ),
     try
         {ok, PreparationState} = pre_migration_preparation(Nodes, VHost),
@@ -727,8 +729,19 @@ wait_for_per_queue_migration_results(Gatherer, TotalQueueCount, IsError, IsInter
             wait_for_per_queue_migration_results(
                 Gatherer, TotalQueueCount - 1, IsError, true, Acc1
             );
-        Error ->
-            Acc1 = [Error | Acc0],
+        {value, {error, _, _} = Val} ->
+            Acc1 = [Val | Acc0],
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
+            );
+        {value, {aborted, _, _} = Val} ->
+            Acc1 = [Val | Acc0],
+            wait_for_per_queue_migration_results(
+                Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
+            );
+        Other ->
+            ?LOG_WARNING("rqm: unexpected gatherer result: ~tp", [Other]),
+            Acc1 = [Other | Acc0],
             wait_for_per_queue_migration_results(
                 Gatherer, TotalQueueCount - 1, true, IsInterrupted, Acc1
             )
@@ -742,18 +755,12 @@ start_migration_on_each_node(
     [{Node, NodeBatchSize} | Rest],
     QueueCountGatherer,
     Gatherer,
-    #migration_opts{
-        vhost = VHost,
-        migration_id = MigrationId,
-        batch_order = BatchOrder,
-        queue_names = QueueNames
-    } =
-        Opts,
+    #migration_opts{} = Opts,
     Acc0
 ) ->
     ok = rqm_gatherer:fork(QueueCountGatherer),
     Args = [
-        QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames
+        QueueCountGatherer, Gatherer, NodeBatchSize, Opts
     ],
     % elp:ignore W0014
     PidAndRef = spawn_monitor(Node, ?MODULE, start_migration_on_node, Args),
@@ -763,13 +770,23 @@ start_migration_on_each_node(
     ).
 
 start_migration_on_node(
-    QueueCountGatherer, Gatherer, VHost, MigrationId, NodeBatchSize, BatchOrder, QueueNames
+    QueueCountGatherer,
+    Gatherer,
+    NodeBatchSize,
+    #migration_opts{
+        vhost = VHost,
+        migration_id = MigrationId,
+        batch_order = BatchOrder,
+        queue_names = QueueNames
+    } = Opts
 ) ->
     ?LOG_DEBUG(
         "rqm: node ~tp starting migration ~s for vhost ~tp (batch: ~p, order: ~p)",
         [node(), format_migration_id(MigrationId), VHost, NodeBatchSize, BatchOrder]
     ),
 
+    % TODO all of this getting/filtering of queues needs to be in its own function
+    %
     % Get all classic queues for this vhost on this node
     AllQueues = rabbit_db_queue:get_all_by_type_and_node(VHost, rabbit_classic_queue, node()),
 
@@ -827,7 +844,7 @@ start_migration_on_node(
                         ])
                 end,
                 % Process the eligible queues
-                process_queues_for_migration(EligibleQueues3, Gatherer, MigrationId),
+                process_queues_for_migration(EligibleQueues3, Gatherer, Opts),
                 {ok, {node_queue_count, QueueCount}};
             false ->
                 {ok, {node_queue_count, 0}}
@@ -838,19 +855,20 @@ start_migration_on_node(
     ok = rqm_gatherer:in(QueueCountGatherer, GathererInData),
     ok = rqm_gatherer:finish(QueueCountGatherer).
 
-process_queues_for_migration([], _Gatherer, _MigrationId) ->
+process_queues_for_migration([], _Gatherer, _Opts) ->
     ok;
-process_queues_for_migration([ClassicQ | Rest], Gatherer, MigrationId) ->
+process_queues_for_migration([ClassicQ | Rest], Gatherer, #migration_opts{} = Opts) ->
     MigrationFun = fun() ->
-        do_migration(ClassicQ, Gatherer, MigrationId)
+        do_migration(ClassicQ, Gatherer, Opts)
     end,
     ok = rqm_gatherer:fork(Gatherer),
     ok = submit_to_worker_pool(MigrationFun),
-    process_queues_for_migration(Rest, Gatherer, MigrationId).
+    process_queues_for_migration(Rest, Gatherer, Opts).
 
-do_migration(ClassicQ, Gatherer, MigrationId) ->
+do_migration(ClassicQ, Gatherer, #migration_opts{migration_id = MigrationId} = Opts) ->
     Resource = amqqueue:get_name(ClassicQ),
 
+    % TODO could this be a function?
     % CRITICAL: Check migration status before starting any work
     case rqm_db:is_current_status(MigrationId, in_progress) of
         false ->
@@ -881,10 +899,10 @@ do_migration(ClassicQ, Gatherer, MigrationId) ->
             end;
         true ->
             % Proceed with normal migration
-            do_migration_work(ClassicQ, Gatherer, MigrationId, Resource)
+            do_migration_work(ClassicQ, Gatherer, Resource, Opts)
     end.
 
-do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
+do_migration_work(ClassicQ, Gatherer, Resource, #migration_opts{migration_id = MigrationId} = Opts) ->
     ?LOG_DEBUG(
         "rqm: starting work on ~ts (migration ~s, node ~tp)",
         [rabbit_misc:rs(Resource), format_migration_id(MigrationId), node()]
@@ -926,6 +944,7 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
         ),
         % Double-check migration status inside the worker process
         _ =
+            % TODO duplicated check, it seems
             case rqm_db:is_current_status(MigrationId, in_progress) of
                 false ->
                     % Check if migration was interrupted or rollback is pending
@@ -960,11 +979,11 @@ do_migration_work(ClassicQ, Gatherer, MigrationId, Resource) ->
                                         [rabbit_misc:rs(Resource)]
                                     ),
                                     migrate_empty_queue_fast_path(
-                                        ClassicQ, Resource, MigrationId, Status
+                                        ClassicQ, Resource, Status, Opts
                                     );
                                 _ ->
                                     % Existing two-phase migration process
-                                    migrate_with_messages(ClassicQ, Resource, MigrationId, Status)
+                                    migrate_with_messages(ClassicQ, Resource, Status, Opts)
                             end,
                         PPid ! {self(), Ref, {ok, Resource, qstr(QuorumQ)}}
                     catch
@@ -1070,15 +1089,17 @@ wait_for_migration(CPid, Ref, Retries0) ->
         wait_for_migration(CPid, Ref, Retries1)
     end.
 
-migrate_to_tmp_qq(FinalResource, MigrationId, Q) ->
+migrate_to_tmp_qq(FinalResource, Q, #migration_opts{} = Opts) ->
     AddTmpPrefixFun = fun rqm_queue_naming:add_temp_prefix/2,
-    migrate(FinalResource, MigrationId, Q, AddTmpPrefixFun, phase_one).
+    migrate(FinalResource, Q, AddTmpPrefixFun, phase_one, Opts).
 
-tmp_qq_to_qq(FinalResource, MigrationId, Q) ->
+tmp_qq_to_qq(FinalResource, Q, #migration_opts{} = Opts) ->
     RemoveTmpPrefixFun = fun rqm_queue_naming:remove_temp_prefix/2,
-    migrate(FinalResource, MigrationId, Q, RemoveTmpPrefixFun, phase_two).
+    migrate(FinalResource, Q, RemoveTmpPrefixFun, phase_two, Opts).
 
-migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
+migrate_empty_queue_fast_path(ClassicQ, Resource, Status, #migration_opts{
+    migration_id = MigrationId
+}) ->
     ?LOG_DEBUG("rqm: fast-path migration for empty ~ts", [rabbit_misc:rs(Resource)]),
 
     % Create final quorum queue directly (skip temporary queue)
@@ -1154,13 +1175,13 @@ migrate_empty_queue_fast_path(ClassicQ, Resource, MigrationId, Status) ->
     ?LOG_DEBUG("rqm: fast-path migration completed for ~ts", [rabbit_misc:rs(Resource)]),
     {ok, NewQ}.
 
-migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
+migrate_with_messages(ClassicQ, Resource, Status, #migration_opts{} = Opts) ->
     ?LOG_DEBUG(
         "rqm: ~ts entering phase 1 - creating temporary quorum queue",
         [rabbit_misc:rs(Resource)]
     ),
     StartTime = erlang:system_time(millisecond),
-    {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, MigrationId, ClassicQ),
+    {ok, QuorumQ0} = migrate_to_tmp_qq(Resource, ClassicQ, Opts),
     Phase1Time = erlang:system_time(millisecond) - StartTime,
     ?LOG_DEBUG(
         "rqm: ~ts phase 1 completed in ~wms",
@@ -1172,7 +1193,7 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
         [rabbit_misc:rs(Resource)]
     ),
     Phase2Start = erlang:system_time(millisecond),
-    {ok, QuorumQ1} = tmp_qq_to_qq(Resource, MigrationId, QuorumQ0),
+    {ok, QuorumQ1} = tmp_qq_to_qq(Resource, QuorumQ0, Opts),
     Phase2Time = erlang:system_time(millisecond) - Phase2Start,
     ?LOG_DEBUG(
         "rqm: ~ts phase 2 completed in ~wms",
@@ -1192,7 +1213,7 @@ migrate_with_messages(ClassicQ, Resource, MigrationId, Status) ->
 
     {ok, QuorumQ1}.
 
-migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
+migrate(FinalResource, Q, NameFun, Phase, #migration_opts{migration_id = MigrationId} = Opts) ->
     Resource = amqqueue:get_name(Q),
     QName = Resource#resource.name,
     NewQName = NameFun(QName, MigrationId),
@@ -1247,7 +1268,7 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
             ])
     end,
 
-    ok = migrate_queue_messages(FinalResource, MigrationId, Q, NewQ, Phase),
+    ok = migrate_queue_messages(FinalResource, Q, NewQ, Phase, Opts),
 
     %% Delete the source queue after successful message migration
     try
@@ -1269,10 +1290,10 @@ migrate(FinalResource, MigrationId, Q, NameFun, Phase) ->
 
     {ok, NewQ}.
 
-migrate_queue_messages(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
-    ok = migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase).
+migrate_queue_messages(FinalResource, OldQ, NewQ, Phase, #migration_opts{} = Opts) ->
+    ok = migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase, Opts).
 
-migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase) ->
+migrate_queue_messages_with_shovel(FinalResource, OldQ, NewQ, Phase, #migration_opts{} = Opts) ->
     OldQName = get_queue_name(OldQ),
     NewQName = get_queue_name(NewQ),
     VHost = get_vhost_from_resource(FinalResource),
@@ -1307,7 +1328,7 @@ migrate_queue_messages_with_shovel(FinalResource, MigrationId, OldQ, NewQ, Phase
         ok = rqm_shovel:create_and_verify(VHost, ShovelName, ShovelDef),
 
         ok = wait_for_shovel_completion(
-            ShovelName, VHost, FinalResource, MigrationId, OldQ, NewQ, PreMigrationCounts
+            ShovelName, VHost, FinalResource, OldQ, NewQ, PreMigrationCounts, Opts
         )
     catch
         Class:Reason:Stack ->
@@ -1400,31 +1421,37 @@ filter_default_bindings(Bindings, QueueName) ->
 
 %% Wait for shovel to complete migration using message count-based detection
 wait_for_shovel_completion(
-    ShovelName, VHost, FinalResource, MigrationId, SrcQueue, DestQueue, PreMigrationCounts
+    ShovelName,
+    VHost,
+    FinalResource,
+    SrcQueue,
+    DestQueue,
+    PreMigrationCounts,
+    #migration_opts{} = Opts
 ) when ?is_amqqueue(SrcQueue), ?is_amqqueue(DestQueue) ->
     % MaxRetries = 900, with 1-second sleep per retry = 15 minutes maximum wait
     wait_for_shovel_completion_stable(
         ShovelName,
         VHost,
         FinalResource,
-        MigrationId,
         SrcQueue,
         DestQueue,
         PreMigrationCounts,
         900,
-        []
+        [],
+        Opts
     ).
 
 wait_for_shovel_completion_stable(
     ShovelName,
     VHost,
     FinalResource,
-    MigrationId,
     SrcQueue,
     DestQueue,
     PreMigrationCounts,
     MaxRetries,
-    DestCountHistory
+    DestCountHistory,
+    #migration_opts{} = Opts
 ) ->
     case MaxRetries of
         0 ->
@@ -1455,7 +1482,7 @@ wait_for_shovel_completion_stable(
                         [Reason, length(NewHistory), SrcCount, DestCount]
                     ),
                     {ok, _} = verify_and_update_progress(
-                        ExpectedTotal, FinalResource, MigrationId, SrcQueue, DestQueue
+                        ExpectedTotal, FinalResource, SrcQueue, DestQueue, Opts
                     ),
                     ok;
                 in_progress ->
@@ -1470,7 +1497,7 @@ wait_for_shovel_completion_stable(
                             DestCount
                         ]
                     ),
-                    update_queue_status_progress(FinalResource, MigrationId, DestQueue),
+                    update_queue_status_progress(FinalResource, DestQueue, Opts),
 
                     timer:sleep(1000),
 
@@ -1478,12 +1505,12 @@ wait_for_shovel_completion_stable(
                         ShovelName,
                         VHost,
                         FinalResource,
-                        MigrationId,
                         SrcQueue,
                         DestQueue,
                         PreMigrationCounts,
                         MaxRetries - 1,
-                        NewHistory
+                        NewHistory,
+                        Opts
                     )
             end
     end.
@@ -1516,7 +1543,9 @@ check_shovel_completion_by_stability(_ExpectedTotal, SrcCount, _DestCount, _Dest
     % Source still has messages - shovel must be in progress.
     in_progress.
 
-update_queue_status_progress(#resource{} = FinalResource, MigrationId, DestQueue) when
+update_queue_status_progress(#resource{} = FinalResource, DestQueue, #migration_opts{
+    migration_id = MigrationId
+}) when
     ?is_amqqueue(DestQueue)
 ->
     DestQueueResource = amqqueue:get_name(DestQueue),
@@ -1542,60 +1571,83 @@ update_queue_status_progress(#resource{} = FinalResource, MigrationId, DestQueue
     end.
 
 %% Verify message counts and update progress with actual counts
-verify_and_update_progress(ExpectedTotal, FinalResource, MigrationId, SrcQueue, DestQueue) ->
+verify_and_update_progress(
+    ExpectedTotal, FinalResource, SrcQueue, DestQueue, #migration_opts{} = Opts
+) ->
     {ok, SrcFinalCount} = rqm_db:get_message_count(SrcQueue),
     {ok, DestFinalCount} = rqm_db:get_message_count(DestQueue),
     ActualTotal = SrcFinalCount + DestFinalCount,
-    verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount).
+    verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, DestFinalCount, Opts).
 
-verify_message_counts(Expected, Expected, FinalResource, MigrationId, DestFinalCount) ->
+verify_message_counts(Expected, Expected, FinalResource, DestFinalCount, #migration_opts{
+    migration_id = MigrationId
+}) ->
     rqm_db:update_queue_status_progress(FinalResource, MigrationId, DestFinalCount);
-verify_message_counts(ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount) ->
+verify_message_counts(
+    ExpectedTotal, ActualTotal, FinalResource, DestFinalCount, #migration_opts{} = Opts
+) ->
     LostMessages = ExpectedTotal - ActualTotal,
     check_message_count_tolerance(
-        LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
+        LostMessages, ExpectedTotal, ActualTotal, FinalResource, DestFinalCount, Opts
     ).
 
 check_message_count_tolerance(
-    LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
+    LostMessages,
+    ExpectedTotal,
+    ActualTotal,
+    FinalResource,
+    DestFinalCount,
+    #migration_opts{tolerance = Tolerance} = Opts
 ) when
     LostMessages < 0
 ->
     % Over-delivery: ActualTotal > ExpectedTotal
     Diff = abs(LostMessages),
-    TolerancePercent = rqm_config:message_count_over_tolerance_percent(),
-    Tolerance = round(ExpectedTotal * TolerancePercent / 100.0),
+    TolerancePercent = get_tolerance_percent(Tolerance, over),
+    ToleranceValue = round(ExpectedTotal * TolerancePercent / 100.0),
     check_within_tolerance(
-        Diff =< Tolerance,
+        Diff =< ToleranceValue,
         over,
         TolerancePercent,
         ExpectedTotal,
         ActualTotal,
         LostMessages,
         FinalResource,
-        MigrationId,
-        DestFinalCount
+        DestFinalCount,
+        Opts
     );
 check_message_count_tolerance(
-    LostMessages, ExpectedTotal, ActualTotal, FinalResource, MigrationId, DestFinalCount
+    LostMessages,
+    ExpectedTotal,
+    ActualTotal,
+    FinalResource,
+    DestFinalCount,
+    #migration_opts{tolerance = Tolerance} = Opts
 ) when
     LostMessages > 0
 ->
     % Under-delivery: ActualTotal < ExpectedTotal
     Diff = abs(LostMessages),
-    TolerancePercent = rqm_config:message_count_under_tolerance_percent(),
-    Tolerance = round(ExpectedTotal * TolerancePercent / 100.0),
+    TolerancePercent = get_tolerance_percent(Tolerance, under),
+    ToleranceValue = round(ExpectedTotal * TolerancePercent / 100.0),
     check_within_tolerance(
-        Diff =< Tolerance,
+        Diff =< ToleranceValue,
         under,
         TolerancePercent,
         ExpectedTotal,
         ActualTotal,
         LostMessages,
         FinalResource,
-        MigrationId,
-        DestFinalCount
+        DestFinalCount,
+        Opts
     ).
+
+get_tolerance_percent(undefined, over) ->
+    rqm_config:message_count_over_tolerance_percent();
+get_tolerance_percent(undefined, under) ->
+    rqm_config:message_count_under_tolerance_percent();
+get_tolerance_percent(Tolerance, _Direction) when is_float(Tolerance) ->
+    Tolerance.
 
 check_within_tolerance(
     true,
@@ -1605,8 +1657,8 @@ check_within_tolerance(
     ActualTotal,
     LostMessages,
     FinalResource,
-    MigrationId,
-    DestFinalCount
+    DestFinalCount,
+    #migration_opts{migration_id = MigrationId}
 ) ->
     ?LOG_WARNING(
         "rqm: message count ~p-delivery within tolerance (~tp%) - Expected: ~tp, Actual: ~tp, Diff: ~tp",
@@ -1621,8 +1673,8 @@ check_within_tolerance(
     ActualTotal,
     LostMessages,
     _FinalResource,
-    _MigrationId,
-    _DestFinalCount
+    _DestFinalCount,
+    _Opts
 ) ->
     ?LOG_ERROR(
         "rqm: message count ~p-delivery exceeds tolerance (~tp%) - Expected: ~tp, Actual: ~tp, Diff: ~tp",
@@ -1686,12 +1738,6 @@ ensure_no_local_connections() ->
             true
     end.
 
-get_migration_status() ->
-    rqm_db:get_migration_status().
-
-get_queue_migration_status(MigrationId) ->
-    rqm_db:get_queue_migration_status(MigrationId).
-
 %% @doc Get rollback pending migration as JSON string for HOTW workflow
 %% Returns {ok, JsonBinary} if rollback_pending migration exists, {error, not_found} otherwise
 -spec get_rollback_pending_migration_json() -> {ok, binary()} | {error, not_found}.
@@ -1711,16 +1757,18 @@ format_migration_id({Timestamp, _Node}) ->
 %% Format error for storage in migration record
 format_migration_error(_Class, {migration_failed_rollback_pending, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    FirstError = format_first_error(Errors),
     iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.", [
-            ErrorCount, AbortedCount
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~s", [
+            ErrorCount, AbortedCount, FirstError
         ])
     );
 format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    FirstError = format_first_error(Errors),
     iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.", [
-            ErrorCount, AbortedCount
+        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~s", [
+            ErrorCount, AbortedCount, FirstError
         ])
     );
 format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reason) ->
@@ -1808,6 +1856,36 @@ count_errors_and_aborted(Errors) ->
     ErrorCount = length([E || E <- Errors, element(1, E) =:= error]),
     AbortedCount = length([A || A <- Errors, element(1, A) =:= aborted]),
     {ErrorCount, AbortedCount}.
+
+%% Helper function to format the first error for display
+format_first_error(Errors) ->
+    case [E || E <- Errors, element(1, E) =:= error] of
+        [] ->
+            "";
+        [{error, Resource, {_Class, Reason, _Stack}} | _] ->
+            QueueName =
+                case Resource of
+                    #resource{name = Name} -> Name;
+                    _ -> <<"unknown">>
+                end,
+            ReasonStr = format_error_reason(Reason),
+            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr]);
+        [{error, Resource, Reason} | _] ->
+            QueueName =
+                case Resource of
+                    #resource{name = Name} -> Name;
+                    _ -> <<"unknown">>
+                end,
+            ReasonStr = format_error_reason(Reason),
+            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr])
+    end.
+
+format_error_reason({message_count_mismatch, Expected, Actual, Diff}) ->
+    io_lib:format("message count mismatch (expected: ~p, actual: ~p, diff: ~p)", [
+        Expected, Actual, Diff
+    ]);
+format_error_reason(Reason) ->
+    io_lib:format("~tp", [Reason]).
 
 %% @doc Prepare the RabbitMQ node connections for migration
 %% 1. Suspend non-HTTP listeners (blocks AMQP connections, keeps HTTP API available)

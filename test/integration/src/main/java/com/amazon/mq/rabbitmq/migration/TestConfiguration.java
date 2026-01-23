@@ -29,6 +29,10 @@ public class TestConfiguration {
   private Integer batchSize = null; // null means "all"
   private String batchOrder = "smallest_first";
 
+  // Per-message TTL configuration
+  private int perMessageTtlPercent = 0; // Percentage of messages with per-message TTL
+  private int perMessageTtlSeconds = 300; // 5 minutes default
+
   /**
    * Get the default virtual host used when no specific vhost is configured.
    *
@@ -368,5 +372,21 @@ public class TestConfiguration {
 
   public void setBatchOrder(String batchOrder) {
     this.batchOrder = batchOrder;
+  }
+
+  public int getPerMessageTtlPercent() {
+    return perMessageTtlPercent;
+  }
+
+  public void setPerMessageTtlPercent(int perMessageTtlPercent) {
+    this.perMessageTtlPercent = Math.max(0, Math.min(100, perMessageTtlPercent));
+  }
+
+  public int getPerMessageTtlSeconds() {
+    return perMessageTtlSeconds;
+  }
+
+  public void setPerMessageTtlSeconds(int perMessageTtlSeconds) {
+    this.perMessageTtlSeconds = perMessageTtlSeconds;
   }
 }

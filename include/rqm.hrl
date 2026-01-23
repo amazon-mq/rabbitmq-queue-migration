@@ -90,7 +90,9 @@
     % List of snapshot info: [{Node, SnapshotId, VolumeId}, ...]
     snapshots,
     % Whether to skip unsuitable queues instead of blocking migration
-    skip_unsuitable_queues = false :: boolean()
+    skip_unsuitable_queues = false :: boolean(),
+    % Message count tolerance percentage (overrides config for both over/under)
+    tolerance = undefined :: undefined | float()
 }).
 
 %% Record to track individual queue migration status
@@ -151,5 +153,6 @@
     batch_size = all :: all | pos_integer(),
     batch_order = smallest_first :: smallest_first | largest_first,
     queue_names = undefined :: undefined | [binary()],
-    migration_id = undefined :: undefined | {integer(), atom()}
+    migration_id = undefined :: undefined | {integer(), atom()},
+    tolerance = undefined :: undefined | float()
 }).

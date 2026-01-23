@@ -45,6 +45,14 @@ SPDX-License-Identifier: Apache-2.0
           <% } %>
         </td>
       </tr>
+      <tr>
+        <th>Skip Unsuitable Queues:</th>
+        <td><%= queue_migration_detail_status.migration.skip_unsuitable_queues ? 'Yes' : 'No' %></td>
+      </tr>
+      <tr>
+        <th>Message Count Tolerance:</th>
+        <td><%= queue_migration_detail_status.migration.tolerance != null ? queue_migration_detail_status.migration.tolerance + '%' : 'Default' %></td>
+      </tr>
     </table>
   </div>
 

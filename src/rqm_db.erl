@@ -16,7 +16,7 @@
 
 %% Migration record operations
 -export([
-    create_migration/5,
+    create_migration/6,
     update_migration_status/2,
     update_migration_failed/2,
     update_migration_completed/2,
@@ -49,6 +49,7 @@
 -export([
     get_migration_status/0,
     get_queue_migration_status/1,
+    queue_migration_exists/1,
     get_rollback_pending_migration/0
 ]).
 
@@ -83,9 +84,11 @@ get_message_count(Resource) when is_record(Resource, resource) ->
 %% Migration record operations
 
 %% @doc Create a new migration record
--spec create_migration(term(), binary(), erlang:timestamp(), boolean(), non_neg_integer()) ->
+-spec create_migration(
+    term(), binary(), erlang:timestamp(), boolean(), non_neg_integer(), undefined | float()
+) ->
     {ok, #queue_migration{}}.
-create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount) ->
+create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount, Tolerance) ->
     MigrationRecord = #queue_migration{
         id = MigrationId,
         vhost = VHost,
@@ -96,7 +99,8 @@ create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCou
         skipped_queues = SkippedCount,
         status = in_progress,
         snapshots = [],
-        skip_unsuitable_queues = SkipUnsuitableQueues
+        skip_unsuitable_queues = SkipUnsuitableQueues,
+        tolerance = Tolerance
     },
     mnesia:dirty_write(MigrationRecord),
     {ok, MigrationRecord}.
@@ -434,39 +438,20 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
         }
     ].
 get_migration_status() ->
-    Migrations = get_all_migrations(),
-    [
-        {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-            SkipUnsuitableQueues,
-            Error}
-     || #queue_migration{
-            id = Id,
-            vhost = VHost,
-            started_at = StartedAt,
-            completed_at = CompletedAt,
-            total_queues = TotalQueues,
-            completed_queues = CompletedQueues,
-            skipped_queues = SkippedQueues,
-            status = Status,
-            skip_unsuitable_queues = SkipUnsuitableQueues,
-            error = Error
-        } <- Migrations
-    ].
+    get_all_migrations().
+
+-spec queue_migration_exists(term()) -> boolean().
+queue_migration_exists(MigrationId) ->
+    case get_migration(MigrationId) of
+        {error, not_found} ->
+            false;
+        {ok, _Migration} ->
+            true
+    end.
 
 %% @doc Get detailed status of a specific migration
 -spec get_queue_migration_status(term()) ->
-    {ok,
-        {#queue_migration{}, [
-            {
-                #resource{},
-                erlang:timestamp() | undefined,
-                erlang:timestamp() | undefined,
-                non_neg_integer(),
-                non_neg_integer(),
-                atom(),
-                term()
-            }
-        ]}}
+    {ok, {#queue_migration{}, [#queue_migration_status{}]}}
     | {error, migration_not_found}.
 get_queue_migration_status(MigrationId) ->
     case get_migration(MigrationId) of
@@ -474,21 +459,7 @@ get_queue_migration_status(MigrationId) ->
             {error, migration_not_found};
         {ok, Migration} ->
             QueueStatuses = get_queue_statuses_for_migration(MigrationId),
-
-            QueueDetails = [
-                {Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs, Status, Error}
-             || #queue_migration_status{
-                    queue_resource = Resource,
-                    started_at = StartedAt,
-                    completed_at = CompletedAt,
-                    total_messages = TotalMsgs,
-                    migrated_messages = MigratedMsgs,
-                    status = Status,
-                    error = Error
-                } <- QueueStatuses
-            ],
-
-            {ok, {Migration, QueueDetails}}
+            {ok, {Migration, QueueStatuses}}
     end.
 
 %% Check if migration has a specific status

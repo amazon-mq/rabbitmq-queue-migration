@@ -59,12 +59,13 @@ NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monito
 // Preserve batch size form state across page refreshes
 $(document).ready(function() {
     // Save state on any change
-    $(document).on('change', 'input[name="batch_mode"], #batch_size, #migration-vhost, #skip_unsuitable_queues, #batch_order', function() {
+    $(document).on('change', 'input[name="batch_mode"], #batch_size, #migration-vhost, #skip_unsuitable_queues, #batch_order, #tolerance', function() {
         localStorage.setItem('rqm_batch_mode', $('input[name="batch_mode"]:checked').val() || 'limited');
         localStorage.setItem('rqm_batch_size', $('#batch_size').val() || '10');
         localStorage.setItem('rqm_vhost', $('#migration-vhost').val() || '/');
         localStorage.setItem('rqm_skip_unsuitable', $('#skip_unsuitable_queues').is(':checked'));
         localStorage.setItem('rqm_batch_order', $('#batch_order').val() || 'smallest_first');
+        localStorage.setItem('rqm_tolerance', $('#tolerance').val() || '');
     });
 
     // Restore state after any render (use MutationObserver to detect DOM changes)
@@ -75,6 +76,7 @@ $(document).ready(function() {
             var savedVhost = localStorage.getItem('rqm_vhost') || '/';
             var savedSkip = localStorage.getItem('rqm_skip_unsuitable') === 'true';
             var savedOrder = localStorage.getItem('rqm_batch_order') || 'smallest_first';
+            var savedTolerance = localStorage.getItem('rqm_tolerance') || '';
 
             if (savedMode === 'all') {
                 $('#batch_all').prop('checked', true);
@@ -85,6 +87,7 @@ $(document).ready(function() {
             $('#migration-vhost').val(savedVhost);
             $('#skip_unsuitable_queues').prop('checked', savedSkip);
             $('#batch_order').val(savedOrder);
+            $('#tolerance').val(savedTolerance);
 
             // Update input disabled state based on radio selection
             $('#batch_size').prop('disabled', $('#batch_all').is(':checked'));
@@ -114,6 +117,10 @@ $(document).on('click', '#start-migration-btn', function() {
     var batchOrder = $('#batch_order').val();
     if (batchOrder) {
         requestBody.batch_order = batchOrder;
+    }
+    var tolerance = parseFloat($('#tolerance').val());
+    if (!isNaN(tolerance) && tolerance >= 0 && tolerance <= 100) {
+        requestBody.tolerance = tolerance;
     }
 
     with_req('POST', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {

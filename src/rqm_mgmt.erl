@@ -58,11 +58,11 @@ resource_exists(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
     case rqm_util:parse_migration_id(MigrationIdUrlEncoded) of
         {ok, MigrationId} ->
-            case rqm:get_queue_migration_status(MigrationId) of
-                {ok, _} ->
+            case rqm_db:queue_migration_exists(MigrationId) of
+                true ->
                     State = {migration_id, MigrationId},
                     {true, ReqData, {status_detail, Context#context{impl = State}}};
-                {error, _} ->
+                _ ->
                     {false, ReqData, {status_detail, Context}}
             end;
         error ->
@@ -87,7 +87,7 @@ to_json(ReqData, {rollback_pending, Context}) ->
     end;
 to_json(ReqData, {status_list, Context}) ->
     {ok, Status} = rqm:status(),
-    Migrations = rqm:get_migration_status(),
+    Migrations = rqm_db:get_migration_status(),
     MigrationData = [migration_to_json(M) || M <- Migrations],
     Json = rabbit_json:encode(#{
         status => Status,
@@ -95,10 +95,10 @@ to_json(ReqData, {status_list, Context}) ->
     }),
     {Json, ReqData, {status_list, Context}};
 to_json(ReqData, {status_detail, #context{impl = {migration_id, MigrationId}}} = Context) ->
-    {ok, {Migration, QueueDetails}} = rqm:get_queue_migration_status(MigrationId),
+    {ok, {Migration, QueueStatuses}} = rqm_db:get_queue_migration_status(MigrationId),
     Json = rabbit_json:encode(#{
         migration => migration_to_json_detail(Migration),
-        queues => [queue_status_to_json(Q) || Q <- QueueDetails]
+        queues => [queue_status_to_json(Q) || Q <- QueueStatuses]
     }),
     {Json, ReqData, {status_detail, Context}};
 to_json(ReqData, {interrupt, Context}) ->
@@ -319,10 +319,19 @@ accept_interrupt(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
             not_found_reply(ReqData, {EndpointType, Context})
     end.
 
-migration_to_json(
-    {Id, VHost, StartedAt, CompletedAt, TotalQueues, CompletedQueues, SkippedQueues, Status,
-        SkipUnsuitableQueues, Error}
-) ->
+migration_to_json(#queue_migration{
+    id = Id,
+    vhost = VHost,
+    started_at = StartedAt,
+    completed_at = CompletedAt,
+    total_queues = TotalQueues,
+    completed_queues = CompletedQueues,
+    skipped_queues = SkippedQueues,
+    status = Status,
+    skip_unsuitable_queues = SkipUnsuitableQueues,
+    tolerance = Tolerance,
+    error = Error
+}) ->
     #{
         id => rqm_util:format_migration_id(Id),
         display_id => format_display_id(Id, VHost, StartedAt),
@@ -335,7 +344,8 @@ migration_to_json(
         progress_percentage => calculate_progress_percentage(CompletedQueues, TotalQueues),
         status => Status,
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        error => format_error(Error)
+        tolerance => undefined_to_null(Tolerance),
+        error => undefined_to_null(Error)
     }.
 
 migration_to_json_detail(#queue_migration{
@@ -349,6 +359,7 @@ migration_to_json_detail(#queue_migration{
     status = Status,
     snapshots = Snapshots,
     skip_unsuitable_queues = SkipUnsuitableQueues,
+    tolerance = Tolerance,
     error = Error
 }) ->
     #{
@@ -364,10 +375,19 @@ migration_to_json_detail(#queue_migration{
         status => Status,
         snapshots => format_snapshots(Snapshots),
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        error => format_error(Error)
+        tolerance => undefined_to_null(Tolerance),
+        error => undefined_to_null(Error)
     }.
 
-queue_status_to_json({Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs, Status, Error}) ->
+queue_status_to_json(#queue_migration_status{
+    queue_resource = Resource,
+    started_at = StartedAt,
+    completed_at = CompletedAt,
+    total_messages = TotalMsgs,
+    migrated_messages = MigratedMsgs,
+    status = Status,
+    error = Error
+}) ->
     #{
         resource => format_resource(Resource),
         started_at => format_timestamp(StartedAt),
@@ -376,7 +396,7 @@ queue_status_to_json({Resource, StartedAt, CompletedAt, TotalMsgs, MigratedMsgs,
         migrated_messages => MigratedMsgs,
         progress_percentage => calculate_progress_percentage(MigratedMsgs, TotalMsgs),
         status => Status,
-        error => format_error(Error)
+        error => undefined_to_null(Error)
     }.
 
 format_display_id({Timestamp, Node}, VHost, _StartedAt) ->
@@ -407,9 +427,9 @@ format_timestamp(Timestamp) ->
         )
     ).
 
-format_error(undefined) ->
+undefined_to_null(undefined) ->
     null;
-format_error(Error) ->
+undefined_to_null(Error) ->
     Error.
 
 calculate_progress_percentage(_, 0) ->
@@ -464,7 +484,8 @@ parse_all_options(Opts0, Json) ->
     Opts1 = parse_skip_unsuitable_queues(Json, Opts0),
     Opts2 = parse_batch_size(Json, Opts1),
     Opts3 = parse_batch_order(Json, Opts2),
-    parse_queue_names(Json, Opts3).
+    Opts4 = parse_queue_names(Json, Opts3),
+    parse_tolerance(Json, Opts4).
 
 parse_skip_unsuitable_queues(Json, Opts) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
@@ -496,6 +517,14 @@ parse_queue_names(Json, Opts) ->
         Names when is_list(Names) ->
             QueueNames = [rqm_util:to_unicode(N) || N <- Names],
             Opts#{queue_names => QueueNames};
+        _ ->
+            Opts
+    end.
+
+parse_tolerance(Json, Opts) ->
+    case maps:get(<<"tolerance">>, Json, undefined) of
+        V when is_number(V), V >= 0.0, V =< 100.0 ->
+            Opts#{tolerance => float(V)};
         _ ->
             Opts
     end.

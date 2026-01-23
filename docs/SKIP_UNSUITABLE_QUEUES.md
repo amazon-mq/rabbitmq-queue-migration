@@ -184,15 +184,34 @@ Publishers can set TTL on individual messages using the `expiration` message pro
 
 **Why this matters:**
 
-If your publishers set per-message TTL and messages expire during migration, the migration will fail with `message_count_mismatch`. The plugin verifies that the destination queue has the same message count as the source - if messages expire during transfer, this verification fails.
+If your publishers set per-message TTL and messages expire during migration, the message count verification will detect a difference between source and destination queues.
 
-**Before migrating, verify that:**
+### Solution: Message Count Tolerance
 
-1. Your publishers do NOT set the `expiration` property on messages, OR
-2. The queue is drained before migration, OR  
-3. Per-message TTL values are long enough that messages won't expire during migration
+Use the `tolerance` parameter to allow migrations to succeed despite message count differences:
 
-**There is no way for this plugin to detect per-message TTL** - it is set by publishers on each message and is not visible at the queue level.
+```bash
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"tolerance": 10.0}' \
+  http://localhost:15672/api/queue-migration/start/%2F
+```
+
+The tolerance is a **per-queue percentage** (0.0-100.0). A queue passes verification if the message count difference is within the tolerance. For example, with `tolerance: 10.0`, a queue with 100 source messages passes if the destination has 90-100 messages.
+
+**How to determine the right tolerance:**
+
+1. Estimate what percentage of messages have per-message TTL
+2. Add a safety margin (e.g., if 5% have TTL, use 10% tolerance)
+3. Monitor migration logs for "within tolerance" warnings
+
+**Alternative approaches:**
+
+1. Drain queues before migration (let consumers process all messages)
+2. Ensure per-message TTL values are long enough that messages won't expire during migration
+3. Temporarily disable publishers that set per-message TTL
+
+**Note:** There is no way for this plugin to detect per-message TTL - it is set by publishers on each message and is not visible at the queue level.
 
 ---
 

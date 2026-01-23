@@ -4,6 +4,9 @@ SPDX-License-Identifier: Apache-2.0
 -->
 
 <h1>Queue Migration</h1>
+<p class="description">
+  <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration?tab=readme-ov-file#rabbitmq-queue-migration-plugin" target="_blank">Documentation ↗</a>
+</p>
 
 <!-- Message shown when migration is started -->
 <div id="migration-started-message" class="info" style="display: none;">
@@ -31,6 +34,14 @@ SPDX-License-Identifier: Apache-2.0
         <td>
           <input type="checkbox" name="skip_unsuitable_queues" id="skip_unsuitable_queues"
                  title="Skip queues that fail validation checks instead of blocking migration" />
+        </td>
+      </tr>
+      <tr>
+        <th><label for="tolerance">Message Count Tolerance:</label></th>
+        <td>
+          <input type="number" name="tolerance" id="tolerance" min="0" max="100" step="0.1" value=""
+                 placeholder="Use config default"
+                 title="Override message count tolerance percentage (0-100). Leave empty to use server config." style="width: 80px;" /> %
         </td>
       </tr>
       <tr>

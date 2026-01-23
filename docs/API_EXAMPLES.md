@@ -245,6 +245,21 @@ curl -u guest:guest -X POST \
 
 ---
 
+### Migration with Message Count Tolerance
+
+Allow up to 10% message count difference per queue (useful when publishers set per-message TTL):
+
+```bash
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"tolerance": 10.0}' \
+  http://localhost:15672/api/queue-migration/start
+```
+
+**Note:** Tolerance is a per-queue percentage. A queue with 100 source messages passes verification if the destination has 90-100 messages.
+
+---
+
 ### Migration for Specific Virtual Host
 
 ```bash
@@ -299,6 +314,7 @@ curl -u guest:guest \
       "skipped_queues": 5,
       "progress_percentage": 100,
       "skip_unsuitable_queues": true,
+      "tolerance": 10.0,
       "error": null
     }
   ]
@@ -321,6 +337,7 @@ curl -u guest:guest \
 - `skipped_queues` - Queues skipped
 - `progress_percentage` - Progress (0-100)
 - `skip_unsuitable_queues` - Whether skip mode was enabled
+- `tolerance` - Message count tolerance percentage (null if not set)
 - `error` - Error details (null if no error)
 
 **Migration Status Values:**
