@@ -47,7 +47,6 @@
 
 %% API for retrieving migration status
 -export([
-    get_migration_status/0,
     get_queue_migration_status/1,
     queue_migration_exists/1,
     get_rollback_pending_migration/0
@@ -400,7 +399,7 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
         }),
 
         % Create queue status records
-        [
+        _ = [
             mnesia:write(#queue_migration_status{
                 key = {amqqueue:get_name(Q), MigrationId},
                 queue_resource = amqqueue:get_name(Q),
@@ -420,25 +419,6 @@ update_migration_with_queues(MigrationId, Queues, _VHost) ->
     mnesia:transaction(F).
 
 %% API for retrieving migration status
-
-%% @doc Get status of all migrations
--spec get_migration_status() ->
-    [
-        {
-            term(),
-            binary(),
-            erlang:timestamp(),
-            erlang:timestamp() | undefined,
-            non_neg_integer(),
-            non_neg_integer(),
-            non_neg_integer(),
-            atom(),
-            boolean(),
-            binary() | undefined
-        }
-    ].
-get_migration_status() ->
-    get_all_migrations().
 
 -spec queue_migration_exists(term()) -> boolean().
 queue_migration_exists(MigrationId) ->

@@ -155,7 +155,11 @@ cleanup(ShovelName, VHost) ->
             ),
             ok;
         _Value ->
-            case catch rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, none) of
+            case
+                catch rabbit_runtime_parameters:clear(
+                    VHost, <<"shovel">>, ShovelName, <<"rmq-shovel">>
+                )
+            of
                 ok ->
                     ?LOG_DEBUG("rqm: cleaned up shovel ~ts", [ShovelName]),
                     ok;

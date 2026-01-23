@@ -87,7 +87,7 @@ to_json(ReqData, {rollback_pending, Context}) ->
     end;
 to_json(ReqData, {status_list, Context}) ->
     {ok, Status} = rqm:status(),
-    Migrations = rqm_db:get_migration_status(),
+    Migrations = rqm_db:get_all_migrations(),
     MigrationData = [migration_to_json(M) || M <- Migrations],
     Json = rabbit_json:encode(#{
         status => Status,

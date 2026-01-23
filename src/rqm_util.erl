@@ -119,7 +119,7 @@ parse_migration_id(UrlEncoded) ->
 %% @doc Format string using io_lib:format and convert to Unicode binary
 %% This function combines io_lib:format/2 with unicode:characters_to_binary/1
 %% to ensure proper Unicode handling and consistent binary output
--spec to_unicode(string()) -> binary().
+-spec to_unicode(string() | binary()) -> binary().
 to_unicode(Arg) ->
     unicode:characters_to_binary(Arg).
 
@@ -313,7 +313,7 @@ filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->
                 end
              || Q <- FilteredQueues
             ],
-    [
+    _ = [
         ?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
      || QName <- SpecifiedButNotFound
     ],

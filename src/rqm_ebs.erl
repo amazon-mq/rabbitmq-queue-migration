@@ -28,7 +28,7 @@
 -type volumes_list() :: [volume_info()].
 
 -type snapshot_options() :: #{
-    description => string(),
+    description => string() | binary(),
     tags => [{string(), string()}],
     dry_run => boolean()
 }.
@@ -193,9 +193,7 @@ parse_snapshot_response([{"CreateSnapshotResponse", SnapshotData}]) ->
     {ok, SnapshotId, Metadata};
 parse_snapshot_response([{"Response", ErrorData}]) ->
     % AWS error response format
-    {error, {snapshot_creation_failed, ErrorData}};
-parse_snapshot_response({error, ErrorType, ErrorDetails}) ->
-    {error, {snapshot_creation_failed, ErrorType, ErrorDetails}}.
+    {error, {snapshot_creation_failed, ErrorData}}.
 
 -spec parse_delete_response(term(), string()) -> {ok, string()} | {error, term()}.
 parse_delete_response([{"DeleteSnapshotResponse", _ResponseData}], SnapshotId) ->
