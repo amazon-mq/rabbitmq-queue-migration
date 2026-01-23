@@ -344,8 +344,8 @@ migration_to_json(#queue_migration{
         progress_percentage => calculate_progress_percentage(CompletedQueues, TotalQueues),
         status => Status,
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        tolerance => Tolerance,
-        error => format_error(Error)
+        tolerance => undefined_to_null(Tolerance),
+        error => undefined_to_null(Error)
     }.
 
 migration_to_json_detail(#queue_migration{
@@ -375,8 +375,8 @@ migration_to_json_detail(#queue_migration{
         status => Status,
         snapshots => format_snapshots(Snapshots),
         skip_unsuitable_queues => SkipUnsuitableQueues,
-        tolerance => Tolerance,
-        error => format_error(Error)
+        tolerance => undefined_to_null(Tolerance),
+        error => undefined_to_null(Error)
     }.
 
 queue_status_to_json(#queue_migration_status{
@@ -396,7 +396,7 @@ queue_status_to_json(#queue_migration_status{
         migrated_messages => MigratedMsgs,
         progress_percentage => calculate_progress_percentage(MigratedMsgs, TotalMsgs),
         status => Status,
-        error => format_error(Error)
+        error => undefined_to_null(Error)
     }.
 
 format_display_id({Timestamp, Node}, VHost, _StartedAt) ->
@@ -427,9 +427,9 @@ format_timestamp(Timestamp) ->
         )
     ).
 
-format_error(undefined) ->
+undefined_to_null(undefined) ->
     null;
-format_error(Error) ->
+undefined_to_null(Error) ->
     Error.
 
 calculate_progress_percentage(_, 0) ->
