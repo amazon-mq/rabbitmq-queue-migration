@@ -84,7 +84,9 @@ get_message_count(Resource) when is_record(Resource, resource) ->
 %% Migration record operations
 
 %% @doc Create a new migration record
--spec create_migration(term(), binary(), erlang:timestamp(), boolean(), non_neg_integer(), undefined | float()) ->
+-spec create_migration(
+    term(), binary(), erlang:timestamp(), boolean(), non_neg_integer(), undefined | float()
+) ->
     {ok, #queue_migration{}}.
 create_migration(MigrationId, VHost, StartTime, SkipUnsuitableQueues, SkippedCount, Tolerance) ->
     MigrationRecord = #queue_migration{
