@@ -188,9 +188,7 @@ handle_check_queue_suitability({error, {unsuitable_queues, Details}}, _Opts) ->
         "Found ~p queue(s) with issues (too many messages, too many bytes, or unsuitable arguments).",
         [length(ProblematicQueues)]
     ),
-    {error, {unsuitable_queues, Details}};
-handle_check_queue_suitability({error, _} = Error, _Opts) ->
-    Error.
+    {error, {unsuitable_queues, Details}}.
 
 handle_check_disk_space({ok, sufficient}, Opts) ->
     pre_migration_validation(active_alarms, Opts);
@@ -202,9 +200,7 @@ handle_check_disk_space({error, {insufficient_disk_space, Details}}, _Opts) ->
         "Required: ~pMB, Available: ~pMB. Free up disk space before migration.",
         [RequiredMB, AvailableMB]
     ),
-    {error, {insufficient_disk_space, Details}};
-handle_check_disk_space({error, _} = Error, _Opts) ->
-    Error.
+    {error, {insufficient_disk_space, Details}}.
 
 handle_check_active_alarms(ok, Opts) ->
     pre_migration_validation(memory_usage, Opts);

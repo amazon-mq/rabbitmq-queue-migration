@@ -431,7 +431,7 @@ check_snapshot_not_in_progress() ->
 %% @doc Check if cluster has any partitions and all nodes are up.
 %% Returns ok if no partitions detected, {error, nodes_down| or {error, partitions_detected} otherwise
 -spec check_cluster_partitions() ->
-    ok | {error, nodes_down} | {error, partitions_detected} | {error, nodes_not_booted}.
+    {ok, [node()]} | {error, nodes_down} | {error, partitions_detected} | {error, nodes_not_booted}.
 check_cluster_partitions() ->
     M = sets:from_list(rabbit_nodes:list_members(), [{version, 2}]),
     R = sets:from_list(rabbit_nodes:list_running(), [{version, 2}]),
@@ -571,7 +571,7 @@ check_eligible_queue_count(
     end.
 
 -spec check_queue_suitability(rabbit_types:vhost()) ->
-    ok | {error, map()}.
+    ok | {error, {unsuitable_queues, map()}}.
 check_queue_suitability(VHost) ->
     % Get ALL classic queues in the vhost (not just mirrored ones)
     % because any classic queue could have unsuitable arguments
