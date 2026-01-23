@@ -131,7 +131,72 @@ rabbitmqctl set_policy overflow-policy "^<queue_pattern>$" \
 
 ---
 
-### 4. `interrupted`
+### 4. `queue_expires`
+
+**Cause:** Queue has `x-expires` argument or `expires` policy
+
+**Why Unsuitable:** The queue could expire and be deleted during the migration process, causing migration failure
+
+**Resolution:**
+
+**Option A:** Remove the expires setting
+```bash
+# If set via policy, remove or modify the policy:
+rabbitmqctl clear_policy <policy_name>
+
+# If set via queue argument, delete and recreate queue without x-expires
+```
+
+**Option B:** Drain the queue and let it expire naturally before migration
+
+**Option C:** Accept that queue cannot be migrated (it will expire eventually anyway)
+
+---
+
+### 5. `message_ttl`
+
+**Cause:** Queue has `x-message-ttl` argument or `message-ttl` policy
+
+**Why Unsuitable:** Messages could expire during the migration process, causing message count mismatches that fail verification
+
+**Resolution:**
+
+**Option A:** Remove the TTL setting temporarily
+```bash
+# If set via policy, remove or modify the policy:
+rabbitmqctl clear_policy <policy_name>
+
+# If set via queue argument, delete and recreate queue without x-message-ttl
+# Then migrate, then reapply TTL to the quorum queue
+```
+
+**Option B:** Drain the queue before migration (let consumers process all messages)
+
+**Option C:** Accept that queue cannot be migrated and handle separately
+
+---
+
+## ⚠️ Important: Per-Message TTL Limitation
+
+**This plugin can only detect queue-level TTL settings (`x-message-ttl` argument or `message-ttl` policy). It CANNOT detect per-message TTL.**
+
+Publishers can set TTL on individual messages using the `expiration` message property. See [Per-Message TTL in Publishers](https://www.rabbitmq.com/docs/3.13/ttl#per-message-ttl-in-publishers) in the RabbitMQ documentation.
+
+**Why this matters:**
+
+If your publishers set per-message TTL and messages expire during migration, the migration will fail with `message_count_mismatch`. The plugin verifies that the destination queue has the same message count as the source - if messages expire during transfer, this verification fails.
+
+**Before migrating, verify that:**
+
+1. Your publishers do NOT set the `expiration` property on messages, OR
+2. The queue is drained before migration, OR  
+3. Per-message TTL values are long enough that messages won't expire during migration
+
+**There is no way for this plugin to detect per-message TTL** - it is set by publishers on each message and is not visible at the queue level.
+
+---
+
+### 6. `interrupted`
 
 **Cause:** Migration was manually interrupted
 

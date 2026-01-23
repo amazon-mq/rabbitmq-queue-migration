@@ -222,10 +222,10 @@ check_critical_arguments(Queue) ->
     CriticalArgChecks = [
         check_critical_overflow_behavior(Args),
         check_critical_dead_letter_args(Args),
-        check_critical_expires(Args),
+        check_critical_expires(Args, Queue),
         check_critical_max_length_args(Args),
         check_critical_single_active_consumer(Args),
-        check_critical_message_ttl(Args)
+        check_critical_message_ttl(Args, Queue)
     ],
     lists:flatten(CriticalArgChecks).
 
@@ -248,12 +248,29 @@ check_critical_dead_letter_args(_Args) ->
     % No specific compatibility issues to check
     Issues.
 
-%% Check expires argument
-check_critical_expires(Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-expires">>) of
-        undefined -> [];
-        % x-expires is supported in quorum queues
-        {_, _} -> []
+%% Check expires argument or policy - queues with expiry are unsuitable for migration
+%% because the queue could expire and be deleted during the migration process
+check_critical_expires(Args, Queue) ->
+    HasExpiresArg = rabbit_misc:table_lookup(Args, <<"x-expires">>) =/= undefined,
+    HasExpiresPolicy = has_expires_policy(Queue),
+    case HasExpiresArg orelse HasExpiresPolicy of
+        true ->
+            [
+                {queue_expires,
+                    "Queues with x-expires argument or expires policy are unsuitable "
+                    "for migration because the queue could expire during the process"}
+            ];
+        false ->
+            []
+    end.
+
+%% Check if queue has expires policy
+has_expires_policy(Queue) ->
+    case rabbit_policy:effective_definition(Queue) of
+        Policies when is_list(Policies) ->
+            proplists:lookup(<<"expires">>, Policies) =/= none;
+        _ ->
+            false
     end.
 
 %% Check max length arguments
@@ -271,12 +288,29 @@ check_critical_single_active_consumer(Args) ->
         {_, _} -> []
     end.
 
-%% Check message TTL
-check_critical_message_ttl(Args) ->
-    case rabbit_misc:table_lookup(Args, <<"x-message-ttl">>) of
-        undefined -> [];
-        % x-message-ttl is supported in quorum queues
-        {_, _} -> []
+%% Check message TTL argument or policy - queues with message TTL are unsuitable for migration
+%% because messages could expire during the migration process, causing count mismatches
+check_critical_message_ttl(Args, Queue) ->
+    HasTtlArg = rabbit_misc:table_lookup(Args, <<"x-message-ttl">>) =/= undefined,
+    HasTtlPolicy = has_message_ttl_policy(Queue),
+    case HasTtlArg orelse HasTtlPolicy of
+        true ->
+            [
+                {message_ttl,
+                    "Queues with x-message-ttl argument or message-ttl policy are unsuitable "
+                    "for migration because messages could expire during the process"}
+            ];
+        false ->
+            []
+    end.
+
+%% Check if queue has message-ttl policy
+has_message_ttl_policy(Queue) ->
+    case rabbit_policy:effective_definition(Queue) of
+        Policies when is_list(Policies) ->
+            proplists:lookup(<<"message-ttl">>, Policies) =/= none;
+        _ ->
+            false
     end.
 
 %% @doc Run complete migration readiness check (system + queues)

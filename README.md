@@ -34,6 +34,22 @@ This plugin provides a safe, automated solution for migrating classic queues to 
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
+## ⚠️ Important: Per-Message TTL Limitation
+
+**This plugin CANNOT detect per-message TTL set by publishers.**
+
+If your publishers set the `expiration` property on individual messages (see [Per-Message TTL in Publishers](https://www.rabbitmq.com/docs/3.13/ttl#per-message-ttl-in-publishers)), and those messages expire during migration, the migration will **fail** with `message_count_mismatch`.
+
+The plugin detects and blocks migration for queues with:
+- `x-message-ttl` queue argument
+- `message-ttl` policy
+
+However, per-message TTL is set on each message by publishers and is **not visible at the queue level**.
+
+**Before migrating, ensure your publishers do NOT set per-message TTL, or drain queues first.**
+
+See [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md#%EF%B8%8F-important-per-message-ttl-limitation) for details.
+
 ## Web UI
 
 The plugin extends the RabbitMQ Management UI with:
