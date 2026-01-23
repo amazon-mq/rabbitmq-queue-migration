@@ -1860,25 +1860,30 @@ count_errors_and_aborted(Errors) ->
 %% Helper function to format the first error for display
 format_first_error(Errors) ->
     case [E || E <- Errors, element(1, E) =:= error] of
-        [] -> "";
+        [] ->
+            "";
         [{error, Resource, {_Class, Reason, _Stack}} | _] ->
-            QueueName = case Resource of
-                #resource{name = Name} -> Name;
-                _ -> <<"unknown">>
-            end,
+            QueueName =
+                case Resource of
+                    #resource{name = Name} -> Name;
+                    _ -> <<"unknown">>
+                end,
             ReasonStr = format_error_reason(Reason),
             io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr]);
         [{error, Resource, Reason} | _] ->
-            QueueName = case Resource of
-                #resource{name = Name} -> Name;
-                _ -> <<"unknown">>
-            end,
+            QueueName =
+                case Resource of
+                    #resource{name = Name} -> Name;
+                    _ -> <<"unknown">>
+                end,
             ReasonStr = format_error_reason(Reason),
             io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr])
     end.
 
 format_error_reason({message_count_mismatch, Expected, Actual, Diff}) ->
-    io_lib:format("message count mismatch (expected: ~p, actual: ~p, diff: ~p)", [Expected, Actual, Diff]);
+    io_lib:format("message count mismatch (expected: ~p, actual: ~p, diff: ~p)", [
+        Expected, Actual, Diff
+    ]);
 format_error_reason(Reason) ->
     io_lib:format("~tp", [Reason]).
 
