@@ -63,6 +63,7 @@
 }).
 
 %% Record to track the overall migration status
+%% Note: '_' in type specs allows Mnesia match patterns like #queue_migration{_ = '_'}
 -record(queue_migration, {
     % Unique migration ID (timestamp + node)
     id,
@@ -78,7 +79,7 @@
     completed_queues,
     % Number of queues skipped
     skipped_queues = 0,
-    status :: migration_status(),
+    status :: migration_status() | '_',
     % Error details if failed (null otherwise)
     error,
     % Timestamp when rollback started
@@ -90,12 +91,13 @@
     % List of snapshot info: [{Node, SnapshotId, VolumeId}, ...]
     snapshots,
     % Whether to skip unsuitable queues instead of blocking migration
-    skip_unsuitable_queues = false :: boolean(),
+    skip_unsuitable_queues = false :: boolean() | '_',
     % Message count tolerance percentage (overrides config for both over/under)
-    tolerance = undefined :: undefined | float()
+    tolerance = undefined :: undefined | float() | '_'
 }).
 
 %% Record to track individual queue migration status
+%% Note: '_' in type specs allows Mnesia match patterns
 -record(queue_migration_status, {
     % Composite primary key: {QueueResource, MigrationId}
     key,
@@ -115,7 +117,7 @@
     total_messages,
     % Number of messages migrated so far
     migrated_messages,
-    status :: queue_migration_status(),
+    status :: queue_migration_status() | '_',
     % Error details if failed (null otherwise)
     error,
     % When rollback started for this queue
