@@ -67,6 +67,7 @@ POST /api/queue-migration/start/:vhost
 ```json
 {
   "skip_unsuitable_queues": true,
+  "tolerance": 10.0,
   "batch_size": 10,
   "batch_order": "smallest_first"
 }
@@ -74,6 +75,7 @@ POST /api/queue-migration/start/:vhost
 
 **Request Body Fields:**
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, skip queues that fail validation checks instead of blocking the entire migration. Defaults to `false`.
+- `tolerance` (optional, number) - Message count tolerance percentage (0.0-100.0) for per-queue verification. When set, a queue passes verification if the destination message count is within this percentage of the source count. Use this when publishers set per-message TTL that may cause messages to expire during migration. Defaults to `0.0` (exact match required).
 - `batch_size` (optional, integer or `"all"`) - Number of queues to migrate in this batch. Use `0` or `"all"` to migrate all eligible queues. Defaults to `all`. Ignored if `queue_names` is specified.
 - `batch_order` (optional, string) - Order to select queues for batching: `"smallest_first"` or `"largest_first"`. Defaults to `"smallest_first"`. Ignored if `queue_names` is specified.
 - `queue_names` (optional, array of strings) - Specific queue names to migrate. When provided, only these queues are migrated. Takes precedence over `batch_size` and `batch_order`. Non-existent or ineligible queues are logged and skipped.
@@ -118,6 +120,12 @@ curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"queue_names": ["queue1", "queue2"], "batch_size": 10}' \
   http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
+
+# Allow message count tolerance for queues with per-message TTL
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"tolerance": 10.0}' \
+  http://localhost:15672/api/queue-migration/start/%2F
 ```
 
 > **Common Mistake:** Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
@@ -206,6 +214,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
       "progress_percentage": 50,
       "status": "in_progress",
       "skip_unsuitable_queues": false,
+      "tolerance": 10.0,
       "error": null
     },
     {
@@ -220,6 +229,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
       "progress_percentage": 100,
       "status": "completed",
       "skip_unsuitable_queues": false,
+      "tolerance": null,
       "error": null
     }
   ]
@@ -244,6 +254,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 - `progress_percentage` - Progress (0-100)
 - `status` - Migration status (see values below)
 - `skip_unsuitable_queues` - Whether skip mode was enabled
+- `tolerance` - Message count tolerance percentage (null if not set)
 - `error` - Error details (null if no error)
   - `pending` - Not started yet
   - `in_progress` - Currently migrating
@@ -288,6 +299,7 @@ curl -u guest:guest \
     "progress_percentage": 50,
     "status": "in_progress",
     "skip_unsuitable_queues": false,
+    "tolerance": 10.0,
     "error": null,
     "snapshots": []
   },
