@@ -1,3 +1,4 @@
+*.plt
 .tool-versions
 .sw?
 .*.sw?
