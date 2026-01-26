@@ -384,14 +384,14 @@ POST /api/queue-migration/interrupt/:migration_id
 **Request:**
 ```bash
 curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/interrupt/1768576931281
+  http://localhost:15672/api/queue-migration/interrupt/g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=
 ```
 
 **Success Response (200 OK):**
 ```json
 {
   "interrupted": true,
-  "migration_id": "1768576931281"
+  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA="
 }
 ```
 

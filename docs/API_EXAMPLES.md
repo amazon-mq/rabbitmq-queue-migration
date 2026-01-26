@@ -458,7 +458,8 @@ curl -u guest:guest -X POST \
 **Response:**
 ```json
 {
-  "status": "interrupted"
+  "interrupted": true,
+  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA="
 }
 ```
 
