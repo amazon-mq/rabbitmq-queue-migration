@@ -300,6 +300,12 @@ public class EndToEndMigrationTest {
       return;
     }
 
+    // Skip AMQP listener verification in load balancer mode - cannot verify individual node states
+    if (config.isLoadBalancerMode()) {
+      logger.info("Skipping AMQP listener verification in load balancer mode");
+      return;
+    }
+
     logger.info("Performing listener state verification during migration...");
 
     boolean httpAvailable = checkHttpApiAvailable(config);
@@ -319,6 +325,12 @@ public class EndToEndMigrationTest {
 
   private static void verifyListenersRestored(TestConfiguration config) {
     if (!shouldVerifyListeners()) {
+      return;
+    }
+
+    // Skip AMQP listener verification in load balancer mode - cannot verify individual node states
+    if (config.isLoadBalancerMode()) {
+      logger.info("Skipping AMQP listener restoration verification in load balancer mode");
       return;
     }
 
