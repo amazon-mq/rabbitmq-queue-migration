@@ -130,7 +130,9 @@ public class EndToEndMigrationTest {
         // If our migration failed immediately, report it
         if (isOurMigration && migration.isFailed()) {
           logger.error(
-              "❌ Migration failed immediately: {} - {}", migration.getDisplayId(), migration.getError());
+              "❌ Migration failed immediately: {} - {}",
+              migration.getDisplayId(),
+              migration.getError());
           return false;
         }
 
