@@ -26,27 +26,16 @@ public class AlreadyQuorumTest {
       // Parse hostname and port from args
       String hostname = "localhost";
       int port = 15672;
-      boolean portSpecified = false;
-      boolean loadBalancer = false;
       for (String arg : args) {
         if (arg.startsWith("--hostname=")) {
           hostname = arg.substring(11);
         } else if (arg.startsWith("--port=")) {
           port = Integer.parseInt(arg.substring(7));
-          portSpecified = true;
-        } else if (arg.equals("--load-balancer")) {
-          loadBalancer = true;
         }
       }
 
-      if (loadBalancer && portSpecified && port != 443) {
-        logger.error("When --load-balancer is specified, --port must be 443 (got {})", port);
-        System.exit(1);
-      }
-
       // Create configuration directly
-      ClusterTopology topology =
-          new ClusterTopology(hostname, port, "guest", "guest", "/", loadBalancer);
+      ClusterTopology topology = new ClusterTopology(hostname, port);
       TestConfiguration config = new TestConfiguration(topology);
       config.setQueueCount(CLASSIC_QUEUE_COUNT);
       config.setQuorumQueueCount(QUORUM_QUEUE_COUNT);

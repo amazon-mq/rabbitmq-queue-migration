@@ -96,10 +96,11 @@ public class ClusterTopology {
             overview.getListeners().forEach(listener -> {
                 String nodeName = listener.getNode();
                 int listenerPort = listener.getPort();
+                String protocol = listener.getProtocol();
 
-                if ("amqp".equals(listener.getProtocol())) {
+                if ("amqp".equals(protocol) || "amqp/ssl".equals(protocol)) {
                     amqpPorts.put(nodeName, listenerPort);
-                } else if ("http".equals(listener.getProtocol())) {
+                } else if ("http".equals(protocol) || "https".equals(protocol)) {
                     httpPorts.put(nodeName, listenerPort);
                 }
             });

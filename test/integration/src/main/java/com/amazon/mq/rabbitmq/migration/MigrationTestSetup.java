@@ -82,6 +82,8 @@ public class MigrationTestSetup {
     boolean portSpecified = false;
     boolean loadBalancer = false;
     String vhost = TestConfiguration.getDefaultVirtualHost();
+    String username = "guest";
+    String password = "guest";
 
     // Check for help first, then get hostname and port
     for (String arg : args) {
@@ -95,6 +97,10 @@ public class MigrationTestSetup {
     for (String testArg : args) {
       if (testArg.startsWith("--hostname=")) {
         hostname = testArg.substring(11);
+      } else if (testArg.startsWith("--username=")) {
+        username = testArg.substring(11);
+      } else if (testArg.startsWith("--password=")) {
+        password = testArg.substring(11);
       } else if (testArg.startsWith("--port=")) {
         try {
           port = Integer.parseInt(testArg.substring(7));
@@ -117,7 +123,7 @@ public class MigrationTestSetup {
 
     // Initialize config with defaults
     ClusterTopology topology =
-        new ClusterTopology(hostname, port, "guest", "guest", vhost, loadBalancer);
+        new ClusterTopology(hostname, port, username, password, vhost, loadBalancer);
     TestConfiguration config = new TestConfiguration(topology);
     config.setVirtualHost(vhost);
 
@@ -219,6 +225,10 @@ public class MigrationTestSetup {
         }
       } else if (arg.startsWith("--hostname=")) {
         hostname = arg.substring(11);
+      } else if (arg.startsWith("--username=")) {
+        // Already parsed in first loop
+      } else if (arg.startsWith("--password=")) {
+        // Already parsed in first loop
       } else if (arg.startsWith("--port=")) {
         try {
           port = Integer.parseInt(arg.substring(7));
@@ -227,6 +237,10 @@ public class MigrationTestSetup {
           printUsage();
           System.exit(1);
         }
+      } else if (arg.startsWith("--vhost=")) {
+        // Already parsed in first loop
+      } else if (arg.equals("--load-balancer")) {
+        // Already parsed in first loop
       } else if (arg.equals("--no-ha")) {
         config.setEnableHA(false);
       } else if (arg.equals("--skip-cleanup")) {
@@ -352,6 +366,8 @@ public class MigrationTestSetup {
         "  --hostname=HOST            RabbitMQ management API hostname (default: localhost)");
     System.out.println(
         "  --port=PORT                RabbitMQ management API port (default: 15672)");
+    System.out.println("  --username=USER            RabbitMQ username (default: guest)");
+    System.out.println("  --password=PASS            RabbitMQ password (default: guest)");
     System.out.println("  --vhost=NAME               Virtual host for all operations (default: /)");
     System.out.println("  --load-balancer            Connect through load balancer using TLS");
     System.out.println(

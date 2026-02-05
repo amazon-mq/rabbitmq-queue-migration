@@ -108,9 +108,7 @@ public class TestConfiguration {
     return clusterTopology.getSslContext();
   }
 
-  /**
-   * Create a QueueMigrationClient configured for this topology.
-   */
+  /** Create a QueueMigrationClient configured for this topology. */
   public QueueMigrationClient createMigrationClient() {
     return new QueueMigrationClient(
         getHttpHost(),

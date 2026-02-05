@@ -41,16 +41,22 @@ public class QueueMigrationClient {
   }
 
   public QueueMigrationClient(
-      String host, int port, String username, String password, String vhost, SSLContext sslContext) {
+      String host,
+      int port,
+      String username,
+      String password,
+      String vhost,
+      SSLContext sslContext) {
     String scheme = sslContext != null ? "https" : "http";
     this.baseUrl = String.format("%s://%s:%d/api", scheme, host, port);
     this.authHeader =
         "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
     this.vhost = vhost;
 
-    HttpClient.Builder builder = HttpClient.newBuilder()
-        .version(HttpClient.Version.HTTP_1_1)
-        .connectTimeout(Duration.ofSeconds(10));
+    HttpClient.Builder builder =
+        HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(10));
     if (sslContext != null) {
       builder.sslContext(sslContext);
     }
