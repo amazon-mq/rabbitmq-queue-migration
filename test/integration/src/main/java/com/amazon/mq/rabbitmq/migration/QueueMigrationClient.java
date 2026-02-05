@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,20 +32,35 @@ public class QueueMigrationClient {
   private final ObjectMapper objectMapper;
 
   public QueueMigrationClient(String host, int port, String username, String password) {
-    this(host, port, username, password, TestConfiguration.getDefaultVirtualHost());
+    this(host, port, username, password, TestConfiguration.getDefaultVirtualHost(), null);
   }
 
   public QueueMigrationClient(
       String host, int port, String username, String password, String vhost) {
-    this.baseUrl = String.format("http://%s:%d/api", host, port);
+    this(host, port, username, password, vhost, null);
+  }
+
+  public QueueMigrationClient(
+      String host,
+      int port,
+      String username,
+      String password,
+      String vhost,
+      SSLContext sslContext) {
+    String scheme = sslContext != null ? "https" : "http";
+    this.baseUrl = String.format("%s://%s:%d/api", scheme, host, port);
     this.authHeader =
         "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
     this.vhost = vhost;
-    this.httpClient =
+
+    HttpClient.Builder builder =
         HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+            .connectTimeout(Duration.ofSeconds(10));
+    if (sslContext != null) {
+      builder.sslContext(sslContext);
+    }
+    this.httpClient = builder.build();
     this.objectMapper = new ObjectMapper();
 
     logger.info("Queue Migration Client initialized for {}:{}", host, port);
@@ -287,10 +303,14 @@ public class QueueMigrationClient {
 
     MigrationInfo migrationInfo =
         new MigrationInfo(
+            latestMigration.has("id") ? latestMigration.get("id").asText() : null,
             latestMigration.has("display_id")
                 ? latestMigration.get("display_id").asText()
                 : "unknown",
             latestMigration.has("status") ? latestMigration.get("status").asText() : "unknown",
+            latestMigration.has("error") && !latestMigration.get("error").isNull()
+                ? latestMigration.get("error").asText()
+                : null,
             latestMigration.has("progress_percentage")
                 ? latestMigration.get("progress_percentage").asInt()
                 : 0,
@@ -364,8 +384,10 @@ public class QueueMigrationClient {
 
   /** Information about a specific migration */
   public static class MigrationInfo {
+    private final String id;
     private final String displayId;
     private final String status;
+    private final String error;
     private final int progressPercentage;
     private final int completedQueues;
     private final int totalQueues;
@@ -373,20 +395,28 @@ public class QueueMigrationClient {
     private final String completedAt;
 
     public MigrationInfo(
+        String id,
         String displayId,
         String status,
+        String error,
         int progressPercentage,
         int completedQueues,
         int totalQueues,
         String startedAt,
         String completedAt) {
+      this.id = id;
       this.displayId = displayId;
       this.status = status;
+      this.error = error;
       this.progressPercentage = progressPercentage;
       this.completedQueues = completedQueues;
       this.totalQueues = totalQueues;
       this.startedAt = startedAt;
       this.completedAt = completedAt;
+    }
+
+    public String getId() {
+      return id;
     }
 
     public String getDisplayId() {
@@ -395,6 +425,10 @@ public class QueueMigrationClient {
 
     public String getStatus() {
       return status;
+    }
+
+    public String getError() {
+      return error;
     }
 
     public int getProgressPercentage() {

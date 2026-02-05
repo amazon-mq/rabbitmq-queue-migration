@@ -2,6 +2,7 @@ package com.amazon.mq.rabbitmq;
 
 import com.rabbitmq.http.client.Client;
 import com.rabbitmq.http.client.ClientParameters;
+import com.rabbitmq.http.client.JdkHttpClientHttpLayer;
 import com.rabbitmq.http.client.domain.OverviewResponse;
 
 import java.net.MalformedURLException;
@@ -10,17 +11,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
 
 /**
  * Discovers and maintains RabbitMQ cluster topology information.
  * Eagerly discovers all broker nodes and their AMQP/HTTP ports upon initialization.
+ *
+ * Supports two modes:
+ * - Direct mode: connects directly to cluster nodes using discovered hostnames
+ * - Load balancer mode: all connections go through the load balancer endpoint
  */
 public class ClusterTopology {
+    private static final int LOAD_BALANCER_HTTPS_PORT = 443;
+    private static final int LOAD_BALANCER_AMQPS_PORT = 5671;
+
     private final String hostname;
     private final int port;
     private final String username;
     private final String password;
     private final String virtualHost;
+    private final boolean loadBalancerMode;
+    private final SSLContext sslContext;
     private final Client httpClient;
 
     private List<AmqpEndpoint> amqpEndpoints = new ArrayList<>();
@@ -29,25 +40,39 @@ public class ClusterTopology {
     private boolean initialized = false;
 
     public ClusterTopology(String hostname, int port) {
-        this(hostname, port, "guest", "guest", "/");
+        this(hostname, port, "guest", "guest", "/", false);
     }
 
     public ClusterTopology(String hostname, int port, String username, String password, String virtualHost) {
+        this(hostname, port, username, password, virtualHost, false);
+    }
+
+    public ClusterTopology(String hostname, int port, String username, String password,
+                           String virtualHost, boolean loadBalancerMode) {
         this.hostname = hostname;
-        this.port = port;
+        this.port = loadBalancerMode ? LOAD_BALANCER_HTTPS_PORT : port;
         this.username = username;
         this.password = password;
         this.virtualHost = virtualHost;
+        this.loadBalancerMode = loadBalancerMode;
+        this.sslContext = loadBalancerMode ? TlsUtils.createTrustAllSslContext() : null;
 
         try {
-            // Add /api/ suffix for RabbitMQ HTTP API compatibility
-            String baseUrl = "http://" + hostname + ":" + port;
-            String apiUrl = baseUrl.endsWith("/") ? baseUrl + "api/" : baseUrl + "/api/";
+            String scheme = loadBalancerMode ? "https" : "http";
+            String baseUrl = scheme + "://" + hostname + ":" + this.port;
+            String apiUrl = baseUrl + "/api/";
 
             ClientParameters params = new ClientParameters()
                 .url(apiUrl)
                 .username(username)
                 .password(password);
+
+            if (loadBalancerMode) {
+                params.httpLayerFactory(JdkHttpClientHttpLayer.configure()
+                    .clientBuilderConsumer(builder -> builder.sslContext(sslContext))
+                    .create());
+            }
+
             this.httpClient = new Client(params);
 
             // Eagerly discover cluster topology
@@ -71,23 +96,37 @@ public class ClusterTopology {
             overview.getListeners().forEach(listener -> {
                 String nodeName = listener.getNode();
                 int listenerPort = listener.getPort();
+                String protocol = listener.getProtocol();
 
-                if ("amqp".equals(listener.getProtocol())) {
+                if ("amqp".equals(protocol) || "amqp/ssl".equals(protocol)) {
                     amqpPorts.put(nodeName, listenerPort);
-                } else if ("http".equals(listener.getProtocol())) {
+                } else if ("http".equals(protocol) || "https".equals(protocol)) {
                     httpPorts.put(nodeName, listenerPort);
                 }
             });
 
             // Create BrokerNode instances
             amqpPorts.forEach((nodeName, amqpPort) -> {
-                String nodeHostname = nodeName.contains("@") ?
-                    nodeName.substring(nodeName.indexOf("@") + 1) : nodeName;
-                int httpPort = httpPorts.getOrDefault(nodeName, 15672); // Default HTTP port
+                String nodeHostname;
+                int effectiveAmqpPort;
+                int effectiveHttpPort;
 
-                brokerNodes.put(nodeName, new BrokerNode(nodeName, nodeHostname, amqpPort, httpPort));
-                amqpEndpoints.add(new AmqpEndpoint(nodeHostname, amqpPort, this.username, this.password, this.virtualHost));
-                httpEndpoints.add(new HttpEndpoint(nodeHostname, httpPort, this.username, this.password));
+                if (loadBalancerMode) {
+                    // In load balancer mode, all connections go through the load balancer
+                    nodeHostname = this.hostname;
+                    effectiveAmqpPort = LOAD_BALANCER_AMQPS_PORT;
+                    effectiveHttpPort = LOAD_BALANCER_HTTPS_PORT;
+                } else {
+                    // Direct mode: use discovered node hostnames
+                    nodeHostname = nodeName.contains("@") ?
+                        nodeName.substring(nodeName.indexOf("@") + 1) : nodeName;
+                    effectiveAmqpPort = amqpPort;
+                    effectiveHttpPort = httpPorts.getOrDefault(nodeName, 15672);
+                }
+
+                brokerNodes.put(nodeName, new BrokerNode(nodeName, nodeHostname, effectiveAmqpPort, effectiveHttpPort));
+                amqpEndpoints.add(new AmqpEndpoint(nodeHostname, effectiveAmqpPort, this.username, this.password, this.virtualHost));
+                httpEndpoints.add(new HttpEndpoint(nodeHostname, effectiveHttpPort, this.username, this.password));
             });
 
         } catch (Exception e) {
@@ -135,14 +174,20 @@ public class ClusterTopology {
             BrokerNode[] nodes = brokerNodes.values().toArray(new BrokerNode[0]);
             BrokerNode node = nodes[idx];
 
-            // Build API URL with proper /api/ suffix
-            String baseUrl = "http://" + node.getHostname() + ":" + node.getHttpPort();
-            String apiUrl = baseUrl.endsWith("/") ? baseUrl + "api/" : baseUrl + "/api/";
+            String scheme = loadBalancerMode ? "https" : "http";
+            String baseUrl = scheme + "://" + node.getHostname() + ":" + node.getHttpPort();
+            String apiUrl = baseUrl + "/api/";
 
             ClientParameters params = new ClientParameters()
                 .url(apiUrl)
                 .username(username)
                 .password(password);
+
+            if (loadBalancerMode) {
+                params.httpLayerFactory(JdkHttpClientHttpLayer.configure()
+                    .clientBuilderConsumer(builder -> builder.sslContext(sslContext))
+                    .create());
+            }
 
             return new Client(params);
 
@@ -173,5 +218,13 @@ public class ClusterTopology {
 
     public int getNodeCount() {
         return amqpEndpoints.size();
+    }
+
+    public boolean isLoadBalancerMode() {
+        return loadBalancerMode;
+    }
+
+    public SSLContext getSslContext() {
+        return sslContext;
     }
 }

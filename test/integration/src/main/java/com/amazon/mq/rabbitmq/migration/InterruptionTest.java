@@ -68,8 +68,7 @@ public class InterruptionTest {
       // Phase 3: Start migration and interrupt
       logger.info(
           "=== Phase 3: Start migration and interrupt after {} queues ===", INTERRUPT_AFTER_QUEUES);
-      QueueMigrationClient client =
-          new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+      QueueMigrationClient client = config.createMigrationClient();
 
       QueueMigrationClient.MigrationResponse startResponse = client.startMigration();
       String migrationId = startResponse.getMigrationId();

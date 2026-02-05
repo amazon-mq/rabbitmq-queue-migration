@@ -85,10 +85,28 @@ java -jar target/migration-test-setup-1.0.0.jar end-to-end \
 ### Connection Configuration
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--amqp-uris=URIS` | Comma-separated AMQP URIs | localhost:5672,5673,5674 |
-| `--http-uris=URIS` | Comma-separated HTTP URIs | localhost:15672,15673,15674 |
-| `--hostname=HOST` | Single hostname (alternative) | localhost |
-| `--port=PORT` | HTTP port (alternative) | 15672 |
+| `--hostname=HOST` | RabbitMQ hostname | localhost |
+| `--port=PORT` | HTTP management port | 15672 |
+| `--username=USER` | RabbitMQ username | guest |
+| `--password=PASS` | RabbitMQ password | guest |
+| `--vhost=NAME` | Virtual host | / |
+| `--load-balancer` | Connect through load balancer using TLS | false |
+
+### Load Balancer Mode
+
+When `--load-balancer` is specified:
+- All connections use TLS (HTTPS port 443, AMQPS port 5671)
+- Hostname verification is disabled (certificate CN won't match)
+- AMQP listener verification is skipped (cannot verify individual nodes through LB)
+- If `--port` is specified, it must be 443
+
+```bash
+java -jar target/migration-test-setup-1.0.0.jar end-to-end \
+  --hostname=my-load-balancer.example.com \
+  --username=admin \
+  --password=secret \
+  --load-balancer
+```
 
 ### Test Control
 | Option | Description | Default |

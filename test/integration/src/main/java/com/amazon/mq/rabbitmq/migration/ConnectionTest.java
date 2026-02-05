@@ -16,7 +16,7 @@ public class ConnectionTest {
   public static boolean testAmqpConnection(TestConfiguration config) {
     boolean allSuccessful = true;
 
-    for (int i = 0; i < config.getClusterTopology().getNodeCount(); i++) {
+    for (int i = 0; i < config.getNodeCount(); i++) {
       AmqpEndpoint endpoint = config.getAmqpEndpoint(i);
       logger.info(
           "Testing AMQP connection to {}:{} vhost '{}'",
@@ -31,6 +31,10 @@ public class ConnectionTest {
       factory.setPassword(endpoint.getPassword());
       factory.setVirtualHost(endpoint.getVirtualHost());
       factory.setConnectionTimeout(5000);
+
+      if (config.isLoadBalancerMode()) {
+        factory.useSslProtocol(config.getSslContext());
+      }
 
       try (Connection connection = factory.newConnection("connection-test")) {
         logger.info(
@@ -75,8 +79,8 @@ public class ConnectionTest {
   public static boolean testManagementConnection(TestConfiguration config) {
     boolean allSuccessful = true;
 
-    for (int i = 0; i < config.getClusterTopology().getNodeCount(); i++) {
-      Client client = config.getClusterTopology().createHttpClient(i);
+    for (int i = 0; i < config.getNodeCount(); i++) {
+      Client client = config.createHttpClient(i);
       logger.info("Testing Management API connection to {}", client.toString());
 
       boolean thisUriSuccess = false;

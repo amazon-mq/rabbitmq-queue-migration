@@ -54,8 +54,7 @@ public class SkipUnsuitableTest {
           UNSUITABLE_QUEUE_COUNT);
       MigrationTestSetup.execute(config);
 
-      QueueMigrationClient client =
-          new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+      QueueMigrationClient client = config.createMigrationClient();
 
       // Phase 2: Attempt migration without skip flag (should fail)
       logger.info("=== Phase 2: Attempt migration without skip flag ===");

@@ -79,7 +79,11 @@ public class MigrationTestSetup {
   public static TestConfiguration parseArguments(String[] args) {
     String hostname = "localhost";
     int port = 15672;
+    boolean portSpecified = false;
+    boolean loadBalancer = false;
     String vhost = TestConfiguration.getDefaultVirtualHost();
+    String username = "guest";
+    String password = "guest";
 
     // Check for help first, then get hostname and port
     for (String arg : args) {
@@ -89,23 +93,37 @@ public class MigrationTestSetup {
       }
     }
 
-    // Parse hostname/port/vhost from args to update config
+    // Parse hostname/port/vhost/load-balancer from args to update config
     for (String testArg : args) {
       if (testArg.startsWith("--hostname=")) {
         hostname = testArg.substring(11);
+      } else if (testArg.startsWith("--username=")) {
+        username = testArg.substring(11);
+      } else if (testArg.startsWith("--password=")) {
+        password = testArg.substring(11);
       } else if (testArg.startsWith("--port=")) {
         try {
           port = Integer.parseInt(testArg.substring(7));
+          portSpecified = true;
         } catch (NumberFormatException e) {
           // Use default port
         }
       } else if (testArg.startsWith("--vhost=")) {
         vhost = testArg.substring(8);
+      } else if (testArg.equals("--load-balancer")) {
+        loadBalancer = true;
       }
     }
 
+    // Validate port when load balancer mode is enabled
+    if (loadBalancer && portSpecified && port != 443) {
+      logger.error("When --load-balancer is specified, --port must be 443 (got {})", port);
+      System.exit(1);
+    }
+
     // Initialize config with defaults
-    ClusterTopology topology = new ClusterTopology(hostname, port, "guest", "guest", vhost);
+    ClusterTopology topology =
+        new ClusterTopology(hostname, port, username, password, vhost, loadBalancer);
     TestConfiguration config = new TestConfiguration(topology);
     config.setVirtualHost(vhost);
 
@@ -207,6 +225,10 @@ public class MigrationTestSetup {
         }
       } else if (arg.startsWith("--hostname=")) {
         hostname = arg.substring(11);
+      } else if (arg.startsWith("--username=")) {
+        // Already parsed in first loop
+      } else if (arg.startsWith("--password=")) {
+        // Already parsed in first loop
       } else if (arg.startsWith("--port=")) {
         try {
           port = Integer.parseInt(arg.substring(7));
@@ -215,6 +237,10 @@ public class MigrationTestSetup {
           printUsage();
           System.exit(1);
         }
+      } else if (arg.startsWith("--vhost=")) {
+        // Already parsed in first loop
+      } else if (arg.equals("--load-balancer")) {
+        // Already parsed in first loop
       } else if (arg.equals("--no-ha")) {
         config.setEnableHA(false);
       } else if (arg.equals("--skip-cleanup")) {
@@ -340,7 +366,13 @@ public class MigrationTestSetup {
         "  --hostname=HOST            RabbitMQ management API hostname (default: localhost)");
     System.out.println(
         "  --port=PORT                RabbitMQ management API port (default: 15672)");
+    System.out.println("  --username=USER            RabbitMQ username (default: guest)");
+    System.out.println("  --password=PASS            RabbitMQ password (default: guest)");
     System.out.println("  --vhost=NAME               Virtual host for all operations (default: /)");
+    System.out.println("  --load-balancer            Connect through load balancer using TLS");
+    System.out.println(
+        "                             Uses HTTPS (443) and AMQPS (5671) with no hostname"
+            + " verification");
     System.out.println(
         "                             ClusterTopology will automatically discover all cluster"
             + " nodes");

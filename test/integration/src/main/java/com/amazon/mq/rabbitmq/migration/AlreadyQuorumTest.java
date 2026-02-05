@@ -53,8 +53,7 @@ public class AlreadyQuorumTest {
           TOTAL_MESSAGES);
       MigrationTestSetup.execute(config);
 
-      QueueMigrationClient client =
-          new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+      QueueMigrationClient client = config.createMigrationClient();
 
       // Phase 2: Verify initial state
       logger.info("=== Phase 2: Verifying initial state ===");

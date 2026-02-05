@@ -54,7 +54,7 @@ public class RabbitMQSetup {
           KeyManagementException,
           MalformedURLException {
 
-    int nodeCount = config.getClusterTopology().getNodeCount();
+    int nodeCount = config.getNodeCount();
 
     logger.info("Initializing RabbitMQ connections to {} cluster nodes...", nodeCount);
 
@@ -63,6 +63,7 @@ public class RabbitMQSetup {
     channels = new Channel[nodeCount];
 
     // Initialize AMQP connections
+    boolean loadBalancerMode = config.isLoadBalancerMode();
     for (int i = 0; i < nodeCount; i++) {
       AmqpEndpoint endpoint = config.getAmqpEndpoint(i);
 
@@ -76,6 +77,10 @@ public class RabbitMQSetup {
         factory.setAutomaticRecoveryEnabled(true);
         factory.setNetworkRecoveryInterval(5000);
         factory.setConnectionTimeout(10000); // 10 second timeout
+
+        if (loadBalancerMode) {
+          factory.useSslProtocol(config.getSslContext());
+        }
 
         connections[i] =
             factory.newConnection(
@@ -105,7 +110,7 @@ public class RabbitMQSetup {
 
     for (int i = 0; i < nodeCount; i++) {
       try {
-        Client c = config.getClusterTopology().createHttpClient(i);
+        Client c = config.createHttpClient(i);
         httpClients[i] = c;
         // Test the management connection with a simple call
         httpClients[i].getVhosts();

@@ -92,6 +92,33 @@ public class TestConfiguration {
     return clusterTopology.getHttpPort();
   }
 
+  public int getNodeCount() {
+    return clusterTopology.getNodeCount();
+  }
+
+  public Client createHttpClient(int idx) {
+    return clusterTopology.createHttpClient(idx);
+  }
+
+  public boolean isLoadBalancerMode() {
+    return clusterTopology.isLoadBalancerMode();
+  }
+
+  public javax.net.ssl.SSLContext getSslContext() {
+    return clusterTopology.getSslContext();
+  }
+
+  /** Create a QueueMigrationClient configured for this topology. */
+  public QueueMigrationClient createMigrationClient() {
+    return new QueueMigrationClient(
+        getHttpHost(),
+        getHttpPort(),
+        clusterTopology.getUsername(),
+        clusterTopology.getPassword(),
+        virtualHost,
+        getSslContext());
+  }
+
   public int getSmallMessageSize() {
     return smallMessageSize;
   }
