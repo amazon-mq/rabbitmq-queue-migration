@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,20 +32,29 @@ public class QueueMigrationClient {
   private final ObjectMapper objectMapper;
 
   public QueueMigrationClient(String host, int port, String username, String password) {
-    this(host, port, username, password, TestConfiguration.getDefaultVirtualHost());
+    this(host, port, username, password, TestConfiguration.getDefaultVirtualHost(), null);
   }
 
   public QueueMigrationClient(
       String host, int port, String username, String password, String vhost) {
-    this.baseUrl = String.format("http://%s:%d/api", host, port);
+    this(host, port, username, password, vhost, null);
+  }
+
+  public QueueMigrationClient(
+      String host, int port, String username, String password, String vhost, SSLContext sslContext) {
+    String scheme = sslContext != null ? "https" : "http";
+    this.baseUrl = String.format("%s://%s:%d/api", scheme, host, port);
     this.authHeader =
         "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
     this.vhost = vhost;
-    this.httpClient =
-        HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+
+    HttpClient.Builder builder = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(Duration.ofSeconds(10));
+    if (sslContext != null) {
+      builder.sslContext(sslContext);
+    }
+    this.httpClient = builder.build();
     this.objectMapper = new ObjectMapper();
 
     logger.info("Queue Migration Client initialized for {}:{}", host, port);

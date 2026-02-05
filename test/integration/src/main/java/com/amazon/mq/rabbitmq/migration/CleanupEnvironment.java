@@ -57,9 +57,7 @@ public class CleanupEnvironment {
     Client httpClient = config.createHttpClient();
 
     // Create migration client for migration records
-    QueueMigrationClient migrationClient =
-        new QueueMigrationClient(
-            config.getHttpHost(), config.getHttpPort(), "guest", "guest", config.getVirtualHost());
+    QueueMigrationClient migrationClient = config.createMigrationClient();
 
     // Step 1: Delete all non-default virtual hosts
     deleteNonDefaultVirtualHosts(httpClient);

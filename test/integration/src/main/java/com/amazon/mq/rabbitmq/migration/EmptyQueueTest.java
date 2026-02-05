@@ -48,8 +48,7 @@ public class EmptyQueueTest {
       logger.info("=== Phase 1: Setup ({} empty queues) ===", QUEUE_COUNT);
       MigrationTestSetup.execute(config);
 
-      QueueMigrationClient client =
-          new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+      QueueMigrationClient client = config.createMigrationClient();
 
       // Phase 2: Start migration
       logger.info("=== Phase 2: Starting migration ===");

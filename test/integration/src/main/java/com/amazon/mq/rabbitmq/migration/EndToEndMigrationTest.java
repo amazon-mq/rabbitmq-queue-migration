@@ -98,9 +98,7 @@ public class EndToEndMigrationTest {
   }
 
   private static QueueMigrationClient createMigrationClient(TestConfiguration config) {
-    // Use first node for migration client
-    return new QueueMigrationClient(
-        config.getHttpHost(), config.getHttpPort(), "guest", "guest", config.getVirtualHost());
+    return config.createMigrationClient();
   }
 
   private static boolean waitForMigrationToStart(

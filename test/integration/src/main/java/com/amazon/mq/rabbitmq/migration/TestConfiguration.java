@@ -108,6 +108,19 @@ public class TestConfiguration {
     return clusterTopology.getSslContext();
   }
 
+  /**
+   * Create a QueueMigrationClient configured for this topology.
+   */
+  public QueueMigrationClient createMigrationClient() {
+    return new QueueMigrationClient(
+        getHttpHost(),
+        getHttpPort(),
+        clusterTopology.getUsername(),
+        clusterTopology.getPassword(),
+        virtualHost,
+        getSslContext());
+  }
+
   public int getSmallMessageSize() {
     return smallMessageSize;
   }

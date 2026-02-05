@@ -61,8 +61,7 @@ public class BatchMigrationTest {
           "=== Phase 1: Setup ({} queues, {} messages) ===", TOTAL_QUEUE_COUNT, TOTAL_MESSAGES);
       MigrationTestSetup.execute(config);
 
-      QueueMigrationClient client =
-          new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+      QueueMigrationClient client = config.createMigrationClient();
 
       // Phase 2: First batch - 10 smallest queues
       logger.info("=== Phase 2: First batch migration (10 smallest queues) ===");
@@ -155,8 +154,7 @@ public class BatchMigrationTest {
       throws Exception {
     boolean valid = true;
 
-    QueueMigrationClient client =
-        new QueueMigrationClient(config.getHttpHost(), config.getHttpPort(), "guest", "guest");
+    QueueMigrationClient client = config.createMigrationClient();
 
     QueueMigrationClient.MigrationDetailResponse details = client.getMigrationDetails(migrationId);
     if (details == null) {
