@@ -303,10 +303,14 @@ public class QueueMigrationClient {
 
     MigrationInfo migrationInfo =
         new MigrationInfo(
+            latestMigration.has("id") ? latestMigration.get("id").asText() : null,
             latestMigration.has("display_id")
                 ? latestMigration.get("display_id").asText()
                 : "unknown",
             latestMigration.has("status") ? latestMigration.get("status").asText() : "unknown",
+            latestMigration.has("error") && !latestMigration.get("error").isNull()
+                ? latestMigration.get("error").asText()
+                : null,
             latestMigration.has("progress_percentage")
                 ? latestMigration.get("progress_percentage").asInt()
                 : 0,
@@ -380,8 +384,10 @@ public class QueueMigrationClient {
 
   /** Information about a specific migration */
   public static class MigrationInfo {
+    private final String id;
     private final String displayId;
     private final String status;
+    private final String error;
     private final int progressPercentage;
     private final int completedQueues;
     private final int totalQueues;
@@ -389,20 +395,28 @@ public class QueueMigrationClient {
     private final String completedAt;
 
     public MigrationInfo(
+        String id,
         String displayId,
         String status,
+        String error,
         int progressPercentage,
         int completedQueues,
         int totalQueues,
         String startedAt,
         String completedAt) {
+      this.id = id;
       this.displayId = displayId;
       this.status = status;
+      this.error = error;
       this.progressPercentage = progressPercentage;
       this.completedQueues = completedQueues;
       this.totalQueues = totalQueues;
       this.startedAt = startedAt;
       this.completedAt = completedAt;
+    }
+
+    public String getId() {
+      return id;
     }
 
     public String getDisplayId() {
@@ -411,6 +425,10 @@ public class QueueMigrationClient {
 
     public String getStatus() {
       return status;
+    }
+
+    public String getError() {
+      return error;
     }
 
     public int getProgressPercentage() {

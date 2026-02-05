@@ -72,7 +72,7 @@ public class EndToEndMigrationTest {
       long migrationStartTime = System.currentTimeMillis();
 
       // Wait for migration to actually start before monitoring
-      if (!waitForMigrationToStart(migrationClient, 120)) {
+      if (!waitForMigrationToStart(migrationClient, migrationResponse.getMigrationId(), 120)) {
         logger.error("❌ Migration did not start within 120 seconds");
         System.exit(1);
       }
@@ -102,7 +102,8 @@ public class EndToEndMigrationTest {
   }
 
   private static boolean waitForMigrationToStart(
-      QueueMigrationClient migrationClient, int timeoutSeconds) throws Exception {
+      QueueMigrationClient migrationClient, String expectedMigrationId, int timeoutSeconds)
+      throws Exception {
     logger.info("Waiting for migration to start (timeout: {}s)...", timeoutSeconds);
 
     long startTime = System.currentTimeMillis();
@@ -116,10 +117,21 @@ public class EndToEndMigrationTest {
       if (statusResponse.hasMigration()) {
         QueueMigrationClient.MigrationInfo migration = statusResponse.getMigrationInfo();
 
+        // Check if this is the migration we started
+        boolean isOurMigration =
+            expectedMigrationId != null && expectedMigrationId.equals(migration.getId());
+
         // Check if this is a migration that's actually running
         if (migration.isInProgress()) {
           logger.info("✅ Migration started and is in progress: {}", migration.getDisplayId());
           return true;
+        }
+
+        // If our migration failed immediately, report it
+        if (isOurMigration && migration.isFailed()) {
+          logger.error(
+              "❌ Migration failed immediately: {} - {}", migration.getDisplayId(), migration.getError());
+          return false;
         }
 
         // If we find a completed migration, it might be stale from a previous run
@@ -128,8 +140,8 @@ public class EndToEndMigrationTest {
           // Continue waiting for a new migration to start
         }
 
-        // If we find a failed migration, it might be stale from a previous run
-        if (migration.isFailed()) {
+        // If we find a failed migration from a previous run, ignore it
+        if (migration.isFailed() && !isOurMigration) {
           logger.debug("Found failed migration (possibly stale): {}", migration.getDisplayId());
           // Continue waiting for a new migration to start
         }
