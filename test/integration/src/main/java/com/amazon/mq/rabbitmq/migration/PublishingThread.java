@@ -77,6 +77,11 @@ public class PublishingThread implements Runnable {
     factory.setPassword(amqp.getPassword());
     factory.setVirtualHost(amqp.getVirtualHost());
     factory.setConnectionTimeout(10000);
+
+    if (config.isLoadBalancerMode()) {
+      factory.useSslProtocol(config.getSslContext());
+    }
+
     connection = factory.newConnection("publishing-thread-" + connectionIndex);
     channel = connection.createChannel();
     channel.confirmSelect();

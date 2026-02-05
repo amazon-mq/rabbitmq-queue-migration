@@ -32,6 +32,10 @@ public class ConnectionTest {
       factory.setVirtualHost(endpoint.getVirtualHost());
       factory.setConnectionTimeout(5000);
 
+      if (config.isLoadBalancerMode()) {
+        factory.useSslProtocol(config.getSslContext());
+      }
+
       try (Connection connection = factory.newConnection("connection-test")) {
         logger.info(
             "✅ AMQP connection successful to {}:{}", endpoint.getHostname(), endpoint.getPort());
