@@ -54,16 +54,12 @@ public class CleanupEnvironment {
     logger.info("=== Phase 0: Cleaning up previous test artifacts ===");
 
     // Create HTTP client for management operations
-    Client httpClient = config.getClusterTopology().createHttpClient();
+    Client httpClient = config.createHttpClient();
 
     // Create migration client for migration records
     QueueMigrationClient migrationClient =
         new QueueMigrationClient(
-            config.getClusterTopology().getHttpHost(),
-            config.getClusterTopology().getHttpPort(),
-            "guest",
-            "guest",
-            config.getVirtualHost());
+            config.getHttpHost(), config.getHttpPort(), "guest", "guest", config.getVirtualHost());
 
     // Step 1: Delete all non-default virtual hosts
     deleteNonDefaultVirtualHosts(httpClient);

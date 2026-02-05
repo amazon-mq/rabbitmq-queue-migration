@@ -141,8 +141,9 @@ public class MultiThreadedPublisher {
     Set<BrokerNode> requiredNodes = clusterInfo.getRequiredNodes();
 
     // Get credentials from cluster topology
-    String username = config.getClusterTopology().getUsername();
-    String password = config.getClusterTopology().getPassword();
+    String username = config.getUsername();
+    String password = config.getPassword();
+    boolean loadBalancerMode = config.isLoadBalancerMode();
 
     for (BrokerNode brokerNode : requiredNodes) {
       try {
@@ -152,6 +153,10 @@ public class MultiThreadedPublisher {
         factory.setUsername(username);
         factory.setPassword(password);
         factory.setVirtualHost(config.getVirtualHost());
+
+        if (loadBalancerMode) {
+          factory.useSslProtocol(config.getSslContext());
+        }
 
         Connection connection = factory.newConnection();
         Channel channel = connection.createChannel();
@@ -180,10 +185,10 @@ public class MultiThreadedPublisher {
 
     try {
       // Get all broker nodes from cluster topology
-      Map<String, BrokerNode> brokerNodes = config.getClusterTopology().getAllNodes();
+      Map<String, BrokerNode> brokerNodes = config.getAllNodes();
 
       // Get queue information to discover leaders
-      Client httpClient = config.getClusterTopology().createHttpClient();
+      Client httpClient = config.createHttpClient();
       List<QueueInfo> queues = httpClient.getQueues(config.getVirtualHost());
       Map<String, String> queueLeaders = new HashMap<>();
 

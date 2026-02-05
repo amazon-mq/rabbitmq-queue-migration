@@ -421,7 +421,7 @@ public class EndToEndMigrationTest {
   private static boolean checkAmqpListenersSuspended(TestConfiguration config) {
     logger.info("Checking if AMQP listeners are suspended across all nodes...");
 
-    int nodeCount = config.getClusterTopology().getNodeCount();
+    int nodeCount = config.getNodeCount();
     boolean allSuspended = true;
 
     for (int i = 0; i < nodeCount; i++) {
@@ -490,7 +490,7 @@ public class EndToEndMigrationTest {
   private static boolean checkAmqpListenersRestored(TestConfiguration config) {
     logger.info("Checking if AMQP listeners are restored across all nodes...");
 
-    int nodeCount = config.getClusterTopology().getNodeCount();
+    int nodeCount = config.getNodeCount();
     boolean allRestored = true;
 
     for (int i = 0; i < nodeCount; i++) {
