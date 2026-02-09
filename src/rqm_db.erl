@@ -56,7 +56,36 @@
 
 %% @doc Get message count for a queue
 -spec get_message_count(#resource{} | amqqueue:amqqueue()) -> {ok, non_neg_integer()}.
-get_message_count(Queue) when ?is_amqqueue(Queue) ->
+get_message_count(Queue) when ?amqqueue_is_quorum(Queue) ->
+    QName = amqqueue:get_name(Queue),
+    Leader = amqqueue:get_pid(Queue),
+    {_, LeaderNode} = Leader,
+    CurrentNode = node(),
+    % Query leader directly via Raft
+    % Note: rabbit_fifo_client:stat returns {ok, Ready, ConsumerCount}
+    LeaderResult =
+        case rabbit_fifo_client:stat(Leader, 5000) of
+            {ok, Ready, _ConsumerCount} ->
+                {ok, Ready};
+            NotOk ->
+                NotOk
+        end,
+    LeaderCount =
+        case LeaderResult of
+            {ok, Count} -> Count;
+            _ -> undefined
+        end,
+    ?LOG_DEBUG(
+        "rqm: get_message_count ~tp: current_node=~tp, leader_node=~tp, is_leader=~tp, leader_count=~tp",
+        [QName, CurrentNode, LeaderNode, CurrentNode =:= LeaderNode, LeaderCount]
+    ),
+    % Use leader result for quorum queues
+    case LeaderResult of
+        {ok, _} -> LeaderResult;
+        % Fallback to 0 on error/timeout
+        _ -> {ok, 0}
+    end;
+get_message_count(Queue) when ?amqqueue_is_classic(Queue) ->
     case rabbit_amqqueue:info(Queue, [messages]) of
         [{messages, Count}] ->
             {ok, Count};
@@ -67,16 +96,9 @@ get_message_count(Queue) when ?is_amqqueue(Queue) ->
 get_message_count(Resource) when is_record(Resource, resource) ->
     case rabbit_amqqueue:lookup(Resource) of
         {ok, Q} ->
-            case rabbit_amqqueue:info(Q, [messages]) of
-                [{messages, Count}] ->
-                    {ok, Count};
-                Unexpected ->
-                    ?LOG_DEBUG("rqm: ~tp Unexpected ~tp", [?FUNCTION_NAME, Unexpected]),
-                    {ok, 0}
-            end;
+            get_message_count(Q);
         {error, not_found} ->
             ?LOG_DEBUG("rqm: ~tp NOT FOUND", [?FUNCTION_NAME]),
-            %% Queue doesn't exist, consider it empty
             {ok, 0}
     end.
 
