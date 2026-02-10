@@ -465,12 +465,13 @@ public class MigrationTestSetup {
         logger.info("Virtual host '{}' already exists", vhost);
       }
 
-      // Grant full permissions to guest user
-      logger.info("Setting permissions for guest user on vhost '{}'", vhost);
+      // Grant full permissions to user
+      String username = topology.getUsername();
+      logger.info("Setting permissions for {} user on vhost '{}'", username, vhost);
       com.rabbitmq.http.client.domain.UserPermissions permissions =
           new com.rabbitmq.http.client.domain.UserPermissions(".*", ".*", ".*");
-      httpClient.updatePermissions(vhost, "guest", permissions);
-      logger.info("✅ Guest user granted full permissions on vhost '{}'", vhost);
+      httpClient.updatePermissions(vhost, username, permissions);
+      logger.info("✅ {} user granted full permissions on vhost '{}'", username, vhost);
 
     } catch (Exception e) {
       logger.error("Failed to create virtual host '{}': {}", vhost, e.getMessage());
