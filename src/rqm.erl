@@ -1754,7 +1754,7 @@ ensure_no_local_connections() ->
 get_rollback_pending_migration_json() ->
     case rqm_db:get_rollback_pending_migration() of
         {ok, Migration} ->
-            {ok, rabbit_json:encode(rqm_mgmt:migration_to_json_detail(Migration))};
+            rabbit_json:encode(rqm_mgmt:migration_to_json_detail(Migration));
         {error, not_found} ->
             {error, not_found}
     end.
@@ -2073,7 +2073,7 @@ create_skipped_queue_records(MigrationId, [
     create_skipped_queue_records(MigrationId, Rest).
 
 %% @doc Extract snapshot information from preparation state
--spec extract_snapshots_from_preparation_state(map()) -> [{atom(), binary(), string()}].
+-spec extract_snapshots_from_preparation_state(map()) -> [{atom(), binary(), string(), string()}].
 extract_snapshots_from_preparation_state(PreparationState) ->
     maps:fold(fun extract_node_snapshots/3, [], PreparationState).
 
@@ -2084,10 +2084,10 @@ extract_node_snapshots(Node, NodeState, Acc) ->
             Acc;
         SnapshotState when is_binary(SnapshotState) ->
             % For tar mode, store as single entry with path as "volume"
-            [{Node, SnapshotState, rqm_util:to_unicode(SnapshotState)} | Acc];
-        {SnapshotId, VolumeId} when is_binary(SnapshotId) andalso is_binary(VolumeId) ->
-            % For EBS mode, single snapshot-volume pair
-            [{Node, SnapshotId, VolumeId} | Acc];
+            [{Node, SnapshotState, rqm_util:to_unicode(SnapshotState), <<>>} | Acc];
+        {SnapshotId, VolumeId, InstanceId} when is_binary(SnapshotId) andalso is_binary(VolumeId) ->
+            % For EBS mode, snapshot-volume-instance triple
+            [{Node, SnapshotId, VolumeId, InstanceId} | Acc];
         Other ->
             ?LOG_WARNING("rqm: unexpected snapshot state format: ~p", [Other]),
             Acc

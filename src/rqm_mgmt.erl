@@ -444,11 +444,12 @@ format_snapshots([]) ->
 format_snapshots(Snapshots) ->
     [format_snapshot(Snapshot) || Snapshot <- Snapshots].
 
-format_snapshot({Node, SnapshotId, VolumeId}) ->
+format_snapshot({Node, SnapshotId, VolumeId, InstanceId}) ->
     #{
         node => Node,
         snapshot_id => SnapshotId,
-        volume_id => VolumeId
+        volume_id => VolumeId,
+        instance_id => InstanceId
     }.
 
 parse_migration_options(VHost, ReqData) ->

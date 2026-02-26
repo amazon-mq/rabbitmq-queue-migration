@@ -13,13 +13,13 @@
 -export([create_snapshot/1, cleanup_snapshot/1, check_no_snapshots_in_progress/0]).
 
 %% @doc Create a snapshot using the configured snapshot mode
--spec create_snapshot(rabbit_types:vhost()) -> {ok, snapshot_id()} | {error, term()}.
+-spec create_snapshot(rabbit_types:vhost()) -> {ok, snapshot_state()} | {error, term()}.
 create_snapshot(VHost) ->
     SnapshotMode = rqm_config:snapshot_mode(),
     create_snapshot(SnapshotMode, VHost).
 
 %% @doc Create a tar-based fake snapshot
--spec create_snapshot(tar, rabbit_types:vhost()) -> {ok, snapshot_id()} | {error, term()}.
+-spec create_snapshot(tar | ebs | none, rabbit_types:vhost()) -> {ok, snapshot_state()} | {error, term()}.
 create_snapshot(tar, VHost) ->
     ?LOG_DEBUG("rqm: creating fake EBS snapshot (tar archive) for vhost ~ts on node ~tp", [
         VHost, node()
@@ -50,7 +50,7 @@ create_snapshot(tar, VHost) ->
                     ?LOG_DEBUG("rqm: fake EBS snapshot created: ~ts (~w bytes)", [
                         ArchiveFile, ArchiveSize
                     ]),
-                    {ok, rqm_util:to_unicode(ArchiveFile)};
+                    {ok, {rqm_util:to_unicode(ArchiveFile), SnapshotDir, rqm_util:to_unicode(rabbit_net:hostname())}};
                 false ->
                     ?LOG_ERROR("rqm: tar archive was not created: ~s", [ArchiveFile]),
                     {error, archive_not_created}
@@ -65,10 +65,10 @@ create_snapshot(ebs, VHost) ->
     {ok, Region} = rabbitmq_aws_config:region(),
     ok = rabbitmq_aws:set_region(Region),
     case rqm_ebs:instance_volumes() of
-        {ok, Volumes} ->
+        {ok, {InstanceId, Volumes}} ->
             case find_rabbitmq_volume(Volumes) of
                 {ok, VolumeId} ->
-                    create_ebs_snapshot(VolumeId);
+                    create_ebs_snapshot(InstanceId, VolumeId);
                 {error, Reason} ->
                     ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
                     {error, {volume_discovery_failed, Reason}}
@@ -104,7 +104,7 @@ check_ebs_snapshots_in_progress() ->
     {ok, Region} = rabbitmq_aws_config:region(),
     ok = rabbitmq_aws:set_region(Region),
     case rqm_ebs:instance_volumes() of
-        {ok, Volumes} ->
+        {ok, {_InstanceId, Volumes}} ->
             case find_rabbitmq_volume(Volumes) of
                 {ok, VolumeId} ->
                     check_volume_snapshots_in_progress(VolumeId);
@@ -223,8 +223,8 @@ extract_volume_id(_, Acc) ->
     Acc.
 
 %% @doc Create EBS snapshot for single volume ID
--spec create_ebs_snapshot(string()) -> {ok, {string(), string()}} | {error, term()}.
-create_ebs_snapshot(VolumeId) ->
+-spec create_ebs_snapshot(InstanceId :: string(), VolumeId :: string()) -> {ok, snapshot_state()} | {error, term()}.
+create_ebs_snapshot(InstanceId, VolumeId) ->
     Timestamp = rqm_util:format_iso8601_utc(),
     Description = rqm_util:unicode_format("RabbitMQ migration snapshot ~s on ~s", [
         Timestamp, node()
@@ -232,8 +232,11 @@ create_ebs_snapshot(VolumeId) ->
 
     case rqm_ebs:create_volume_snapshot(VolumeId, #{description => Description}) of
         {ok, SnapshotId, _Metadata} ->
-            ?LOG_DEBUG("rqm: created snapshot ~s for volume ~s", [SnapshotId, VolumeId]),
-            {ok, {rqm_util:to_unicode(SnapshotId), rqm_util:to_unicode(VolumeId)}};
+            {ok, {
+                rqm_util:to_unicode(SnapshotId),
+                rqm_util:to_unicode(VolumeId),
+                rqm_util:to_unicode(InstanceId)
+            }};
         {error, Reason} ->
             ?LOG_ERROR("rqm: failed to create snapshot for volume ~s: ~p", [VolumeId, Reason]),
             {error, {snapshot_failed, VolumeId, Reason}}
@@ -246,7 +249,7 @@ cleanup_snapshot(SnapshotId) ->
     cleanup_snapshot(SnapshotMode, SnapshotId).
 
 %% @doc Clean up a tar-based snapshot
--spec cleanup_snapshot(tar, snapshot_id()) -> ok | {error, term()}.
+-spec cleanup_snapshot(tar | ebs | none, snapshot_id()) -> ok | {error, term()}.
 cleanup_snapshot(tar, SnapshotId) when is_binary(SnapshotId) ->
     SnapshotPath = binary_to_list(SnapshotId),
     ?LOG_DEBUG("rqm: cleaning up tar snapshot: ~s", [SnapshotPath]),
