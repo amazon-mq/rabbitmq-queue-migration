@@ -1754,7 +1754,7 @@ ensure_no_local_connections() ->
 get_rollback_pending_migration_json() ->
     case rqm_db:get_rollback_pending_migration() of
         {ok, Migration} ->
-            rabbit_json:encode(rqm_mgmt:migration_to_json_detail(Migration));
+            {ok, rabbit_json:encode(rqm_mgmt:migration_to_json_detail(Migration))};
         {error, not_found} ->
             {error, not_found}
     end.
