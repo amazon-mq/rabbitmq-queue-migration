@@ -456,7 +456,7 @@ public class QueueMigrationClient {
     }
 
     public boolean isFailed() {
-      return "failed".equals(status);
+      return "failed".equals(status) || "rollback_pending".equals(status);
     }
 
     public boolean isInProgress() {
