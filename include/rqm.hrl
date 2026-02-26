@@ -130,6 +130,9 @@
 
 %% Type definitions
 -type snapshot_id() :: binary().
+-type volume_id() :: binary() | string().
+-type instance_id() :: binary() | string().
+-type snapshot_state() :: {snapshot_id(), volume_id(), instance_id()}.
 
 -type migration_status() ::
     'pending'

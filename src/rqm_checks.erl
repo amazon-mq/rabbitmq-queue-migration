@@ -145,13 +145,13 @@ check_queue_synchronization(VHost) ->
 %%----------------------------------------------------------------------------
 
 %% @doc Get all mirrored classic queues in the specified virtual host
--spec get_mirrored_classic_queues(rabbit_types:vhost()) -> [rabbit_types:amqqueue()].
+-spec get_mirrored_classic_queues(rabbit_types:vhost()) -> [amqqueue:amqqueue()].
 get_mirrored_classic_queues(VHost) ->
     AllQueues = rqm_db_queue:get_all_by_vhost_and_type(VHost, rabbit_classic_queue),
     lists:filter(fun rqm_util:has_ha_policy/1, AllQueues).
 
 %% @doc Analyze the distribution of queue leaders across cluster nodes
--spec analyze_leader_distribution([rabbit_types:amqqueue()]) -> #{node() => non_neg_integer()}.
+-spec analyze_leader_distribution([amqqueue:amqqueue()]) -> #{node() => non_neg_integer()}.
 analyze_leader_distribution(Queues) ->
     % Get all cluster nodes first to ensure we account for nodes with zero queues
     ClusterNodes = rabbit_nodes:list_running(),
@@ -325,7 +325,7 @@ estimate_migration_disk_usage(VHost, UnsuitableQueues) ->
     end.
 
 %% @doc Get disk usage for a single queue
--spec get_queue_disk_usage(rabbit_types:amqqueue()) -> non_neg_integer().
+-spec get_queue_disk_usage(amqqueue:amqqueue()) -> non_neg_integer().
 get_queue_disk_usage(Queue) ->
     QueueName = amqqueue:get_name(Queue),
     % Get queue information including message count and message bytes usage
@@ -597,7 +597,7 @@ check_queue_suitability(VHost) ->
     end.
 
 %% @doc Collect all suitability issues from all queues
--spec collect_all_suitability_issues([rabbit_types:amqqueue()], rabbit_types:vhost()) -> list().
+-spec collect_all_suitability_issues([amqqueue:amqqueue()], rabbit_types:vhost()) -> list().
 collect_all_suitability_issues(AllClassicQueues, _VHost) ->
     % Check for reject-publish-dlx issues
     RejectPublishDlxIssues = collect_reject_publish_dlx_issues(AllClassicQueues),
@@ -636,7 +636,7 @@ collect_all_suitability_issues(AllClassicQueues, _VHost) ->
     RejectPublishDlxIssues ++ QueueExpiresIssues ++ MessageTtlIssues ++ TooManyQueuesIssues.
 
 %% @doc Collect reject-publish-dlx issues from queues
--spec collect_reject_publish_dlx_issues([rabbit_types:amqqueue()]) -> list().
+-spec collect_reject_publish_dlx_issues([amqqueue:amqqueue()]) -> list().
 collect_reject_publish_dlx_issues(Queues) ->
     lists:filtermap(
         fun(Queue) ->
@@ -658,7 +658,7 @@ collect_reject_publish_dlx_issues(Queues) ->
 %% @doc Collect queue expires issues from queues
 %% Queues with x-expires argument or expires policy are unsuitable because
 %% the queue could expire and be deleted during the migration process
--spec collect_queue_expires_issues([rabbit_types:amqqueue()]) -> list().
+-spec collect_queue_expires_issues([amqqueue:amqqueue()]) -> list().
 collect_queue_expires_issues(Queues) ->
     lists:filtermap(
         fun(Queue) ->
@@ -683,7 +683,7 @@ collect_queue_expires_issues(Queues) ->
     ).
 
 %% @doc Check if queue has expires policy
--spec has_expires_policy(rabbit_types:amqqueue()) -> boolean().
+-spec has_expires_policy(amqqueue:amqqueue()) -> boolean().
 has_expires_policy(Queue) ->
     case rabbit_policy:effective_definition(Queue) of
         Policies when is_list(Policies) ->
@@ -695,7 +695,7 @@ has_expires_policy(Queue) ->
 %% @doc Collect message TTL issues from queues
 %% Queues with x-message-ttl argument or message-ttl policy are unsuitable because
 %% messages could expire during the migration process, causing count mismatches
--spec collect_message_ttl_issues([rabbit_types:amqqueue()]) -> list().
+-spec collect_message_ttl_issues([amqqueue:amqqueue()]) -> list().
 collect_message_ttl_issues(Queues) ->
     lists:filtermap(
         fun(Queue) ->
@@ -720,7 +720,7 @@ collect_message_ttl_issues(Queues) ->
     ).
 
 %% @doc Check if queue has message-ttl policy
--spec has_message_ttl_policy(rabbit_types:amqqueue()) -> boolean().
+-spec has_message_ttl_policy(amqqueue:amqqueue()) -> boolean().
 has_message_ttl_policy(Queue) ->
     case rabbit_policy:effective_definition(Queue) of
         Policies when is_list(Policies) ->

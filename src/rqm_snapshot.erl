@@ -19,7 +19,8 @@ create_snapshot(VHost) ->
     create_snapshot(SnapshotMode, VHost).
 
 %% @doc Create a tar-based fake snapshot
--spec create_snapshot(tar | ebs | none, rabbit_types:vhost()) -> {ok, snapshot_state()} | {error, term()}.
+-spec create_snapshot(tar | ebs | none, rabbit_types:vhost()) ->
+    {ok, snapshot_state()} | {error, term()}.
 create_snapshot(tar, VHost) ->
     ?LOG_DEBUG("rqm: creating fake EBS snapshot (tar archive) for vhost ~ts on node ~tp", [
         VHost, node()
@@ -50,7 +51,11 @@ create_snapshot(tar, VHost) ->
                     ?LOG_DEBUG("rqm: fake EBS snapshot created: ~ts (~w bytes)", [
                         ArchiveFile, ArchiveSize
                     ]),
-                    {ok, {rqm_util:to_unicode(ArchiveFile), SnapshotDir, rqm_util:to_unicode(rabbit_net:hostname())}};
+                    {ok, {
+                        rqm_util:to_unicode(ArchiveFile),
+                        SnapshotDir,
+                        rqm_util:to_unicode(rabbit_net:hostname())
+                    }};
                 false ->
                     ?LOG_ERROR("rqm: tar archive was not created: ~s", [ArchiveFile]),
                     {error, archive_not_created}
@@ -223,7 +228,8 @@ extract_volume_id(_, Acc) ->
     Acc.
 
 %% @doc Create EBS snapshot for single volume ID
--spec create_ebs_snapshot(InstanceId :: string(), VolumeId :: string()) -> {ok, snapshot_state()} | {error, term()}.
+-spec create_ebs_snapshot(InstanceId :: string(), VolumeId :: string()) ->
+    {ok, snapshot_state()} | {error, term()}.
 create_ebs_snapshot(InstanceId, VolumeId) ->
     Timestamp = rqm_util:format_iso8601_utc(),
     Description = rqm_util:unicode_format("RabbitMQ migration snapshot ~s on ~s", [
