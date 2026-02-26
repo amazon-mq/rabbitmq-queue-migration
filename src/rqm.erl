@@ -331,22 +331,29 @@ handle_migration_exception_on_nodes(Nodes, Class, Reason) ->
     ],
     ok.
 
-handle_migration_exception(Class, Ex, Stack, MigrationId) ->
-    ?LOG_ERROR(
-        "rqm: CRITICAL EXCEPTION in migration ~s: ~tp",
-        [format_migration_id(MigrationId), Class]
+handle_migration_exception(
+    Class, {migration_failed_rollback_pending, {errors, Errors}} = Ex, Stack, MigrationId
+) ->
+    log_migration_exception(Class, Ex, Stack, MigrationId),
+    {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
+    ?LOG_WARNING(
+        "rqm: migration ~s failed, rollback is pending! ~p error(s), ~p aborted",
+        [format_migration_id(MigrationId), ErrorCount, AbortedCount]
     ),
-    ?LOG_ERROR("~tp", [Stack]),
-
+    case rqm_db:get_migration(MigrationId) of
+        {ok, #queue_migration{status = rollback_pending}} ->
+            ?LOG_INFO(
+                "rqm: migration ~s status is rollback_pending, preserving status for HOTW rollback",
+                [format_migration_id(MigrationId)]
+            );
+        _ ->
+            update_migration_failed_safe(Class, Ex, MigrationId)
+    end;
+handle_migration_exception(Class, Ex, Stack, MigrationId) ->
+    log_migration_exception(Class, Ex, Stack, MigrationId),
     case Ex of
         {badmatch, _} ->
             ?LOG_ERROR("rqm: badmatch error in migration ~s", [format_migration_id(MigrationId)]);
-        {migration_failed_rollback_pending, {errors, Errors}} ->
-            {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
-            ?LOG_WARNING(
-                "rqm: migration ~s failed, rollback is pending! ~p error(s), ~p aborted",
-                [format_migration_id(MigrationId), ErrorCount, AbortedCount]
-            );
         {migration_failed_no_rollback, {errors, Errors}} ->
             {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
             ?LOG_WARNING(
@@ -358,7 +365,16 @@ handle_migration_exception(Class, Ex, Stack, MigrationId) ->
                 format_migration_id(MigrationId), Ex
             ])
     end,
+    update_migration_failed_safe(Class, Ex, MigrationId).
 
+log_migration_exception(Class, Ex, Stack, MigrationId) ->
+    ?LOG_ERROR(
+        "rqm: CRITICAL EXCEPTION in migration ~s: ~tp",
+        [format_migration_id(MigrationId), Class]
+    ),
+    ?LOG_ERROR("~tp:~tp~n~tp", [Class, Ex, Stack]).
+
+update_migration_failed_safe(Class, Ex, MigrationId) ->
     ErrorReason = format_migration_error(Class, Ex),
     case rqm_db:update_migration_failed(MigrationId, ErrorReason) of
         {ok, _} ->
