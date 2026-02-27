@@ -19,6 +19,7 @@
     create_migration/6,
     update_migration_status/2,
     update_migration_failed/2,
+    update_migration_rollback_pending/2,
     update_migration_completed/2,
     update_migration_completed_count/1,
     update_migration_skipped_count/1,
@@ -145,6 +146,14 @@ update_migration_status(MigrationId, Status) ->
 update_migration_failed(MigrationId, Error) ->
     F = fun(M) ->
         M#queue_migration{status = failed, error = Error, completed_at = os:timestamp()}
+    end,
+    update_migration(MigrationId, F).
+
+%% @doc Update migration as rollback_pending with error reason and completion timestamp
+-spec update_migration_rollback_pending(term(), term()) -> {ok, #queue_migration{}} | {error, not_found}.
+update_migration_rollback_pending(MigrationId, Error) ->
+    F = fun(M) ->
+        M#queue_migration{status = rollback_pending, error = Error, completed_at = os:timestamp()}
     end,
     update_migration(MigrationId, F).
 

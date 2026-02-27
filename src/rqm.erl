@@ -1041,7 +1041,8 @@ do_migration_work(ClassicQ, Gatherer, Resource, #migration_opts{migration_id = M
                                 "rqm: CRITICAL - failure detected for ~ts, setting migration status to rollback_pending",
                                 [rabbit_misc:rs(Resource)]
                             ),
-                            {ok, _} = rqm_db:update_migration_status(MigrationId, rollback_pending),
+                            ErrorReason = format_migration_error(Class, Reason),
+                            {ok, _} = rqm_db:update_migration_rollback_pending(MigrationId, ErrorReason),
                             ?LOG_DEBUG("rqm: migration ~tp status updated to rollback_pending", [
                                 MigrationId
                             ]),
