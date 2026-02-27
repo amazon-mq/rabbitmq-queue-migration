@@ -46,7 +46,8 @@
     description => string()
 }.
 
--spec instance_volumes() -> {'ok', volumes_list()} | {'error', 'undefined'}.
+-spec instance_volumes() ->
+    {'ok', {string(), volumes_list()}} | {'error', 'undefined' | 'parse_error'}.
 %% @doc Return the EBS volumes attached to the current instance from the EC2 API.
 %% @end
 instance_volumes() ->
@@ -56,11 +57,16 @@ instance_volumes() ->
                 "/?Action=DescribeVolumes&Filter.1.Name=attachment.instance-id&Filter.1.Value.1=" ++
                     InstanceId ++ "&Version=2016-11-15",
             case rabbitmq_aws:api_get_request("ec2", Path) of
-                {ok, Response} -> parse_volumes_response(Response);
-                {error, Reason} -> {error, Reason}
+                {ok, Response} ->
+                    case parse_volumes_response(Response) of
+                        {ok, Volumes} -> {ok, {InstanceId, Volumes}};
+                        Error -> Error
+                    end;
+                Error ->
+                    Error
             end;
-        {error, Reason} ->
-            {error, Reason}
+        Error ->
+            Error
     end.
 
 -spec create_volume_snapshot(string()) -> {ok, string(), snapshot_metadata()} | {error, term()}.

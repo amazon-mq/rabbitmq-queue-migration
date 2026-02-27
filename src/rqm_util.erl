@@ -38,7 +38,7 @@ has_ha_policy(Q) ->
 
 %% @doc Check if all mirrors of a mirrored classic queue are synchronized
 %% Returns true if all mirror nodes have synchronized replicas, false otherwise
--spec has_all_mirrors_synchronized(rabbit_types:amqqueue()) -> boolean().
+-spec has_all_mirrors_synchronized(amqqueue:amqqueue()) -> boolean().
 has_all_mirrors_synchronized(Q) ->
     case amqqueue:get_type(Q) of
         rabbit_classic_queue ->
@@ -291,8 +291,8 @@ format_iso8601_utc() ->
         [Year, Month, Day, Hour, Min, Sec]
     ).
 
--spec filter_by_queue_names([rabbit_types:amqqueue()], undefined | [binary()]) ->
-    [rabbit_types:amqqueue()].
+-spec filter_by_queue_names([amqqueue:amqqueue()], undefined | [binary()]) ->
+    [amqqueue:amqqueue()].
 filter_by_queue_names(Queues, undefined) ->
     Queues;
 filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->

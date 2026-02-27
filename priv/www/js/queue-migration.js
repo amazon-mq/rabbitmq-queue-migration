@@ -172,6 +172,8 @@ function fmt_migration_status(status) {
         return '<span class="status-yellow">Interrupted</span>';
     } else if (status === 'failed') {
         return '<span class="status-red">Failed</span>';
+    } else if (status === 'rollback_pending') {
+        return '<span class="status-red">Rollback Pending</span>';
     } else {
         return '<span>' + status + '</span>';
     }
