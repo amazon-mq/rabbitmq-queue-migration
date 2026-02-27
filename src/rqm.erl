@@ -343,9 +343,11 @@ handle_migration_exception(
     case rqm_db:get_migration(MigrationId) of
         {ok, #queue_migration{status = rollback_pending}} ->
             ?LOG_INFO(
-                "rqm: migration ~s status is rollback_pending, preserving status for HOTW rollback",
+                "rqm: migration ~s status is rollback_pending, updating error message for HOTW rollback",
                 [format_migration_id(MigrationId)]
-            );
+            ),
+            ErrorReason = format_migration_error(Class, Ex),
+            rqm_db:update_migration_error(MigrationId, ErrorReason);
         _ ->
             update_migration_failed_safe(Class, Ex, MigrationId)
     end;
@@ -1042,7 +1044,9 @@ do_migration_work(ClassicQ, Gatherer, Resource, #migration_opts{migration_id = M
                                 [rabbit_misc:rs(Resource)]
                             ),
                             ErrorReason = format_migration_error(Class, Reason),
-                            {ok, _} = rqm_db:update_migration_rollback_pending(MigrationId, ErrorReason),
+                            {ok, _} = rqm_db:update_migration_rollback_pending(
+                                MigrationId, ErrorReason
+                            ),
                             ?LOG_DEBUG("rqm: migration ~tp status updated to rollback_pending", [
                                 MigrationId
                             ]),
