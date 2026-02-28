@@ -1,18 +1,26 @@
 # Changelog
 
+## [1.0.2](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.2) (2026-02-28)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.1...1.0.2)
+
+**Merged pull requests:**
+
+- Preserve rollback\_pending status in migration exception handler [\#32](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/32) ([lukebakken](https://github.com/lukebakken))
+
 ## [1.0.1](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.1) (2026-02-09)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.0...1.0.1)
 
 **Merged pull requests:**
 
-- Query quorum queue leader directly for message counts [\#27](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/27) ([lukebakken](https://github.com/lukebakken))
 - Add load balancer support for RabbitMQ cluster connections [\#26](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/26) ([lukebakken](https://github.com/lukebakken))
 - Bump ch.qos.logback:logback-classic from 1.5.25 to 1.5.27 in /test/integration [\#25](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/25) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump org.apache.maven.plugins:maven-compiler-plugin from 3.14.1 to 3.15.0 in /test/integration [\#24](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/24) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump actions/cache from 5.0.2 to 5.0.3 [\#23](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/23) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump actions/setup-java from 5.1.0 to 5.2.0 [\#21](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/21) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump actions/checkout from 6.0.1 to 6.0.2 [\#20](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/20) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Query quorum queue leader directly for message counts [\#27](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/27) ([lukebakken](https://github.com/lukebakken))
 
 ## [1.0.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.0) (2026-01-26)
 
