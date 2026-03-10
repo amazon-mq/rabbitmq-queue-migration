@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.3](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.3) (2026-03-10)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.2...1.0.3)
+
+**Merged pull requests:**
+
+- Handle 3-tuple EBS snapshot state in `cleanup_node_snapshots` [\#37](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/37) ([lukebakken](https://github.com/lukebakken))
+- Bump actions/upload-artifact from 6.0.0 to 7.0.0 [\#36](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/36) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump com.rabbitmq:amqp-client from 5.28.0 to 5.29.0 in /test/integration [\#35](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/35) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump actions/download-artifact from 7.0.0 to 8.0.0 [\#34](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/34) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump erlef/setup-beam from 1.20.4 to 1.21.0 [\#33](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/33) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump com.fasterxml.jackson.core:jackson-databind from 2.21.0 to 2.21.1 in /test/integration [\#31](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/31) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump org.apache.maven.plugins:maven-surefire-plugin from 3.5.4 to 3.5.5 in /test/integration [\#30](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/30) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump ch.qos.logback:logback-classic from 1.5.27 to 1.5.32 in /test/integration [\#29](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/29) ([dependabot[bot]](https://github.com/apps/dependabot))
+
 ## [1.0.2](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.2) (2026-02-28)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.1...1.0.2)
