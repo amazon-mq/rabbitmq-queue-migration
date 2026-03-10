@@ -598,6 +598,8 @@ cleanup_node_snapshots(NodePreparationState) ->
                 SnapshotState when is_binary(SnapshotState) ->
                     cleanup_single_snapshot(SnapshotState);
                 {SnapshotId, _VolumeId} when is_binary(SnapshotId) ->
+                    cleanup_single_snapshot(SnapshotId);
+                {SnapshotId, _VolumeId, _InstanceId} when is_binary(SnapshotId) ->
                     cleanup_single_snapshot(SnapshotId)
             end
     end.
