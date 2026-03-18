@@ -838,8 +838,11 @@ check_queue_synchronization_result(VHost) ->
                 status => passed,
                 message => <<"All mirrored classic queues are fully synchronized">>
             };
-        {error, {unsynchronized_queues, QueueNames}} ->
-            QueueNamesStr = lists:join(<<", ">>, QueueNames),
+        {error, {unsynchronized_queues, UnsuitableRecords}} ->
+            QueueNamesStr = lists:join(<<", ">>, [
+                rabbit_misc:rs(R#unsuitable_queue.resource)
+             || R <- UnsuitableRecords
+            ]),
             Message = iolist_to_binary([
                 <<"Unsynchronized queues: ">>,
                 QueueNamesStr,
