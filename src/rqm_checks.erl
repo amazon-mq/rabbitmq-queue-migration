@@ -512,23 +512,22 @@ check_memory_usage() ->
     MaxPercent = rqm_config:max_memory_usage_percent(),
     RunningNodes = rabbit_nodes:list_running(),
 
-    % Check memory usage on all running nodes
-    Results = lists:map(
-        fun(Node) ->
-            case erpc:call(Node, vm_memory_monitor, get_rss_memory, []) of
-                {badrpc, Reason} ->
-                    {Node, {error, Reason}};
-                RssMemory ->
-                    case erpc:call(Node, vm_memory_monitor, get_total_memory, []) of
-                        {badrpc, Reason} ->
-                            {Node, {error, Reason}};
-                        TotalMemory ->
-                            UsagePercent = round((RssMemory / TotalMemory) * 100),
-                            {Node, {ok, UsagePercent, RssMemory, TotalMemory}}
-                    end
+    RssResults = erpc:multicall(RunningNodes, vm_memory_monitor, get_rss_memory, []),
+    TotalResults = erpc:multicall(RunningNodes, vm_memory_monitor, get_total_memory, []),
+
+    Results = lists:zipwith3(
+        fun(Node, RssResult, TotalResult) ->
+            case {RssResult, TotalResult} of
+                {{ok, Rss}, {ok, Total}} when is_integer(Rss), is_integer(Total), Total > 0 ->
+                    UsagePercent = round((Rss / Total) * 100),
+                    {Node, {ok, UsagePercent, Rss, Total}};
+                _ ->
+                    {Node, {error, {rss_result, RssResult, total_result, TotalResult}}}
             end
         end,
-        RunningNodes
+        RunningNodes,
+        RssResults,
+        TotalResults
     ),
 
     % Check if any node exceeds the threshold
