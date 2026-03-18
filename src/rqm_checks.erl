@@ -739,6 +739,8 @@ check_system_migration_readiness(VHost) ->
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
     QueueSuitabilityResult = check_queue_suitability_result(VHost),
     DiskSpaceResult = check_disk_space_result(VHost),
+    ActiveAlarmsResult = check_active_alarms_result(),
+    MemoryUsageResult = check_memory_usage_result(),
     SnapshotResult = check_snapshot_not_in_progress_result(),
 
     [
@@ -747,6 +749,8 @@ check_system_migration_readiness(VHost) ->
         QueueSynchronizationResult,
         QueueSuitabilityResult,
         DiskSpaceResult,
+        ActiveAlarmsResult,
+        MemoryUsageResult,
         SnapshotResult
     ].
 
@@ -853,6 +857,42 @@ check_snapshot_not_in_progress_result() ->
                 check_type => snapshot_not_in_progress,
                 status => failed,
                 message => format_snapshot_in_progress_error(Details)
+            }
+    end.
+
+check_active_alarms_result() ->
+    case check_active_alarms() of
+        ok ->
+            #{
+                check_type => active_alarms,
+                status => passed,
+                message => <<"No active alarms">>
+            };
+        {error, alarms_active} ->
+            #{
+                check_type => active_alarms,
+                status => failed,
+                message =>
+                    <<"Active alarms detected. Resolve memory or disk alarms before migration.">>
+            }
+    end.
+
+check_memory_usage_result() ->
+    case check_memory_usage() of
+        {ok, sufficient} ->
+            #{
+                check_type => memory_usage,
+                status => passed,
+                message => <<"Memory usage is within acceptable limits">>
+            };
+        {error, {memory_usage_too_high, Details}} ->
+            MaxPercent = maps:get(max_allowed_percent, Details, 0),
+            #{
+                check_type => memory_usage,
+                status => failed,
+                message => rqm_util:unicode_format(
+                    "Memory usage exceeds ~p% threshold on one or more nodes.", [MaxPercent]
+                )
             }
     end.
 
