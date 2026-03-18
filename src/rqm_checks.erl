@@ -246,24 +246,32 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
 -spec check_disk_space(rabbit_types:vhost(), list()) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
 check_disk_space(VHost, UnsuitableQueues) ->
-    % Get current disk space information
-    CurrentFree = rabbit_disk_monitor:get_disk_free(),
-    DiskFreeLimit = rabbit_disk_monitor:get_disk_free_limit(),
+    RunningNodes = rabbit_nodes:list_running(),
+    FreeResults = erpc:multicall(RunningNodes, rabbit_disk_monitor, get_disk_free, []),
+    LimitResults = erpc:multicall(RunningNodes, rabbit_disk_monitor, get_disk_free_limit, []),
 
-    case CurrentFree of
-        'NaN' ->
-            ?LOG_WARNING("rqm: disk: unable to determine current free disk space"),
+    % Pair each node with its free/limit results
+    NodeResults = lists:zip3(RunningNodes, FreeResults, LimitResults),
+
+    % Find the node with the least available space (worst case)
+    case find_most_constrained_node(NodeResults) of
+        unknown ->
+            ?LOG_WARNING("rqm: disk: unable to determine free disk space on one or more nodes"),
             {error,
                 {insufficient_disk_space, #{
                     reason => disk_space_unknown,
                     message => "Unable to determine current free disk space"
                 }}};
-        _ when is_integer(CurrentFree) ->
-            % Estimate disk space needed for migration
+        none ->
+            ?LOG_WARNING("rqm: disk: no running nodes found"),
+            {error,
+                {insufficient_disk_space, #{
+                    reason => disk_space_unknown,
+                    message => "Unable to determine current free disk space"
+                }}};
+        {CurrentFree, DiskFreeLimit} ->
             EstimatedUsage = estimate_migration_disk_usage(VHost, UnsuitableQueues),
             RequiredFree = EstimatedUsage + rqm_config:min_disk_space_buffer(),
-
-            % Check if we have sufficient space
             check_disk_space_sufficiency(
                 CurrentFree,
                 DiskFreeLimit,
@@ -272,6 +280,40 @@ check_disk_space(VHost, UnsuitableQueues) ->
                 VHost
             )
     end.
+
+%% @doc Find the node with the least available disk space.
+%% Returns {MinFree, CorrespondingLimit} or unknown if any node's data is unavailable.
+-spec find_most_constrained_node([{node(), term(), term()}]) ->
+    {non_neg_integer(), non_neg_integer()} | unknown | none.
+find_most_constrained_node(NodeResults) ->
+    lists:foldl(
+        fun
+            (_, unknown) ->
+                unknown;
+            ({Node, {ok, Free}, {ok, Limit}}, Acc) when is_integer(Free), is_integer(Limit) ->
+                ?LOG_DEBUG(
+                    "rqm: disk: node ~tp free=~tpMB limit=~tpMB",
+                    [Node, Free div (1024 * 1024), Limit div (1024 * 1024)]
+                ),
+                Available = Free - Limit,
+                case Acc of
+                    none ->
+                        {Free, Limit};
+                    {AccFree, AccLimit} when Available < AccFree - AccLimit ->
+                        {Free, Limit};
+                    _ ->
+                        Acc
+                end;
+            ({Node, FreeResult, LimitResult}, _Acc) ->
+                ?LOG_WARNING(
+                    "rqm: disk: unable to get disk space from node ~tp: free=~tp limit=~tp",
+                    [Node, FreeResult, LimitResult]
+                ),
+                unknown
+        end,
+        none,
+        NodeResults
+    ).
 
 %%----------------------------------------------------------------------------
 %% Internal disk space functions
