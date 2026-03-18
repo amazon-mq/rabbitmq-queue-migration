@@ -879,6 +879,12 @@ check_disk_space_result(VHost) ->
                 status => passed,
                 message => <<"Sufficient disk space available for migration">>
             };
+        {error, {insufficient_disk_space, #{reason := disk_space_unknown}}} ->
+            #{
+                check_type => disk_space,
+                status => failed,
+                message => <<"Unable to determine free disk space on one or more cluster nodes.">>
+            };
         {error, {insufficient_disk_space, Details}} ->
             #{
                 check_type => disk_space,
