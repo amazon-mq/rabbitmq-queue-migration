@@ -250,6 +250,8 @@ function fmt_check_type_name(checkType) {
         'queue_suitability': 'Queue Suitability',
         'message_count': 'Message Count Limits',
         'disk_space': 'Disk Space',
+        'active_alarms': 'Active Alarms',
+        'memory_usage': 'Memory Usage',
         'snapshot_not_in_progress': 'EBS Snapshot Status'
     };
     return nameMap[checkType] || checkType;

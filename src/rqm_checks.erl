@@ -246,24 +246,32 @@ check_balance(Distribution, MaxImbalanceRatio, TotalQueues) ->
 -spec check_disk_space(rabbit_types:vhost(), list()) ->
     {ok, sufficient} | {error, {insufficient_disk_space, map()}}.
 check_disk_space(VHost, UnsuitableQueues) ->
-    % Get current disk space information
-    CurrentFree = rabbit_disk_monitor:get_disk_free(),
-    DiskFreeLimit = rabbit_disk_monitor:get_disk_free_limit(),
+    RunningNodes = rabbit_nodes:list_running(),
+    FreeResults = erpc:multicall(RunningNodes, rabbit_disk_monitor, get_disk_free, []),
+    LimitResults = erpc:multicall(RunningNodes, rabbit_disk_monitor, get_disk_free_limit, []),
 
-    case CurrentFree of
-        'NaN' ->
-            ?LOG_WARNING("rqm: disk: unable to determine current free disk space"),
+    % Pair each node with its free/limit results
+    NodeResults = lists:zip3(RunningNodes, FreeResults, LimitResults),
+
+    % Find the node with the least available space (worst case)
+    case find_most_constrained_node(NodeResults) of
+        unknown ->
+            ?LOG_WARNING("rqm: disk: unable to determine free disk space on one or more nodes"),
             {error,
                 {insufficient_disk_space, #{
                     reason => disk_space_unknown,
                     message => "Unable to determine current free disk space"
                 }}};
-        _ when is_integer(CurrentFree) ->
-            % Estimate disk space needed for migration
+        none ->
+            ?LOG_WARNING("rqm: disk: no running nodes found"),
+            {error,
+                {insufficient_disk_space, #{
+                    reason => disk_space_unknown,
+                    message => "Unable to determine current free disk space"
+                }}};
+        {CurrentFree, DiskFreeLimit} ->
             EstimatedUsage = estimate_migration_disk_usage(VHost, UnsuitableQueues),
             RequiredFree = EstimatedUsage + rqm_config:min_disk_space_buffer(),
-
-            % Check if we have sufficient space
             check_disk_space_sufficiency(
                 CurrentFree,
                 DiskFreeLimit,
@@ -272,6 +280,40 @@ check_disk_space(VHost, UnsuitableQueues) ->
                 VHost
             )
     end.
+
+%% @doc Find the node with the least available disk space.
+%% Returns {MinFree, CorrespondingLimit} or unknown if any node's data is unavailable.
+-spec find_most_constrained_node([{node(), term(), term()}]) ->
+    {non_neg_integer(), non_neg_integer()} | unknown | none.
+find_most_constrained_node(NodeResults) ->
+    lists:foldl(
+        fun
+            (_, unknown) ->
+                unknown;
+            ({Node, {ok, Free}, {ok, Limit}}, Acc) when is_integer(Free), is_integer(Limit) ->
+                ?LOG_DEBUG(
+                    "rqm: disk: node ~tp free=~tpMB limit=~tpMB",
+                    [Node, Free div (1024 * 1024), Limit div (1024 * 1024)]
+                ),
+                Available = Free - Limit,
+                case Acc of
+                    none ->
+                        {Free, Limit};
+                    {AccFree, AccLimit} when Available < AccFree - AccLimit ->
+                        {Free, Limit};
+                    _ ->
+                        Acc
+                end;
+            ({Node, FreeResult, LimitResult}, _Acc) ->
+                ?LOG_WARNING(
+                    "rqm: disk: unable to get disk space from node ~tp: free=~tp limit=~tp",
+                    [Node, FreeResult, LimitResult]
+                ),
+                unknown
+        end,
+        none,
+        NodeResults
+    ).
 
 %%----------------------------------------------------------------------------
 %% Internal disk space functions
@@ -470,23 +512,22 @@ check_memory_usage() ->
     MaxPercent = rqm_config:max_memory_usage_percent(),
     RunningNodes = rabbit_nodes:list_running(),
 
-    % Check memory usage on all running nodes
-    Results = lists:map(
-        fun(Node) ->
-            case erpc:call(Node, vm_memory_monitor, get_rss_memory, []) of
-                {badrpc, Reason} ->
-                    {Node, {error, Reason}};
-                RssMemory ->
-                    case erpc:call(Node, vm_memory_monitor, get_total_memory, []) of
-                        {badrpc, Reason} ->
-                            {Node, {error, Reason}};
-                        TotalMemory ->
-                            UsagePercent = round((RssMemory / TotalMemory) * 100),
-                            {Node, {ok, UsagePercent, RssMemory, TotalMemory}}
-                    end
+    RssResults = erpc:multicall(RunningNodes, vm_memory_monitor, get_rss_memory, []),
+    TotalResults = erpc:multicall(RunningNodes, vm_memory_monitor, get_total_memory, []),
+
+    Results = lists:zipwith3(
+        fun(Node, RssResult, TotalResult) ->
+            case {RssResult, TotalResult} of
+                {{ok, Rss}, {ok, Total}} when is_integer(Rss), is_integer(Total), Total > 0 ->
+                    UsagePercent = round((Rss / Total) * 100),
+                    {Node, {ok, UsagePercent, Rss, Total}};
+                _ ->
+                    {Node, {error, {rss_result, RssResult, total_result, TotalResult}}}
             end
         end,
-        RunningNodes
+        RunningNodes,
+        RssResults,
+        TotalResults
     ),
 
     % Check if any node exceeds the threshold
@@ -739,6 +780,8 @@ check_system_migration_readiness(VHost) ->
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
     QueueSuitabilityResult = check_queue_suitability_result(VHost),
     DiskSpaceResult = check_disk_space_result(VHost),
+    ActiveAlarmsResult = check_active_alarms_result(),
+    MemoryUsageResult = check_memory_usage_result(),
     SnapshotResult = check_snapshot_not_in_progress_result(),
 
     [
@@ -747,6 +790,8 @@ check_system_migration_readiness(VHost) ->
         QueueSynchronizationResult,
         QueueSuitabilityResult,
         DiskSpaceResult,
+        ActiveAlarmsResult,
+        MemoryUsageResult,
         SnapshotResult
     ].
 
@@ -792,8 +837,11 @@ check_queue_synchronization_result(VHost) ->
                 status => passed,
                 message => <<"All mirrored classic queues are fully synchronized">>
             };
-        {error, {unsynchronized_queues, QueueNames}} ->
-            QueueNamesStr = lists:join(<<", ">>, QueueNames),
+        {error, {unsynchronized_queues, UnsuitableRecords}} ->
+            QueueNamesStr = lists:join(<<", ">>, [
+                rabbit_misc:rs(R#unsuitable_queue.resource)
+             || R <- UnsuitableRecords
+            ]),
             Message = iolist_to_binary([
                 <<"Unsynchronized queues: ">>,
                 QueueNamesStr,
@@ -830,6 +878,12 @@ check_disk_space_result(VHost) ->
                 status => passed,
                 message => <<"Sufficient disk space available for migration">>
             };
+        {error, {insufficient_disk_space, #{reason := disk_space_unknown}}} ->
+            #{
+                check_type => disk_space,
+                status => failed,
+                message => <<"Unable to determine free disk space on one or more cluster nodes.">>
+            };
         {error, {insufficient_disk_space, Details}} ->
             #{
                 check_type => disk_space,
@@ -853,6 +907,42 @@ check_snapshot_not_in_progress_result() ->
                 check_type => snapshot_not_in_progress,
                 status => failed,
                 message => format_snapshot_in_progress_error(Details)
+            }
+    end.
+
+check_active_alarms_result() ->
+    case check_active_alarms() of
+        ok ->
+            #{
+                check_type => active_alarms,
+                status => passed,
+                message => <<"No active alarms">>
+            };
+        {error, alarms_active} ->
+            #{
+                check_type => active_alarms,
+                status => failed,
+                message =>
+                    <<"Active alarms detected. Resolve memory or disk alarms before migration.">>
+            }
+    end.
+
+check_memory_usage_result() ->
+    case check_memory_usage() of
+        {ok, sufficient} ->
+            #{
+                check_type => memory_usage,
+                status => passed,
+                message => <<"Memory usage is within acceptable limits">>
+            };
+        {error, {memory_usage_too_high, Details}} ->
+            MaxPercent = maps:get(max_allowed_percent, Details, 0),
+            #{
+                check_type => memory_usage,
+                status => failed,
+                message => rqm_util:unicode_format(
+                    "Memory usage exceeds ~p% threshold on one or more nodes.", [MaxPercent]
+                )
             }
     end.
 
