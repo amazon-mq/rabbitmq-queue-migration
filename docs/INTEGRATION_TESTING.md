@@ -124,6 +124,8 @@ The test uses a 3-node RabbitMQ cluster with unique ports per node:
 All nodes use identical configuration:
 
 ```ini
+quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true
+queue_migration.snapshot_mode = none
 cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
 cluster_formation.classic_config.nodes.1 = rabbit@rmq0
 cluster_formation.classic_config.nodes.2 = rabbit@rmq1

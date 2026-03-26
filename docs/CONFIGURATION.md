@@ -82,6 +82,10 @@ queue_migration.message_count_under_tolerance_percent = 2.0
 **Description:** Number of messages to prefetch during shovel transfer
 
 **Usage:**
+```erlang
+queue_migration.shovel_prefetch_count = 256
+```
+
 **Note:** The default value is optimized for typical production workloads.
 
 ---

@@ -135,7 +135,7 @@ Queues with zero messages skip the two-phase process:
 
 **Listener Suspension:**
 - Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended broker-wide
-- All existing client connections are closed gracefully
+- All existing client connections are closed
 - HTTP API remains available for monitoring
 
 **Why Suspend Listeners:**

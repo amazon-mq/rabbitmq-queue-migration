@@ -362,8 +362,7 @@ Returned when the migration ID is invalid (cannot be decoded) or the migration d
 
 ```json
 {
-  "error": "Object Not Found",
-  "reason": "Not Found"
+  "error": "Migration not found"
 }
 ```
 
@@ -409,8 +408,7 @@ Returned when the migration ID is invalid or the migration does not exist.
 
 ```json
 {
-  "error": "Object Not Found",
-  "reason": "Not Found"
+  "error": "Migration not found"
 }
 ```
 
@@ -450,6 +448,10 @@ curl -u guest:guest -X POST \
 curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2Fproduction%2Fapp
 
+# Check all vhosts
+curl -u guest:guest -X POST \
+  http://localhost:15672/api/queue-migration/check/all
+
 # With skip mode enabled
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -457,7 +459,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 
-**Response (200 OK):**
+**Response (200 OK) - single vhost:**
 ```json
 {
   "vhost": "/",
@@ -501,6 +503,16 @@ curl -u guest:guest -X POST \
         "message": "Sufficient disk space available for migration"
       },
       {
+        "check_type": "active_alarms",
+        "status": "passed",
+        "message": "No active alarms"
+      },
+      {
+        "check_type": "memory_usage",
+        "status": "passed",
+        "message": "Memory usage is within acceptable limits"
+      },
+      {
         "check_type": "snapshot_not_in_progress",
         "status": "passed",
         "message": "No EBS snapshots in progress"
@@ -527,7 +539,34 @@ curl -u guest:guest -X POST \
 - `queue_synchronization` - All mirrored queues synchronized
 - `queue_suitability` - All queues suitable for migration
 - `disk_space` - Sufficient disk space available
+- `active_alarms` - No active memory or disk alarms
+- `memory_usage` - Memory usage within configured threshold
 - `snapshot_not_in_progress` - No EBS snapshots currently in progress
+
+**Response (200 OK) - all vhosts (`/api/queue-migration/check/all`):**
+```json
+{
+  "vhost": "all",
+  "vhost_results": [
+    {
+      "vhost": "/",
+      "overall_ready": true,
+      "skip_unsuitable_queues": false,
+      "system_checks": { "..." : "..." },
+      "queue_checks": { "..." : "..." }
+    },
+    {
+      "vhost": "/production",
+      "overall_ready": false,
+      "skip_unsuitable_queues": false,
+      "system_checks": { "..." : "..." },
+      "queue_checks": { "..." : "..." }
+    }
+  ]
+}
+```
+
+Each entry in `vhost_results` has the same shape as the single-vhost response.
 
 ---
 
@@ -560,16 +599,19 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
   "snapshots": [
     {
       "node": "rabbit@node1",
+      "instance_id": "i-0abc1234567890001",
       "snapshot_id": "snap-0abc123",
       "volume_id": "vol-0def456"
     },
     {
       "node": "rabbit@node2",
+      "instance_id": "i-0abc1234567890002",
       "snapshot_id": "snap-0ghi789",
       "volume_id": "vol-0jkl012"
     },
     {
       "node": "rabbit@node3",
+      "instance_id": "i-0abc1234567890003",
       "snapshot_id": "snap-0mno345",
       "volume_id": "vol-0pqr678"
     }
@@ -581,6 +623,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 - Standard migration fields (id, vhost, status, etc.)
 - `snapshots` - Array of snapshot information for rollback:
   - `node` - RabbitMQ node name
+  - `instance_id` - EC2 instance ID
   - `snapshot_id` - EBS snapshot ID or tar file path
   - `volume_id` - EBS volume ID or tar file path
 
@@ -603,7 +646,6 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 | 400 | Bad Request | Invalid parameters or validation failed |
 | 401 | Unauthorized | Authentication required |
 | 404 | Not Found | Resource not found (migration ID or vhost) |
-| 409 | Conflict | Migration already in progress |
 | 500 | Internal Server Error | Server error during processing |
 
 ## Migration ID Format
@@ -663,8 +705,8 @@ done
 **Migration Already Running:**
 ```json
 {
-  "error": "Migration already in progress",
-  "current_migration_id": "..."
+  "error": "bad_request",
+  "reason": "Migration validation failed: in_progress"
 }
 ```
 **Action:** Wait for current migration to complete or check its status.
@@ -672,11 +714,8 @@ done
 **Validation Failed:**
 ```json
 {
-  "error": "Pre-migration validation failed",
-  "details": {
-    "check": "shovel_plugin",
-    "reason": "rabbitmq_shovel plugin is not enabled"
-  }
+  "error": "bad_request",
+  "reason": "rabbitmq_shovel plugin must be enabled for migration. Enable the plugin with: rabbitmq-plugins enable rabbitmq_shovel"
 }
 ```
 **Action:** Fix the validation issue and retry. Use the compatibility endpoint for detailed validation results.
@@ -684,8 +723,10 @@ done
 **No Eligible Queues:**
 ```json
 {
-  "error": "No eligible queues found for migration",
-  "vhost": "/"
+  "error": "bad_request",
+  "reason": "No mirrored classic queues found in this vhost. Only classic queues with an HA policy can be migrated.",
+  "total_queues": 0,
+  "unsuitable_queues": 0
 }
 ```
 **Action:** Verify queues are mirrored classic queues with HA policies applied.
@@ -693,13 +734,10 @@ done
 **Insufficient Disk Space:**
 ```json
 {
-  "error": "Pre-migration validation failed",
-  "details": {
-    "check": "disk_space",
-    "reason": "Insufficient disk space",
-    "required_bytes": 10737418240,
-    "available_bytes": 5368709120
-  }
+  "error": "bad_request",
+  "reason": "Insufficient disk space for migration. Required: 5000MB, Available: 2000MB",
+  "required_free_mb": 5000,
+  "available_for_migration_mb": 2000
 }
 ```
 **Action:** Free up disk space or reduce queue message counts before migrating.
@@ -787,5 +825,4 @@ curl -s -u guest:guest \
 ## See Also
 
 - [README](README.md) - Plugin overview and quick start
-- [AGENTS](AGENTS.md) - Technical architecture and implementation details
 - [test/integration/README](test/integration/README.md) - Integration testing guide
