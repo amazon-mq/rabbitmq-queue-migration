@@ -32,6 +32,7 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 - [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
 - [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
 - [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration if EBS snapshots are used
+- [Performance Reference](docs/PERFORMANCE.md) - Real-world migration timing data
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
 
