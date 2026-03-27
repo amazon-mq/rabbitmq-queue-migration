@@ -69,9 +69,7 @@ smaller increments if your total queue data exceeds this threshold.
 
 ---
 
-## mq.m7g.4xlarge
-
-*Results to be added after testing.*
+## mq.m7g.4xlarge — Migration at Disk Capacity Limit
 
 ### Environment
 
@@ -83,6 +81,32 @@ smaller increments if your total queue data exceeds this threshold.
 | Storage | EBS |
 | Disk per node | 90 GB |
 | Network baseline / burst | 7.5 / 15.0 Gbps |
+
+See [Amazon MQ RabbitMQ broker instance types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
+for full instance specifications.
+
+### Migration Parameters
+
+| Property | Value |
+|----------|-------|
+| Queues migrated | 250 |
+| Messages per queue | 5,000 |
+| Message size | 16 KiB |
+| Total data | ~19.1 GiB |
+
+### Result
+
+| Property | Value |
+|----------|-------|
+| Duration | 11 minutes 35 seconds |
+| Outcome | All 250 queues completed successfully |
+
+### Notes
+
+This migration was configured to approach the disk capacity limit of the
+mq.m7g.4xlarge instance type. With 90 GB of disk per node and ~19.1 GiB
+of queue data, the plugin requires approximately 38.7 GB free
+(19.1 GiB × 2.0 multiplier + 500 MB buffer).
 
 ---
 
