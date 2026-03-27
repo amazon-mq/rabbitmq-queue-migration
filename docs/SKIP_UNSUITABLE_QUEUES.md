@@ -484,4 +484,4 @@ A: Yes - use the compatibility check with `skip_unsuitable_queues=true`.
 
 - **HTTP API Reference:** HTTP_API.md
 - **Troubleshooting Guide:** TROUBLESHOOTING.md
-- **Integration Tests:** INTEGRATION_TESTS.md (see SkipUnsuitableTest)
+- **Integration Tests:** INTEGRATION_TESTING.md (see SkipUnsuitableTest)

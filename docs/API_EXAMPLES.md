@@ -62,6 +62,16 @@ curl -u guest:guest -X POST \
         "message": "Sufficient disk space available for migration"
       },
       {
+        "check_type": "active_alarms",
+        "status": "passed",
+        "message": "No active alarms"
+      },
+      {
+        "check_type": "memory_usage",
+        "status": "passed",
+        "message": "Memory usage is within acceptable limits"
+      },
+      {
         "check_type": "snapshot_not_in_progress",
         "status": "passed",
         "message": "No EBS snapshots in progress"
@@ -118,13 +128,13 @@ curl -u guest:guest -X POST \
     },
     "results": [
       {
-        "name": "unsync.queue.1",
+        "name": "expires.queue.1",
         "vhost": "/",
         "compatible": false,
         "issues": [
           {
-            "type": "unsynchronized",
-            "reason": "Queue has unsynchronized mirrors"
+            "type": "queue_expires",
+            "reason": "Queues with x-expires argument or expires policy are unsuitable for migration because the queue could expire during the process"
           }
         ]
       },
@@ -135,7 +145,7 @@ curl -u guest:guest -X POST \
         "issues": [
           {
             "type": "unsuitable_overflow",
-            "reason": "Queue has overflow policy reject-publish-dlx"
+            "reason": "x-overflow=reject-publish-dlx is not supported in quorum queues. Quorum queues support drop-head and reject-publish, but reject-publish does not provide dead lettering like reject-publish-dlx does in classic queues."
           }
         ]
       },
@@ -146,7 +156,7 @@ curl -u guest:guest -X POST \
         "issues": [
           {
             "type": "too_many_queues",
-            "reason": "Too many queues to migrate safely"
+            "reason": "Too many queues for migration (10001 found, max 10000)"
           }
         ]
       }
@@ -379,6 +389,7 @@ curl -u guest:guest \
     "snapshots": [
       {
         "node": "rabbit-1@hostname",
+        "instance_id": "i-0abc1234567890001",
         "volume_id": "vol-abc123",
         "snapshot_id": "snap-xyz789"
       }
@@ -440,6 +451,8 @@ curl -u guest:guest \
 - `unsynchronized` - Mirrored queue not synchronized
 - `too_many_queues` - Too many queues to migrate safely
 - `unsuitable_overflow` - Queue has reject-publish-dlx overflow policy
+- `queue_expires` - Queue has x-expires argument or expires policy
+- `message_ttl` - Queue has x-message-ttl argument or message-ttl policy
 - `interrupted` - Migration was manually interrupted
 
 ---
@@ -579,7 +592,7 @@ curl -u guest:guest -X POST \
 ```json
 {
   "error": "bad_request",
-  "reason": "A migration is already in progress"
+  "reason": "Migration validation failed: in_progress"
 }
 ```
 
@@ -602,25 +615,6 @@ curl -u guest:guest -X POST \
 
 ---
 
-### Invalid Parameter
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"batch_size": -10}' \
-  http://localhost:15672/api/queue-migration/start
-```
-
-**Response (400):**
-```json
-{
-  "error": "bad_request",
-  "reason": "batch_size must be a positive integer or 'all'"
-}
-```
-
----
-
 ### Migration Not Found
 
 ```bash
@@ -631,8 +625,7 @@ curl -u guest:guest \
 **Response (404):**
 ```json
 {
-  "error": "Object Not Found",
-  "reason": "Not Found"
+  "error": "Migration not found"
 }
 ```
 

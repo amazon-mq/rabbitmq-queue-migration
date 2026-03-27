@@ -259,7 +259,9 @@ curl -u guest:guest http://localhost:15672/api/shovels
 
 **Log Message:** `Failed to create shovel: noproc`
 
-**Cause:** Shovel supervisor not available
+**Cause:** A race condition in `mirrored_supervisor:child/2` causes a `badmatch` exception during shovel cleanup. If this occurs frequently enough, the shovel supervisor exceeds its restart intensity and stops, preventing new shovels from being created.
+
+**Note:** This is fixed in RabbitMQ 4.1.x and later via [rabbitmq/rabbitmq-server#15229](https://github.com/rabbitmq/rabbitmq-server/pull/15229). On RabbitMQ 3.13.x this fix must be backported manually. Amazon MQ for RabbitMQ includes this fix.
 
 **Solution:** Plugin has automatic retry (10 attempts). If still failing:
 ```bash
@@ -326,7 +328,6 @@ curl -u guest:guest \
 - Queues actively migrating complete normally
 - Queues not yet started are marked "skipped" with reason "interrupted"
 - Original classic queues remain for skipped queues
-- Completed queues remain as quorum queues
 - Completed queues remain as quorum queues
 
 **Recovery:**
