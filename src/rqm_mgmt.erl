@@ -51,6 +51,11 @@ content_types_provided(ReqData, {EndpointType, Context}) ->
 
 allowed_methods(ReqData, {check, Context}) ->
     {[<<"POST">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {check, Context}};
+allowed_methods(ReqData, {EndpointType, Context}) when
+    EndpointType =:= status_list;
+    EndpointType =:= rollback_pending
+->
+    {[<<"GET">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}};
 allowed_methods(ReqData, {EndpointType, Context}) ->
     {[<<"GET">>, <<"HEAD">>, <<"POST">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
 
