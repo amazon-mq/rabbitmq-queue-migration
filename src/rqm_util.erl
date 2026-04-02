@@ -25,7 +25,8 @@
     close_all_client_connections/0,
     resume_non_http_listeners/1,
     resume_all_non_http_listeners/0,
-    format_iso8601_utc/0
+    format_iso8601_utc/0,
+    is_valid_utf8/1
 ]).
 
 has_ha_policy(Q) ->
@@ -290,6 +291,14 @@ format_iso8601_utc() ->
         "~.4.0w-~.2.0w-~.2.0wT~.2.0w-~.2.0w-~.2.0wZ",
         [Year, Month, Day, Hour, Min, Sec]
     ).
+
+-spec is_valid_utf8(binary()) -> boolean().
+is_valid_utf8(<<_C/utf8, Rest/binary>>) ->
+    is_valid_utf8(Rest);
+is_valid_utf8(<<>>) ->
+    true;
+is_valid_utf8(_) ->
+    false.
 
 -spec filter_by_queue_names([amqqueue:amqqueue()], undefined | [binary()]) ->
     [amqqueue:amqqueue()].
