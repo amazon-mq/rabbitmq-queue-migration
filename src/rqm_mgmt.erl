@@ -113,25 +113,32 @@ bad_request(ErrorJson, ReqData, {EndpointType, Context}) ->
     ReqData3 = cowboy_req:reply(400, #{<<"content-type">> => <<"application/json">>}, ReqData2),
     {stop, ReqData3, {EndpointType, Context}}.
 
-accept_content(ReqData, {check, Context}) ->
-    accept_compatibility_check(ReqData, {check, Context});
-accept_content(ReqData, {start, Context}) ->
-    accept_migration_start(ReqData, {start, Context});
-accept_content(ReqData, {start_vhost, Context}) ->
-    accept_migration_start(ReqData, {start_vhost, Context});
-accept_content(ReqData, {status_detail, Context}) ->
+accept_content(ReqData, Context) ->
+    accept_content(get_and_validate_vhost(ReqData), ReqData, Context).
+
+accept_content({false, _VHost}, ReqData, ContextArg) ->
+    ErrorJson = rabbit_json:encode(#{
+        error => bad_request,
+        reason => <<"invalid virtual host argument">>
+    }),
+    bad_request(ErrorJson, ReqData, ContextArg);
+accept_content({true, VHost}, ReqData, ContextArg) ->
+    do_accept_content(VHost, ReqData, ContextArg).
+
+do_accept_content(VHost, ReqData, {check, Context}) ->
+    accept_compatibility_check(VHost, ReqData, {check, Context});
+do_accept_content(VHost, ReqData, {start, Context}) ->
+    accept_migration_start(VHost, ReqData, {start, Context});
+do_accept_content(VHost, ReqData, {start_vhost, Context}) ->
+    accept_migration_start(VHost, ReqData, {start_vhost, Context});
+do_accept_content(_VHost, ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
     accept_status_update(MigrationIdUrlEncoded, ReqData, {status_detail, Context});
-accept_content(ReqData, {interrupt, Context}) ->
+do_accept_content(_VHost, ReqData, {interrupt, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
     accept_interrupt(MigrationIdUrlEncoded, ReqData, {interrupt, Context}).
 
-accept_migration_start(ReqData, {EndpointType, Context}) ->
-    VHost =
-        case cowboy_req:binding(vhost, ReqData) of
-            undefined -> <<"/">>;
-            _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
-        end,
+accept_migration_start(VHost, ReqData, {EndpointType, Context}) ->
     % Parse request body for options
     Opts0 = parse_migration_options(VHost, ReqData),
     % First, run validation synchronously to catch errors before spawning
@@ -540,13 +547,12 @@ not_found_reply(ReqData, State) ->
 %% Compatibility check handlers
 %%--------------------------------------------------------------------
 
-accept_compatibility_check(ReqData, {EndpointType, Context}) ->
-    VHost =
-        case cowboy_req:binding(vhost, ReqData) of
-            <<"all">> -> all_vhosts;
-            undefined -> <<"/">>;
-            _VHostName -> rabbit_mgmt_util:id(vhost, ReqData)
-        end,
+accept_compatibility_check(<<"all">>, ReqData, ContextArg) ->
+    do_accept_compatibility_check(all_vhosts, ReqData, ContextArg);
+accept_compatibility_check(VHost, ReqData, ContextArg) when is_binary(VHost) ->
+    do_accept_compatibility_check(VHost, ReqData, ContextArg).
+
+do_accept_compatibility_check(VHost, ReqData, {EndpointType, Context}) ->
     OptsMap = parse_skip_unsuitable_queues_from_body(ReqData),
     case VHost of
         all_vhosts ->
@@ -626,3 +632,13 @@ format_issue({Type, Reason}) when is_atom(Type), is_list(Reason) ->
     #{type => atom_to_binary(Type, utf8), reason => list_to_binary(Reason)};
 format_issue({unsupported_argument, ArgName, Reason}) ->
     #{type => <<"unsupported_argument">>, argument => ArgName, reason => list_to_binary(Reason)}.
+
+get_and_validate_vhost(ReqData) ->
+    VHost1 =
+        case cowboy_req:binding(vhost, ReqData) of
+            undefined ->
+                <<"/">>;
+            VHost0 when is_binary(VHost0) ->
+                VHost0
+        end,
+    {rqm_util:is_valid_utf8(VHost1), VHost1}.
