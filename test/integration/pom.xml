@@ -31,7 +31,7 @@
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>http-client</artifactId>
-            <version>5.4.0</version>
+            <version>5.5.0</version>
         </dependency>
 
         <!-- Jackson for JSON processing -->
