@@ -4,7 +4,15 @@ updates:
     directory: "test/integration"
     schedule:
       interval: "weekly"
+    groups:
+      maven:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
