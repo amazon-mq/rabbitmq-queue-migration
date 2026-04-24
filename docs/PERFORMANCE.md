@@ -35,7 +35,7 @@ reference points, not guarantees.
 | Disk per node | 15 GB |
 | Network baseline / burst | 0.937 / 12.5 Gbps |
 
-See [Amazon MQ RabbitMQ broker instance types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
+See [Amazon MQ for RabbitMQ broker instance types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
 for full instance specifications.
 
 ### Migration Parameters
@@ -82,7 +82,7 @@ smaller increments if your total queue data exceeds this threshold.
 | Disk per node | 90 GB |
 | Network baseline / burst | 7.5 / 15.0 Gbps |
 
-See [Amazon MQ RabbitMQ broker instance types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
+See [Amazon MQ for RabbitMQ broker instance types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
 for full instance specifications.
 
 ### Migration Parameters
@@ -114,4 +114,4 @@ of queue data, the plugin requires approximately 38.7 GB free
 
 - **Configuration Reference:** [CONFIGURATION](CONFIGURATION.md)
 - **Troubleshooting:** [TROUBLESHOOTING](TROUBLESHOOTING.md)
-- **Amazon MQ instance types:** [rmq-broker-instance-types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)
+- **Amazon MQ for RabbitMQ instance types:** [rmq-broker-instance-types](https://docs.aws.amazon.com/amazon-mq/latest/developer-guide/rmq-broker-instance-types.html)

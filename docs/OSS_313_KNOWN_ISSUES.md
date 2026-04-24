@@ -1,0 +1,54 @@
+# Known Issues on Open-Source RabbitMQ 3.13.7
+
+**Last Updated:** April 24, 2026
+
+This document describes upstream issues that affect migrations performed by this
+plugin when running on open-source RabbitMQ 3.13.7 (the final release in the
+3.13.x series).
+
+---
+
+## Overview
+
+This plugin targets RabbitMQ 3.13.x because mirrored classic queues (the subject
+of migration) exist only in that series. During development and testing of the
+plugin, three upstream RabbitMQ issues were observed to occur more frequently
+under migration workloads. The fixes for these issues are not present in any
+open-source 3.13.x release.
+
+---
+
+## Affected Issues
+
+The following upstream issues can affect migrations on open-source RabbitMQ
+3.13.7:
+
+- [rabbitmq/rabbitmq-server#13758](https://github.com/rabbitmq/rabbitmq-server/issues/13758)
+- [rabbitmq/rabbitmq-server#14181](https://github.com/rabbitmq/rabbitmq-server/discussions/14181)
+- [rabbitmq/rabbitmq-server#15229](https://github.com/rabbitmq/rabbitmq-server/pull/15229)
+
+All three affect classic queues and the shovel subsystem, both of which are
+exercised heavily during migration.
+
+---
+
+## Mitigations
+
+There are no effective mitigations available within the plugin or its
+configuration.
+
+---
+
+## Resolution Paths
+
+- **Amazon MQ for RabbitMQ** broker builds on the 3.13 series include
+  backports of the fixes for these issues.
+- Operators with the necessary Erlang and RabbitMQ build expertise may
+  backport the upstream fixes to their own 3.13.7 build.
+
+---
+
+## Related Documentation
+
+- [Migration Guide](MIGRATION_GUIDE.md)
+- [Troubleshooting Guide](TROUBLESHOOTING.md)
