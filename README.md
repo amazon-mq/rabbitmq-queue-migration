@@ -36,7 +36,19 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
 
-## ⚠️ Important: Per-Message TTL Limitation
+## ⚠️ Known Limitations
+
+### Open-Source RabbitMQ 3.13.7
+
+Three upstream RabbitMQ issues are known to affect migrations performed by this
+plugin when running on open-source RabbitMQ 3.13.7. There are no effective
+mitigations within the plugin. Migrating empty queues prevents these issues
+entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for
+RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
+
+See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
+
+### Per-Message TTL
 
 **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing message count differences.
 
@@ -188,7 +200,7 @@ For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.m
 Quick checks:
 - **Migration fails to start:** Run compatibility check to identify issues
 - **Migration stuck:** Check status and broker logs
-- **Rollback required:** Manual cleanup needed (automatic rollback available on Amazon MQ only)
+- **Rollback required:** Manual cleanup needed (automatic rollback available on Amazon MQ for RabbitMQ only)
 
 ## Contributing
 

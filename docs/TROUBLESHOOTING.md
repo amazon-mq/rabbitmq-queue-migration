@@ -15,6 +15,12 @@ This guide covers potential issues, error messages, and solutions when using the
 
 ---
 
+> **Note:** Users running open-source RabbitMQ 3.13.7 should also review
+> [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that
+> affect migration but cannot be worked around in this plugin.
+
+---
+
 ## Pre-Migration Issues
 
 ### Compatibility Check Fails

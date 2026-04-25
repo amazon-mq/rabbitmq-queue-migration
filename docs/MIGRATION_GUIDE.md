@@ -16,6 +16,12 @@ This guide explains how the RabbitMQ Queue Migration Plugin works, including the
 
 ---
 
+> **Note:** If you are running open-source RabbitMQ 3.13.7, see
+> [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that
+> can affect migration.
+
+---
+
 ## Pre-Migration Validation
 
 The plugin performs comprehensive checks before starting migration to ensure safety and success.
