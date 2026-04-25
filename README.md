@@ -42,8 +42,9 @@ See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migratio
 
 Three upstream RabbitMQ issues are known to affect migrations performed by this
 plugin when running on open-source RabbitMQ 3.13.7. There are no effective
-mitigations within the plugin. **Amazon MQ for RabbitMQ** broker builds on the
-3.13 series include backports of the fixes.
+mitigations within the plugin. Migrating empty queues prevents these issues
+entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for
+RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
 
 See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
 

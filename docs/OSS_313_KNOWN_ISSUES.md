@@ -39,6 +39,15 @@ configuration.
 
 ---
 
+## Operational Best Practices
+
+Migrating empty queues will prevent these issues entirely, and is also the
+fastest way to complete migration. Migrating shorter queues reduces the
+likelihood of encountering these issues. Where possible, drain queues before
+migration, or schedule migration for a time when queue depth is low.
+
+---
+
 ## Resolution Paths
 
 - **Amazon MQ for RabbitMQ** broker builds on the 3.13 series include
