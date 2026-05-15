@@ -13,13 +13,26 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 - HTTP API and Web UI for control and monitoring
 - Sets vhost default queue type to `quorum` on completion
 
+## ⚠️ Mnesia-Only Compatibility
+
+> **This plugin is incompatible with brokers that have Khepri enabled as the metadata store.**
+>
+> The plugin relies on Mnesia for internal table management. On brokers running
+> Khepri (the new metadata store introduced in RabbitMQ 4.x and optionally
+> available in 3.13.x), the plugin will fail to start because Mnesia is not
+> active. Enabling this plugin on a Khepri-enabled broker causes an
+> unrecoverable boot loop.
+>
+> **Before enabling this plugin, confirm your broker is using Mnesia (the default
+> in RabbitMQ 3.13.x).**
+
 ## Prerequisites
 
 - RabbitMQ 3.13.x
 - Multi-node cluster (3+ nodes recommended)
 - `rabbitmq_management` plugin enabled
 - `rabbitmq_shovel` plugin enabled
-- Khepri database disabled (classic Mnesia required)
+- **Mnesia metadata store** (Khepri must NOT be enabled)
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
