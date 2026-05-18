@@ -38,7 +38,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.21.2</version>
+            <version>2.21.3</version>
         </dependency>
 
         <!-- Logging -->
@@ -57,7 +57,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>6.1.0-M1</version>
+            <version>6.1.0-RC1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
