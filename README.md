@@ -11,7 +11,6 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 - Selective migration by queue name or batch size
 - EBS or tar-based snapshots before migration
 - HTTP API and Web UI for control and monitoring
-- Sets vhost default queue type to `quorum` on completion
 
 ## ⚠️ Mnesia-Only Compatibility
 
