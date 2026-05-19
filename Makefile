@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_queue_migration
 PROJECT_DESCRIPTION = RabbitMQ Queue Migration
 PROJECT_MOD = rqm_app
-PROJECT_VERSION = 1.0.5
+PROJECT_VERSION = 1.0.6
 
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
