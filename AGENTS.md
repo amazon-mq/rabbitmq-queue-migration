@@ -238,21 +238,6 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - **Real-time Updates**: Database updated during message migration
 - **Percentage Calculation**: `(completed / total) * 100`
 
-## Post-Migration Configuration
-
-After successful migration, consider applying these configurations:
-
-### Set Default Queue Type
-
-```bash
-curl -X POST -u guest:guest \
-    -H "Content-Type: application/json" \
-    -d '{"default_queue_type":"quorum"}' \
-    "http://localhost:15672/api/vhosts/%2F"
-```
-
-This ensures new queues are created as quorum type by default.
-
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled **before** migration (validated during pre-migration checks). This allows applications to redeclare queues with classic arguments after migration without errors.
 
 ## Key Functions by Module

@@ -521,9 +521,6 @@ post_migration_restore(Nodes, PreparationState, VHost) when is_map(PreparationSt
     ),
     ?LOG_DEBUG("rqm: RestoreStates ~tp", [RestoreStates]),
 
-    % Always set default queue type to quorum after successful migration
-    ok = set_default_queue_type_to_quorum(VHost),
-
     RestoreEnd = erlang:system_time(second),
     RestoreDuration = RestoreEnd - RestoreStart,
     ?LOG_DEBUG("rqm: post-migration restore duration ~w seconds", [RestoreDuration]),
@@ -2031,23 +2028,6 @@ quiesce_and_flush_node(VHost) ->
 
     ?LOG_DEBUG("rqm: node ~tp successfully quiesced and flushed for vhost ~ts", [node(), VHost]),
     {ok, EbsPreparationState}.
-
-%% @doc Set default queue type to quorum for the migrated vhost
-%% This is always done after successful migration to ensure new queues are quorum by default
--spec set_default_queue_type_to_quorum(rabbit_types:vhost()) -> ok.
-set_default_queue_type_to_quorum(VHost) ->
-    ?LOG_DEBUG("rqm: setting default queue type to quorum for vhost ~ts", [VHost]),
-    case
-        rabbit_vhost:update_metadata(
-            VHost, #{default_queue_type => <<"quorum">>}, <<"internal_user">>
-        )
-    of
-        ok ->
-            ?LOG_DEBUG("rqm: successfully set default queue type to quorum for vhost ~ts", [VHost]);
-        {error, Reason} ->
-            ?LOG_ERROR("rqm: failed to set default queue type for vhost ~ts: ~p", [VHost, Reason])
-    end,
-    ok.
 
 submit_to_worker_pool(Fun) ->
     ok = worker_pool:submit_async(rqm_config:worker_pool_name(), Fun).

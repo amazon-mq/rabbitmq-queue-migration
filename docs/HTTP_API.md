@@ -742,40 +742,6 @@ done
 ```
 **Action:** Free up disk space or reduce queue message counts before migrating.
 
-## Best Practices
-
-### Before Migration
-1. **Run compatibility check** - Validate system readiness
-2. **Review eligible queues** - Confirm expected queues will migrate
-3. **Check disk space** - Ensure sufficient space available
-4. **Backup data** - Create manual backups if needed
-
-### During Migration
-1. **Monitor progress** - Poll status endpoint regularly
-2. **Check logs** - Watch RabbitMQ logs for errors
-3. **Avoid changes** - Don't modify queues during migration
-4. **Be patient** - Large migrations can take hours
-
-### After Migration
-1. **Validate results** - Check all queues converted to quorum type
-2. **Verify messages** - Confirm message counts match
-3. **Test applications** - Ensure applications work with quorum queues
-4. **Update configuration** - Set default queue type to quorum
-
-## Rate Limiting
-
-The API does not implement rate limiting, but be considerate:
-- **Status polling**: 5-10 second intervals recommended
-- **Concurrent requests**: Avoid excessive parallel requests
-- **Migration starts**: Only one migration per vhost at a time
-
-## Security Considerations
-
-- **Authentication required**: All endpoints require valid RabbitMQ credentials
-- **Authorization**: User must have monitoring permissions (or higher)
-- **Sensitive data**: Migration IDs and snapshots may contain sensitive information
-- **Network security**: Use HTTPS in production environments
-
 ## Examples
 
 ### Complete Migration Workflow
