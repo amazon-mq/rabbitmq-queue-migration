@@ -5,13 +5,18 @@
 
 dispatcher_add(function(sammy) {
     sammy.get('#/queue-migration/status', function() {
-        render({queue_migration_status: '/queue-migration/status', vhosts: '/vhosts'},
-               'queue-migration-status', '#/queue-migration/status');
+        rqm_with_req('GET', '/queue-migration/status', null, function(/* resp */) {
+            render({queue_migration_status: '/queue-migration/status', vhosts: '/vhosts'},
+                   'queue-migration-status', '#/queue-migration/status');
+        });
     });
 
     sammy.get('#/queue-migration/status/:migration_id', function() {
-        render({queue_migration_detail_status: '/queue-migration/status/' + esc(this.params['migration_id'])},
-               'queue-migration-detail-status', '#/queue-migration/status');
+        var migrationPath = '/queue-migration/status/' + esc(this.params['migration_id']);
+        rqm_with_req('GET', migrationPath, null, function(/* resp */) {
+            render({queue_migration_detail_status: migrationPath},
+                   'queue-migration-detail-status', '#/queue-migration/status');
+        });
     });
 
     sammy.post('#/queue-migration/check', function() {
@@ -21,7 +26,7 @@ dispatcher_add(function(sammy) {
             requestBody.skip_unsuitable_queues = true;
         }
 
-        with_req('POST', '/queue-migration/check/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
+        rqm_with_req('POST', '/queue-migration/check/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
             var data = JSON.parse(resp.responseText);
             var html = format('queue-migration-check-results', {compatibility_results: data});
             $('#compatibility-results').html(html);
@@ -39,8 +44,8 @@ dispatcher_add(function(sammy) {
             requestBody.skip_unsuitable_queues = true;
         }
 
-        // Use the existing with_req function for async requests with proper error handling
-        with_req('POST', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), JSON.stringify(requestBody), function(resp) {
+        // Use rqm_with_req for async requests with init-state-aware error handling
+        rqm_with_req('POST', '/queue-migration/start/' + encodeURIComponent(self.params.vhost), JSON.stringify(requestBody), function(resp) {
             // Success callback - migration started successfully
             $('#start-migration-section').hide();
             $('#migration-started-message').show();
@@ -55,6 +60,66 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Admin'][0]['Queue Migration'] = ['#/queue-migration/status', "monitoring"];
+
+// rqm_with_req: variant of with_req that intercepts 503 responses carrying
+// the queue migration plugin's init-state JSON and renders a custom banner
+// instead of letting check_bad_response show the management plugin's
+// generic "Proxy: could not connect" error.
+function rqm_with_req(method, path, body, ok_fun) {
+    if (typeof has_auth_credentials === 'function' && !has_auth_credentials()) {
+        location.reload();
+        return;
+    }
+
+    var req = xmlHttpRequest();
+    req.open(method, 'api' + path, true);
+    var header = authorization_header();
+    if (header !== null) {
+        req.setRequestHeader('authorization', header);
+    }
+    req.setRequestHeader('x-vhost', current_vhost);
+    req.onreadystatechange = function() {
+        if (req.readyState !== 4) return;
+        if (req.status === 503 && rqm_render_init_status_if_applicable(req)) {
+            return;
+        }
+        if (check_bad_response(req, true)) {
+            ok_fun(req);
+        }
+    };
+    req.send(body);
+}
+
+// Returns true if the response was a 503 from the queue migration plugin's
+// init-state gate AND the corresponding banner has been rendered. Returns
+// false otherwise (e.g. 503 from elsewhere, or a body that does not parse
+// as our JSON shape), in which case the caller falls through to standard
+// management-plugin error handling.
+function rqm_render_init_status_if_applicable(req) {
+    try {
+        var data = JSON.parse(req.responseText);
+        if (data && (data.status === 'initializing' || data.status === 'failed')) {
+            var html = format('queue-migration-init-status', data);
+            replace_content('main', html);
+            if (data.status === 'initializing') {
+                // Re-fire the route every 5 seconds while the plugin is
+                // initialising. Skip the refresh if the user has navigated
+                // away to a different page.
+                setTimeout(function() {
+                    if (typeof go === 'function' &&
+                        window.location.hash === '#/queue-migration/status') {
+                        go('#/queue-migration/status');
+                    }
+                }, 5000);
+            }
+            return true;
+        }
+    } catch (e) {
+        // Not the queue migration plugin's 503 JSON shape; let the caller
+        // fall through to check_bad_response.
+    }
+    return false;
+}
 
 // Preserve batch size form state across page refreshes
 $(document).ready(function() {
@@ -123,7 +188,7 @@ $(document).on('click', '#start-migration-btn', function() {
         requestBody.tolerance = tolerance;
     }
 
-    with_req('POST', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
+    rqm_with_req('POST', '/queue-migration/start/' + encodeURIComponent(vhost), JSON.stringify(requestBody), function(resp) {
         if (resp && resp.migration_id) {
             go('#/queue-migration/status/' + encodeURIComponent(resp.migration_id));
         } else {
@@ -139,7 +204,7 @@ $(document).on('click', '#start-migration-btn', function() {
 
 $(document).on('click', '.interrupt-migration-btn', function() {
     var migrationId = $(this).data('migration-id');
-    with_req('POST', '/queue-migration/interrupt/' + encodeURIComponent(migrationId), null, function(resp) {
+    rqm_with_req('POST', '/queue-migration/interrupt/' + encodeURIComponent(migrationId), null, function(resp) {
         update();
     });
 });
@@ -148,7 +213,7 @@ $(document).on('click', '.interrupt-migration-btn', function() {
 setInterval(function() {
     if ($('#migration-in-progress').length === 0) return;
 
-    with_req('GET', '/queue-migration/status', null, function(resp) {
+    rqm_with_req('GET', '/queue-migration/status', null, function(resp) {
         var data = JSON.parse(resp.responseText);
         var inProgress = data.status === 'in_progress';
         if (inProgress) {

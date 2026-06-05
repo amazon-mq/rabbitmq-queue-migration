@@ -1,0 +1,47 @@
+<!--
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<h1>Queue Migration</h1>
+<p class="description">
+  <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration?tab=readme-ov-file#rabbitmq-queue-migration-plugin" target="_blank">Documentation ↗</a>
+</p>
+
+<% if (status === 'initializing') { %>
+  <div class="section">
+    <h2>Plugin is starting up</h2>
+    <p>
+      The queue migration plugin is still initialising. Its Mnesia
+      tables are being set up in the background, so the plugin's HTTP
+      API is temporarily unavailable.
+    </p>
+    <ul>
+      <li>Attempt: <%= attempts %> of <%= max_attempts %></li>
+      <li>Started: <%= started_at %></li>
+    </ul>
+    <p>This page will refresh automatically every 5 seconds.</p>
+  </div>
+<% } else if (status === 'failed') { %>
+  <div class="section">
+    <h2>Plugin initialisation failed</h2>
+    <p>
+      The queue migration plugin could not finish initialising after
+      <%= max_attempts %> attempts. The plugin's HTTP API will continue
+      to return <code>503 Service Unavailable</code> until an operator
+      intervenes.
+    </p>
+    <ul>
+      <li>Started: <%= started_at %></li>
+      <li>Failed: <%= failed_at %></li>
+    </ul>
+    <p><strong>Last error:</strong></p>
+    <pre><%= error %></pre>
+    <p>
+      To retry initialisation, an operator must disable then re-enable
+      the plugin on each broker node:
+    </p>
+    <pre>rabbitmq-plugins disable rabbitmq_queue_migration
+rabbitmq-plugins enable rabbitmq_queue_migration</pre>
+  </div>
+<% } %>
