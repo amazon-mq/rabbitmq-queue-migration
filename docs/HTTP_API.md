@@ -46,6 +46,40 @@ curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
 
 ---
 
+## Plugin Initialization States
+
+The plugin sets up its Mnesia tables asynchronously when the broker starts. Until that setup completes, every endpoint listed below returns `503 Service Unavailable` with a JSON body identifying the plugin's init state. Callers must be prepared to handle 503 from any endpoint, including the status endpoints, until the plugin reports `ready`.
+
+### `503` body while the plugin is initialising
+
+```json
+{
+  "status": "initializing",
+  "attempts": 3,
+  "max_attempts": 10,
+  "started_at": "2026-06-05T17:55:00Z"
+}
+```
+
+The plugin is still attempting to set up its tables. The retry budget is 10 attempts of 30 seconds each (5 minutes total). Subsequent requests may succeed once the plugin transitions to `ready`. Callers can poll any endpoint until they receive a 2xx response.
+
+### `503` body when the plugin failed to initialise
+
+```json
+{
+  "status": "failed",
+  "attempts": 10,
+  "max_attempts": 10,
+  "started_at": "2026-06-05T17:55:00Z",
+  "failed_at": "2026-06-05T18:00:00Z",
+  "error": "{timeout_waiting_for_tables, [...], [queue_migration, queue_migration_status]}"
+}
+```
+
+The plugin exhausted its retry budget. The plugin's HTTP API will continue to return 503 until an operator runs `rabbitmq-plugins disable rabbitmq_queue_migration` followed by `rabbitmq-plugins enable rabbitmq_queue_migration` on each broker node.
+
+---
+
 ## Endpoints
 
 ### Start Migration
@@ -647,6 +681,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 | 401 | Unauthorized | Authentication required |
 | 404 | Not Found | Resource not found (migration ID or vhost) |
 | 500 | Internal Server Error | Server error during processing |
+| 503 | Service Unavailable | Plugin is still initialising or in `failed` state. See [Plugin Initialization States](#plugin-initialization-states). |
 
 ## Migration ID Format
 
@@ -680,7 +715,7 @@ while true; do
   STATUS=$(curl -s -u guest:guest \
     "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
     | jq -r '.migration.status')
-  
+
   if [ "$STATUS" = "completed" ]; then
     echo "Migration completed successfully"
     exit 0
@@ -688,11 +723,11 @@ while true; do
     echo "Migration failed: $STATUS"
     exit 1
   fi
-  
+
   PROGRESS=$(curl -s -u guest:guest \
     "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
     | jq -r '.migration.progress_percentage')
-  
+
   echo "Progress: $PROGRESS%"
   sleep $INTERVAL
 done
@@ -701,6 +736,10 @@ done
 ## Error Handling
 
 ### Error Scenarios
+
+**Plugin Initialising or Init Failed:**
+
+A `503 Service Unavailable` response from any endpoint carries a JSON body whose `status` field is either `initializing` or `failed`. See [Plugin Initialization States](#plugin-initialization-states) for the full body shape and recovery procedure.
 
 **Migration Already Running:**
 ```json
@@ -765,7 +804,7 @@ while true; do
   STATUS=$(curl -s -u guest:guest \
     "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
     | jq -r '.migration.status')
-  
+
   if [ "$STATUS" = "completed" ]; then
     echo "✅ Migration completed successfully"
     break
@@ -773,11 +812,11 @@ while true; do
     echo "❌ Migration failed: $STATUS"
     exit 1
   fi
-  
+
   PROGRESS=$(curl -s -u guest:guest \
     "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
     | jq -r '.migration.progress_percentage')
-  
+
   echo "Progress: $PROGRESS%"
   sleep 5
 done

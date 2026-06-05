@@ -14,16 +14,15 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 
 ## ⚠️ Mnesia-Only Compatibility
 
-> **This plugin is incompatible with brokers that have Khepri enabled as the metadata store.**
+> **This plugin requires Mnesia as the metadata store.**
 >
-> The plugin relies on Mnesia for internal table management. On brokers running
-> Khepri (the new metadata store introduced in RabbitMQ 4.x and optionally
-> available in 3.13.x), the plugin will fail to start because Mnesia is not
-> active. Enabling this plugin on a Khepri-enabled broker causes an
-> unrecoverable boot loop.
+> The plugin manages two internal Mnesia tables (`queue_migration` and `queue_migration_status`). On brokers where Mnesia is unavailable - Khepri-enabled 3.13.x brokers, or any cluster where peer Mnesia replicas are unreachable at boot - the plugin's table initialisation will fail. Starting in 1.1.0, the plugin tolerates this gracefully: the broker boots normally, the plugin's HTTP API returns `503 Service Unavailable` with a JSON body identifying initialisation status (see [HTTP API](docs/HTTP_API.md#plugin-initialization-states)), and the UI shows the same state. To recover from a `failed` state, run `rabbitmq-plugins disable rabbitmq_queue_migration` followed by `rabbitmq-plugins enable rabbitmq_queue_migration` on each broker node.
 >
-> **Before enabling this plugin, confirm your broker is using Mnesia (the default
-> in RabbitMQ 3.13.x).**
+> **Before enabling this plugin, confirm your broker is using Mnesia (the default in RabbitMQ 3.13.x).**
+
+## ⚠️ Broker actions during migration
+
+Restarting any broker node, performing a full cluster reboot, or applying a maintenance window restart to a broker while a migration is in progress is not supported and is not tested. Mid-migration state is complex; recovery generally requires snapshot restore (see [Snapshots Guide](docs/SNAPSHOTS.md)). Only initiate broker restarts when no migration is in flight.
 
 ## Prerequisites
 

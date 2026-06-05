@@ -22,7 +22,7 @@ reference points, not guarantees.
 
 ---
 
-## mq.m7g.large — Migration at Disk Capacity Limit
+## mq.m7g.large - Migration at Disk Capacity Limit
 
 ### Environment
 
@@ -69,7 +69,7 @@ smaller increments if your total queue data exceeds this threshold.
 
 ---
 
-## mq.m7g.4xlarge — Migration at Disk Capacity Limit
+## mq.m7g.4xlarge - Migration at Disk Capacity Limit
 
 ### Environment
 

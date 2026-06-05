@@ -581,6 +581,58 @@ curl -u guest:guest -X POST \
 
 ## Error Response Examples
 
+### Plugin Not Ready
+
+The plugin's HTTP API returns `503 Service Unavailable` until its Mnesia tables are initialised. See [HTTP API: Plugin Initialization States](HTTP_API.md#plugin-initialization-states) for the contract.
+
+#### While initialising
+
+```bash
+curl -u guest:guest -i \
+  http://localhost:15672/api/queue-migration/status
+```
+
+**Response (503):**
+```
+HTTP/1.1 503 Service Unavailable
+content-type: application/json
+
+{
+  "status": "initializing",
+  "attempts": 3,
+  "max_attempts": 10,
+  "started_at": "2026-06-05T17:55:00Z"
+}
+```
+
+Retry the request after a short delay; the plugin will eventually transition to `ready`.
+
+#### After initialisation failed
+
+```bash
+curl -u guest:guest -i \
+  http://localhost:15672/api/queue-migration/status
+```
+
+**Response (503):**
+```
+HTTP/1.1 503 Service Unavailable
+content-type: application/json
+
+{
+  "status": "failed",
+  "attempts": 10,
+  "max_attempts": 10,
+  "started_at": "2026-06-05T17:55:00Z",
+  "failed_at": "2026-06-05T18:00:00Z",
+  "error": "{timeout_waiting_for_tables, [...], [queue_migration, queue_migration_status]}"
+}
+```
+
+Run `rabbitmq-plugins disable rabbitmq_queue_migration` followed by `rabbitmq-plugins enable rabbitmq_queue_migration` on each broker node to retry initialisation.
+
+---
+
 ### Migration Already Running
 
 ```bash

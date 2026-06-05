@@ -457,7 +457,7 @@ Skipped queues remain as classic queues and still need to be addressed:
 
 ## FAQ
 
-**Q: Can I migrate only specific queues?**  
+**Q: Can I migrate only specific queues?**\
 A: Yes - use the `queue_names` parameter:
 ```bash
 curl -u guest:guest -X POST \
@@ -466,16 +466,16 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-**Q: What happens to messages in skipped queues?**  
+**Q: What happens to messages in skipped queues?**\
 A: Nothing - they remain in the classic queue unchanged.
 
-**Q: Can I retry skipped queues automatically?**  
+**Q: Can I retry skipped queues automatically?**\
 A: Not currently - you must fix issues and start a new migration.
 
-**Q: Does skip mode affect performance?**  
+**Q: Does skip mode affect performance?**\
 A: No - skipped queues are filtered out early in the process.
 
-**Q: Can I see which queues would be skipped before migrating?**  
+**Q: Can I see which queues would be skipped before migrating?**\
 A: Yes - use the compatibility check with `skip_unsuitable_queues=true`.
 
 ---

@@ -22,9 +22,9 @@ queue_migration.shovel_prefetch_count = 256
 
 ### `worker_pool_max`
 
-**Type:** Positive integer  
-**Default:** 32  
-**Range:** 1-32  
+**Type:** Positive integer\
+**Default:** 32\
+**Range:** 1-32\
 **Description:** Maximum number of concurrent queue migrations per node
 
 **Note:** The default value is optimized for typical production workloads. Actual pool size is `min(schedulers, worker_pool_max)`.
@@ -35,9 +35,9 @@ queue_migration.shovel_prefetch_count = 256
 
 ### `message_count_over_tolerance_percent`
 
-**Type:** Float  
-**Default:** 5.0  
-**Range:** 0.0-100.0  
+**Type:** Float\
+**Default:** 5.0\
+**Range:** 0.0-100.0\
 **Description:** Percentage tolerance for extra messages in destination queue
 
 **Usage:**
@@ -54,9 +54,9 @@ queue_migration.message_count_over_tolerance_percent = 10.0
 
 ### `message_count_under_tolerance_percent`
 
-**Type:** Float  
-**Default:** 0.0  
-**Range:** 0.0-100.0  
+**Type:** Float\
+**Default:** 0.0\
+**Range:** 0.0-100.0\
 **Description:** Percentage tolerance for missing messages in destination queue
 
 **Usage:**
@@ -77,8 +77,8 @@ queue_migration.message_count_under_tolerance_percent = 2.0
 
 ### `shovel_prefetch_count`
 
-**Type:** Positive integer  
-**Default:** 128  
+**Type:** Positive integer\
+**Default:** 128\
 **Description:** Number of messages to prefetch during shovel transfer
 
 **Usage:**
@@ -94,17 +94,17 @@ queue_migration.shovel_prefetch_count = 256
 
 ### `min_disk_space_buffer`
 
-**Type:** Positive integer (bytes)  
-**Default:** 524288000 (500 MB)  
+**Type:** Positive integer (bytes)\
+**Default:** 524288000 (500 MB)\
 **Description:** Minimum free disk space buffer required for migration
 
 ---
 
 ### `disk_usage_peak_multiplier`
 
-**Type:** Float  
-**Default:** 2.0  
-**Range:** >= 1.5  
+**Type:** Float\
+**Default:** 2.0\
+**Range:** >= 1.5\
 **Description:** Multiplier for estimating peak disk usage during migration
 
 **Usage:**
@@ -123,9 +123,9 @@ Required space = (concurrent_workers × avg_queue_size × multiplier) + buffer
 
 ### `max_memory_usage_percent`
 
-**Type:** Integer  
-**Default:** 40  
-**Range:** 1-100  
+**Type:** Integer\
+**Default:** 40\
+**Range:** 1-100\
 **Description:** Maximum memory usage percentage allowed for migration to start
 
 **Usage:**
@@ -139,8 +139,8 @@ queue_migration.max_memory_usage_percent = 50
 
 ### `max_queues_for_migration`
 
-**Type:** Positive integer  
-**Default:** 10000  
+**Type:** Positive integer\
+**Default:** 10000\
 **Description:** Maximum number of queues allowed in a single migration
 
 **Usage:**
@@ -154,8 +154,8 @@ queue_migration.max_queues_for_migration = 5000
 
 ### `max_migration_duration_ms`
 
-**Type:** Positive integer (milliseconds)  
-**Default:** 2700000 (45 minutes)  
+**Type:** Positive integer (milliseconds)\
+**Default:** 2700000 (45 minutes)\
 **Description:** Maximum duration for entire migration process
 
 **Usage:**
@@ -169,9 +169,9 @@ queue_migration.max_migration_duration_ms = 3600000  % 1 hour
 
 ### `progress_update_frequency`
 
-**Type:** Positive integer  
-**Default:** 10  
-**Range:** 1-4096  
+**Type:** Positive integer\
+**Default:** 10\
+**Range:** 1-4096\
 **Description:** Number of messages between progress updates
 
 **Usage:**
@@ -187,9 +187,9 @@ queue_migration.progress_update_frequency = 100
 
 ### `snapshot_mode`
 
-**Type:** Atom  
-**Default:** ebs  
-**Options:** `tar`, `ebs`, `none`  
+**Type:** Atom\
+**Default:** ebs\
+**Options:** `tar`, `ebs`, `none`\
 **Description:** Snapshot creation method
 
 **Usage:**
@@ -206,8 +206,8 @@ queue_migration.snapshot_mode = tar
 
 ### `cleanup_snapshots_on_success`
 
-**Type:** Boolean  
-**Default:** true  
+**Type:** Boolean\
+**Default:** true\
 **Description:** Whether to delete snapshots after successful migration
 
 **Usage:**
@@ -219,8 +219,8 @@ queue_migration.cleanup_snapshots_on_success = false
 
 ### `ebs_volume_device`
 
-**Type:** String  
-**Default:** "/dev/sdh"  
+**Type:** String\
+**Default:** "/dev/sdh"\
 **Description:** EBS volume device path for RabbitMQ data
 
 **Usage:**
@@ -236,8 +236,8 @@ queue_migration.ebs_volume_device = "/dev/nvme1n1"
 
 ### `max_imbalance_ratio`
 
-**Type:** Float  
-**Default:** 1.6  
+**Type:** Float\
+**Default:** 1.6\
 **Description:** Maximum allowed ratio between most and least loaded nodes
 
 **Note:** Not configurable via rabbitmq.conf (hardcoded constant)
@@ -246,8 +246,8 @@ queue_migration.ebs_volume_device = "/dev/nvme1n1"
 
 ### `min_queues_for_balance_check`
 
-**Type:** Integer  
-**Default:** 10  
+**Type:** Integer\
+**Default:** 10\
 **Description:** Minimum number of queues required to perform balance check
 
 **Note:** Not configurable via rabbitmq.conf (hardcoded constant)

@@ -9,9 +9,10 @@ This guide covers potential issues, error messages, and solutions when using the
 ## Table of Contents
 
 1. [Pre-Migration Issues](#pre-migration-issues)
-2. [Migration Failures](#migration-failures)
-3. [Performance Issues](#performance-issues)
-4. [Rollback and Recovery](#rollback-and-recovery)
+2. [Plugin Initialization](#plugin-initialization)
+3. [Migration Failures](#migration-failures)
+4. [Performance Issues](#performance-issues)
+5. [Rollback and Recovery](#rollback-and-recovery)
 
 ---
 
@@ -237,6 +238,42 @@ rabbitmqctl forget_cluster_node <node>
 ```
 
 **Do not attempt migration during partition** - resolve partition first.
+
+---
+
+## Plugin Initialization
+
+### Plugin returns 503 from every endpoint
+
+**Symptom:** Every request to `/api/queue-migration/*` returns `503 Service Unavailable` with a JSON body whose `status` field is `initializing` or `failed`.
+
+**Why this happens:** Starting in plugin version 1.1.0, the plugin's Mnesia table setup runs asynchronously after the broker starts so that table-setup failures cannot abort broker boot. Until the tables are ready, the plugin's HTTP routes return 503. See [HTTP API: Plugin Initialization States](HTTP_API.md#plugin-initialization-states) for the response contract.
+
+#### While `initializing`
+
+The plugin is still attempting to create and load its Mnesia tables. The retry budget is 10 attempts of 30 seconds each, totalling 5 minutes. No operator action is needed; subsequent requests will succeed once the plugin transitions to `ready`.
+
+The most common reasons for the plugin to spend time in `initializing`:
+
+1. **Cluster recovery from a full cluster reboot.** When peer nodes are not yet up, `rabbit_table:wait/1` blocks until peer Mnesia replicas come online. As nodes come up one at a time, the plugin's tables on this node become reachable and the plugin transitions to `ready`.
+2. **Slow disc IO during peer Mnesia replication.** Large Mnesia datasets take longer to load.
+
+#### After `failed`
+
+The plugin exhausted its retry budget without ever loading its tables. Common causes:
+
+1. **The broker is using Khepri instead of Mnesia.** This plugin is incompatible with Khepri. Confirm the metadata store with `rabbitmq-diagnostics status` and check the `Metadata Store` field. If the broker is on Khepri, the plugin should be disabled.
+2. **Peer Mnesia replicas are permanently unreachable.** A node was forgotten from the cluster but its hostname remains in this node's Mnesia schema, or DNS for cluster peers is broken. Investigate cluster membership with `rabbitmqctl cluster_status`.
+3. **Mnesia schema is in an inconsistent state.** Examine the broker logs around the plugin start time for `[error] rqm: schema setup attempt N/10 failed: ...` entries. The error term is the exact `rabbit_table:create/2` or `rabbit_table:wait/1` failure.
+
+**Recovery:** Once the underlying issue is resolved (peer replicas are reachable, schema is consistent, etc.), retry initialisation by running:
+
+```bash
+rabbitmq-plugins disable rabbitmq_queue_migration
+rabbitmq-plugins enable rabbitmq_queue_migration
+```
+
+on each broker node. The plugin restarts its state machine from `initializing` and runs the same retry loop. See the [README's Mnesia-Only Compatibility section](../README.md#%EF%B8%8F-mnesia-only-compatibility) for the full lifecycle.
 
 ---
 

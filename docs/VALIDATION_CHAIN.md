@@ -71,7 +71,7 @@ handle_check_eligible_queue_count({ok, Opts}, Nodes) ->
 cluster_partitions -> eligible_queue_count -> queue_suitability -> ... -> cluster_partitions
 ```
 
-**How to avoid:** 
+**How to avoid:**
 - `eligible_queue_count` is SPECIAL - it's only called at the end by `cluster_partitions`
 - Never add it as a regular `pre_migration_validation` clause
 - Never call it from any handler except `handle_check_cluster_partitions`
@@ -143,14 +143,14 @@ validation_checks() ->
         {shovel_plugin, fun rqm_checks:check_shovel_plugin/0},
         {khepri_disabled, fun rqm_checks:check_khepri_disabled/0},
         {relaxed_checks, fun rqm_checks:check_relaxed_checks_setting/0},
-        {leader_balance, fun(Opts) -> 
+        {leader_balance, fun(Opts) ->
             rqm_checks:check_leader_balance(Opts#migration_opts.vhost) end},
-        {queue_sync, fun(Opts) -> 
+        {queue_sync, fun(Opts) ->
             rqm_checks:check_queue_synchronization(Opts#migration_opts.vhost) end},
-        {queue_suitability, fun(Opts) -> 
+        {queue_suitability, fun(Opts) ->
             rqm_checks:check_queue_suitability(Opts#migration_opts.vhost) end},
-        {disk_space, fun(Opts) -> 
-            rqm_checks:check_disk_space(Opts#migration_opts.vhost, 
+        {disk_space, fun(Opts) ->
+            rqm_checks:check_disk_space(Opts#migration_opts.vhost,
                                         Opts#migration_opts.unsuitable_queues) end},
         {active_alarms, fun rqm_checks:check_active_alarms/0},
         {memory_usage, fun rqm_checks:check_memory_usage/0},
@@ -166,14 +166,14 @@ run_validation_chain([], Opts, _Nodes) ->
     {ok, Opts};
 run_validation_chain([{CheckName, CheckFun} | Rest], Opts, Nodes) ->
     case apply_check(CheckFun, Opts) of
-        ok -> 
+        ok ->
             run_validation_chain(Rest, Opts, Nodes);
-        {ok, UpdatedOpts} -> 
+        {ok, UpdatedOpts} ->
             run_validation_chain(Rest, UpdatedOpts, Nodes);
         {ok, Nodes} when CheckName =:= cluster_partitions ->
             % Terminal: cluster_partitions returns nodes, proceed to final check
             run_validation_chain(Rest, Opts, Nodes);
-        {error, _} = Error -> 
+        {error, _} = Error ->
             Error
     end.
 
