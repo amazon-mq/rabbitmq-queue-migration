@@ -74,10 +74,11 @@ start_link() ->
 status() ->
     gen_server:call(?MODULE, status).
 
-%% @doc Returns a JSON-shaped map describing the init state, suitable for
-%% use as the body of a 503 response. When the status is `ready`, returns
-%% the atom `ready` so callers can short-circuit.
--spec status_detail() -> ready | map().
+%% @doc Returns the current init state wrapped in `{ok, _}`. The payload
+%% is `ready` when the plugin is ready, or `{not_ready, Map}` where `Map`
+%% is a JSON-shaped map describing the `initializing` or `failed` state,
+%% suitable for use as the body of a 503 response.
+-spec status_detail() -> {ok, ready | {not_ready, map()}}.
 status_detail() ->
     gen_server:call(?MODULE, status_detail).
 
@@ -101,9 +102,9 @@ init([]) ->
 handle_call(status, _From, State = #state{status = S}) ->
     {reply, S, State};
 handle_call(status_detail, _From, State = #state{status = ready}) ->
-    {reply, ready, State};
+    {reply, {ok, ready}, State};
 handle_call(status_detail, _From, State) ->
-    {reply, build_status_detail(State), State};
+    {reply, {ok, {not_ready, build_status_detail(State)}}, State};
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 

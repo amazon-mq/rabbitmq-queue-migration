@@ -10,6 +10,7 @@
 -export([dispatcher/0, web_ui/0, to_json/2, migration_to_json_detail/1]).
 -export([
     init/2,
+    service_available/2,
     content_types_accepted/2,
     content_types_provided/2,
     allowed_methods/2,
@@ -42,6 +43,26 @@ web_ui() -> [{javascript, <<"queue-migration.js">>}].
 init(Req, [EndpointType]) ->
     {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE),
         {EndpointType, #context{}}}.
+
+%% @doc Gate every HTTP route on the plugin's init state. While the
+%% plugin is `ready` (`rqm_init_state:status_detail/0` returns
+%% `{ok, ready}`), callers see normal 2xx responses. Otherwise the
+%% plugin returns 503 Service Unavailable with a JSON body identifying
+%% the init state. This single callback covers all routes that
+%% `dispatcher/0` registers.
+service_available(ReqData, {EndpointType, Context}) ->
+    case rqm_init_state:status_detail() of
+        {ok, ready} ->
+            {true, ReqData, {EndpointType, Context}};
+        {ok, {not_ready, Detail}} when is_map(Detail) ->
+            ReqData1 = cowboy_req:set_resp_header(
+                <<"content-type">>, <<"application/json">>, ReqData
+            ),
+            ReqData2 = cowboy_req:set_resp_body(
+                rabbit_json:encode(Detail), ReqData1
+            ),
+            {false, ReqData2, {EndpointType, Context}}
+    end.
 
 content_types_accepted(ReqData, {EndpointType, Context}) ->
     {[{'*', accept_content}], ReqData, {EndpointType, Context}}.
