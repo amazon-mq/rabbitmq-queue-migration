@@ -1,7 +1,5 @@
 # Configuration Reference
 
-**Last Updated:** January 21, 2026
-
 Complete reference for all configuration parameters in the RabbitMQ Queue Migration Plugin.
 
 ---
@@ -114,8 +112,13 @@ queue_migration.disk_usage_peak_multiplier = 3.0
 
 **Calculation:**
 ```
-Required space = (concurrent_workers × avg_queue_size × multiplier) + buffer
+Required space = (total_queue_data × multiplier) + min_disk_space_buffer
 ```
+
+Where:
+- `total_queue_data` = sum of disk usage across all migratable classic queues in the vhost (computed by `rqm_checks:estimate_migration_disk_usage/2`)
+- `multiplier` = the value of this setting
+- `min_disk_space_buffer` = the value of the [`min_disk_space_buffer`](#min_disk_space_buffer) setting (default 500 MB)
 
 ---
 
