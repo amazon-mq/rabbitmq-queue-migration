@@ -1,7 +1,5 @@
 # API Examples - RabbitMQ Queue Migration Plugin
 
-**Last Updated:** January 21, 2026
-
 This document provides practical examples for all HTTP API endpoints with actual response structures verified against a running broker.
 
 ---
@@ -322,7 +320,7 @@ curl -u guest:guest \
       "total_queues": 50,
       "completed_queues": 45,
       "skipped_queues": 5,
-      "progress_percentage": 100,
+      "progress_percentage": 90,
       "skip_unsuitable_queues": true,
       "tolerance": 10.0,
       "error": null
@@ -383,7 +381,7 @@ curl -u guest:guest \
     "total_queues": 50,
     "completed_queues": 45,
     "skipped_queues": 5,
-    "progress_percentage": 100,
+    "progress_percentage": 90,
     "skip_unsuitable_queues": true,
     "error": null,
     "snapshots": [
