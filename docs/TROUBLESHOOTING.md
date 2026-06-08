@@ -222,6 +222,37 @@ Queues exceeding the safe migration limit will be skipped and can be migrated in
 
 ---
 
+#### 7. Plugin Not Ready On Some Nodes
+
+**Error:** `plugin_not_ready_on_nodes`
+
+**Cause:** The pre-migration validation chain checks every running cluster node and refuses to start the migration unless all nodes confirm the queue-migration plugin is `ready`. A node will be flagged here when its `rqm_init_state` reports `initializing` or `failed`, or when an `erpc:call` to that node returns an error such as `{erpc, timeout}` or `{erpc, noconnection}`.
+
+The error term lists the affected nodes and what each reported, e.g.:
+
+```erlang
+{plugin_not_ready_on_nodes,
+ [{'rabbit@ip-10-0-1-20', failed},
+  {'rabbit@ip-10-0-1-210', {rpc_error, timeout}}]}
+```
+
+**Solution:**
+
+For nodes reporting `initializing`, wait up to 5 minutes for the plugin's table-setup retry budget to complete and try again.
+
+For nodes reporting `failed`, recover by running on each affected node:
+
+```bash
+rabbitmq-plugins disable rabbitmq_queue_migration
+rabbitmq-plugins enable rabbitmq_queue_migration
+```
+
+For nodes reporting `{rpc_error, _}`, investigate cluster connectivity and node health before retrying. Errors of this shape commonly indicate a partial network partition or an overloaded node.
+
+See [Plugin Initialization](#plugin-initialization) for the full lifecycle of `initializing` and `failed` states.
+
+---
+
 ### Network Partition Detected
 
 **Error:** `network_partition_detected`
