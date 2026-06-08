@@ -77,7 +77,7 @@ This plugin provides a production-ready solution for migrating mirrored classic 
 ### Prerequisites (BEFORE Migration)
 
 1. **Cluster Health**: All cluster nodes must be running
-2. **Plugin Enabled**: `rabbitmq_queue_migration` and `rabbitmq_shovel` plugins loaded
+2. **Plugins Enabled**: `rabbitmq_queue_migration` and `rabbitmq_shovel` must be loaded; the `rabbitmq_queue_migration` plugin must additionally have completed its async initialization on every running node (validation chain step `plugin_ready_on_all_nodes`)
 3. **Queue Eligibility**: Only mirrored classic queues with HA policies
 4. **Khepri Disabled**: Classic Mnesia required (Khepri not compatible)
 5. **AWS Configuration**: For EBS snapshots, AWS credentials and region must be configured
@@ -233,10 +233,10 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 
 ### Progress Tracking
 
-- **Update Frequency**: Configurable via `progress_update_frequency` (default: 10)
-- **Calculation**: Messages processed ÷ 4 for progress count
-- **Real-time Updates**: Database updated during message migration
-- **Percentage Calculation**: `(completed / total) * 100`
+- **Update Frequency**: Configurable via `progress_update_frequency` (default: 10 messages between status writes)
+- **Verification on completion**: After the shovel reports completion, `rqm:verify_and_update_progress/5` reads the source and destination message counts and writes the actual delivered count via `rqm_db:update_queue_status_progress/3`
+- **Real-time Updates**: Database updated as queues complete each phase
+- **Percentage Calculation**: `rqm_mgmt:calculate_progress_percentage/2` computes `trunc((completed / total) * 100)`
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled **before** migration (validated during pre-migration checks). This allows applications to redeclare queues with classic arguments after migration without errors.
 
@@ -288,11 +288,13 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 **System Checks:**
 - `check_shovel_plugin/0` - Verify shovel plugin enabled
 - `check_khepri_disabled/0` - Verify Khepri not enabled
+- `check_relaxed_checks_setting/0` - Verify `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
 - `check_leader_balance/1` - Verify queue leaders balanced
-- `check_disk_space/2` - Verify sufficient disk space
+- `check_disk_space/2` - Verify sufficient disk space (signature: `(VHost, UnsuitableQueues)`)
 - `check_active_alarms/0` - Check for memory/disk alarms
 - `check_memory_usage/0` - Verify memory usage acceptable
 - `check_snapshot_not_in_progress/0` - Verify no concurrent snapshots
+- `check_plugin_ready_on_all_nodes/0` - Verify the queue migration plugin reports `ready` on every running node
 - `check_cluster_partitions/0` - Verify no network partitions
 
 **Queue Checks:**
@@ -317,6 +319,10 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 **Key Functions:**
 - All configuration getters return values from application environment or defaults
 - See Configuration Parameters section for complete list
+
+### `rqm_gatherer.erl` (Distributed Result Collection)
+
+**Key Functions:**
 - `fork/1` - Declare intent to produce results (increment producer count)
 - `finish/1` - Signal completion of work (decrement producer count)
 - `in/2` - Add result to gatherer queue (async)
@@ -375,10 +381,11 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `check_leader_balance/1` - Ensure balanced queue distribution
 - `check_queue_synchronization/1` - Verify all mirrors are synchronized
 - `check_queue_suitability/1` - Comprehensive queue eligibility
-- `check_disk_space/1` - Disk space estimation and validation based on worker pool concurrency
+- `check_disk_space/2` - Disk space estimation and validation (signature: `(VHost, UnsuitableQueues)`); required free = total queue data x peak multiplier + min disk space buffer
 - `check_active_alarms/0` - Check for active RabbitMQ alarms
 - `check_memory_usage/0` - Validate memory usage is within limits
 - `check_snapshot_not_in_progress/0` - Verify no concurrent EBS snapshots (delegates to `rqm_snapshot`)
+- `check_plugin_ready_on_all_nodes/0` - Verify the queue migration plugin is `ready` on every running cluster node
 - `check_cluster_partitions/0` - Verify no cluster partitions and all nodes up
 - `check_system_migration_readiness/1` - Overall system readiness
 
@@ -393,9 +400,6 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `format_migration_readiness_response/1` - Format readiness check response
 - `format_system_checks_for_ui/1` - Format system checks for web UI
 - `format_queue_checks_for_ui/1` - Format queue checks for web UI
-- `check_queue_suitability/1` - Comprehensive queue eligibility
-- `check_disk_space/1` - Disk space estimation and validation
-- `check_system_migration_readiness/1` - Overall system readiness
 
 ## Configuration Parameters
 
@@ -674,7 +678,7 @@ Performance varies significantly based on:
 ### AWS Configuration Requirements
 - **Credentials**: AWS credentials via environment variables, config files, or EC2 instance roles
 - **Region**: AWS region configuration (defaults to us-east-1, should match peer discovery)
-- **Permissions**: EC2 permissions for `CreateSnapshot`, `DescribeVolumes`, `DescribeSnapshots`, and `DescribeInstances`
+- **Permissions**: EC2 permissions for `ec2:DescribeVolumes`, `ec2:CreateSnapshot`, `ec2:DescribeSnapshots`, and `ec2:DeleteSnapshot`. The plugin does not call `ec2:CreateTags` or `ec2:DescribeInstances`.
 - **Volume Setup**: RabbitMQ data directory must be on EBS volume at configured device path
 
 ### Snapshot Timing
@@ -693,7 +697,7 @@ Performance varies significantly based on:
 
 ### Skip Unsuitable Queues Feature
 - **Skip Mode**: `skip_unsuitable_queues` parameter allows migration to proceed by skipping problematic queues
-- **Skip Reasons**: Tracks why queues were skipped (unsynchronized, too_many_queues, unsuitable_overflow, interrupted)
+- **Skip Reasons**: Tracks why queues were skipped. Validation produces five reasons via `#unsuitable_queue{reason = ...}` (`unsynchronized`, `too_many_queues`, `unsuitable_overflow`, `queue_expires`, `message_ttl`); a sixth `interrupted` status is recorded for queues from a previously interrupted migration
 - **Integration Tests**: SkipUnsuitableTest validates feature works correctly
 
 ### Batch Migration Feature

@@ -1,7 +1,5 @@
 # Snapshot Support
 
-**Last Updated:** January 21, 2026
-
 This guide explains the snapshot functionality in the RabbitMQ Queue Migration Plugin, including the three supported modes and their configuration.
 
 ---
@@ -85,7 +83,6 @@ queue_migration.ebs_volume_device = /dev/sdh
    - `ec2:CreateSnapshot` - Create EBS snapshots
    - `ec2:DescribeVolumes` - Query attached volumes
    - `ec2:DescribeSnapshots` - Check snapshot status
-   - `ec2:CreateTags` - Tag snapshots with metadata
    - `ec2:DeleteSnapshot` - Delete snapshots after successful migration
 
 3. **AWS Credentials**

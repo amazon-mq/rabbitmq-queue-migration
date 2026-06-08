@@ -1,7 +1,5 @@
 # Migration Performance Reference
 
-**Last Updated:** March 27, 2026
-
 Real-world migration timing data from Amazon MQ for RabbitMQ environments.
 Use these figures as a rough guide when estimating migration windows.
 
@@ -69,13 +67,13 @@ smaller increments if your total queue data exceeds this threshold.
 
 ---
 
-## mq.m7g.4xlarge - Migration at Disk Capacity Limit
+## m7g.4xlarge - Migration at Disk Capacity Limit
 
 ### Environment
 
 | Property | Value |
 |----------|-------|
-| Instance type | mq.m7g.4xlarge (cluster deployment, 3 nodes) |
+| Instance type | m7g.4xlarge (cluster deployment, 3 nodes) |
 | vCPU per node | 16 |
 | Memory per node | 64 GiB |
 | Storage | EBS |
@@ -104,7 +102,7 @@ for full instance specifications.
 ### Notes
 
 This migration was configured to approach the disk capacity limit of the
-mq.m7g.4xlarge instance type. With 90 GB of disk per node and ~19.1 GiB
+m7g.4xlarge instance type. With 90 GB of disk per node and ~19.1 GiB
 of queue data, the plugin requires approximately 38.7 GB free
 (19.1 GiB × 2.0 multiplier + 500 MB buffer).
 

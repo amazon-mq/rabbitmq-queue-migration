@@ -1,7 +1,5 @@
 # Troubleshooting Guide - RabbitMQ Queue Migration Plugin
 
-**Last Updated:** January 21, 2026
-
 This guide covers potential issues, error messages, and solutions when using the RabbitMQ Queue Migration Plugin.
 
 ---
@@ -129,14 +127,15 @@ queue_migration.worker_pool_max = 8  % Reduce from default 32
 
 #### 3. Cluster Alarms Active
 
-**Error:** `cluster_alarms_active`
+**Error:** `alarms_active`
 
 **Cause:** Memory or disk alarms are triggered
 
 **Solution:**
 ```bash
-# Check alarms
-rabbitmqctl list_alarms
+# Check cluster alarms (RabbitMQ 3.13 has no `list_alarms` subcommand;
+# alarm state appears under the "Alarms" header in the status output)
+rabbitmqctl status | grep -A 2 'Alarms'
 
 # Clear memory alarm (if safe)
 rabbitmqctl set_vm_memory_high_watermark 0.6
@@ -176,15 +175,22 @@ Unsynchronized queues will be skipped and can be migrated later after synchroniz
 
 ---
 
-#### 5. Too Many Queues to Migrate
+#### 5. Unsuitable Queues
 
-**Error:** `too_many_queues`
+**Error term:** `{unsuitable_queues, Details}` (returned from the validation chain in `rqm:start/1` and `rqm:validate_migration/1`)
 
-**Cause:** Too many queues in the vhost to migrate safely at once
+**Variant from the `/check/:vhost` HTTP endpoint:** `{unsuitable_overflow_behavior, Details}` is returned when the only blocker is overflow behavior (`rqm_mgmt.erl` returns this distinct shape with a `queue_name` and `overflow_behavior` field).
 
-**Solution:**
+**Cause:** One or more queues in the vhost have characteristics that prevent migration. The `Details` map contains a `problematic_queues` list, where each entry has a `reason` field. Common reasons:
 
-**Option A:** Use batch migration
+- `too_many_queues` - The vhost has more classic queues than the plugin will migrate in a single run (limit configured by `queue_migration.max_queues_for_migration`).
+- `unsuitable_overflow` - A queue uses `x-overflow=reject-publish-dlx`, which is not supported in quorum queues. Quorum queues support `drop-head` and `reject-publish` only.
+- `too_many_messages` / `too_many_bytes` - A queue exceeds the per-queue message-count or byte-size thresholds for safe migration.
+
+**Solutions:**
+
+**Option A:** Use batch migration to handle a high queue count:
+
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -192,7 +198,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-**Option B:** Use skip mode to handle automatically
+**Option B:** Use skip mode to skip individual unsuitable queues (the migration proceeds with the suitable ones):
+
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -200,29 +207,11 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-Queues exceeding the safe migration limit will be skipped and can be migrated in subsequent runs.
+**Option C:** For `unsuitable_overflow` specifically, change the queue's overflow behavior before migration. Quorum queues support `drop-head` and `reject-publish`. Either redeclare the queue with the supported value, or set a policy that overrides `x-overflow`.
 
 ---
 
-#### 6. Unsuitable Queue Arguments
-
-**Error:** `unsuitable_overflow`
-
-**Cause:** Queue has `overflow: reject-publish-dlx` which is incompatible with quorum queues
-
-**Solution:**
-
-**Option A:** Change queue overflow policy before migration
-```bash
-# Delete and recreate queue with different overflow policy
-# Or use policy to override
-```
-
-**Option B:** Use skip mode to skip these queues
-
----
-
-#### 7. Plugin Not Ready On Some Nodes
+#### 6. Plugin Not Ready On Some Nodes
 
 **Error:** `plugin_not_ready_on_nodes`
 
@@ -255,20 +244,18 @@ See [Plugin Initialization](#plugin-initialization) for the full lifecycle of `i
 
 ### Network Partition Detected
 
-**Error:** `network_partition_detected`
+**Error:** `partitions_detected`
 
-**Cause:** Cluster has network partition
+**Cause:** RabbitMQ has detected a network partition between cluster nodes.
 
 **Solution:**
-```bash
-# Check partition status
-rabbitmqctl cluster_status
 
-# Resolve partition (choose appropriate strategy)
-rabbitmqctl forget_cluster_node <node>
+```bash
+# Check partition state
+rabbitmqctl cluster_status
 ```
 
-**Do not attempt migration during partition** - resolve partition first.
+How to recover depends on your cluster's `cluster_partition_handling` strategy and which side of the partition you trust. See the [RabbitMQ partitions documentation](https://www.rabbitmq.com/docs/partitions) for resolution procedures appropriate to each strategy. **Do not attempt migration during partition** - resolve the partition first.
 
 ---
 
@@ -576,7 +563,7 @@ tail -1000 /var/log/rabbitmq/rabbit@<node>.log | grep rqm
 3. **Cluster Status:**
 ```bash
 rabbitmqctl cluster_status
-rabbitmqctl list_alarms
+rabbitmqctl status | grep -A 2 'Alarms'
 ```
 
 4. **Queue Information:**

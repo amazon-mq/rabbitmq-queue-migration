@@ -1,7 +1,5 @@
 # Skip Unsuitable Queues Feature Guide
 
-**Last Updated:** January 21, 2026
-
 This guide explains the skip unsuitable queues feature, when to use it, and how to handle skipped queues.
 
 ---
@@ -390,8 +388,8 @@ curl -u guest:guest -X POST \
 
 **Result:** 950 suitable, 50 unsuitable
 - 30 unsynchronized
-- 15 too many queues
-- 5 unsuitable overflow
+- 15 queue_expires
+- 5 unsuitable_overflow
 
 #### Step 2: First Migration (Suitable Queues)
 
@@ -415,7 +413,7 @@ Repeat until all suitable queues migrated (850 total).
 #### Step 4: Address Unsuitable Queues
 
 - Sync the 30 unsynchronized queues
-- Reduce queue count or use batch migration for the 15 queues flagged as too many
+- Remove `x-expires` argument or `expires` policy from the 15 queues flagged with `queue_expires`
 - Change overflow policy on 5 queues
 
 #### Step 5: Final Migration
@@ -437,12 +435,14 @@ Skip mode only applies to queue-level checks. These system-level checks still bl
 
 - Shovel plugin not enabled
 - Khepri enabled (must be disabled for migration)
+- `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` not enabled
 - Insufficient disk space
 - Cluster alarms active
 - Memory pressure
 - Network partitions
 - Unbalanced queue leaders
 - EBS snapshots in progress
+- Queue migration plugin not `ready` on every running cluster node
 
 **Reason:** These issues affect the entire migration process, not individual queues.
 

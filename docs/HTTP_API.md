@@ -286,10 +286,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 - `completed_queues` - Queues completed so far
 - `skipped_queues` - Queues skipped
 - `progress_percentage` - Progress (0-100)
-- `status` - Migration status (see values below)
-- `skip_unsuitable_queues` - Whether skip mode was enabled
-- `tolerance` - Message count tolerance percentage (null if not set)
-- `error` - Error details (null if no error)
+- `status` - Migration status:
   - `pending` - Not started yet
   - `in_progress` - Currently migrating
   - `completed` - Successfully completed
@@ -297,6 +294,9 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
   - `interrupted` - Migration was interrupted
   - `rollback_pending` - Requires rollback
   - `rollback_completed` - Rollback completed
+- `skip_unsuitable_queues` - Whether skip mode was enabled
+- `tolerance` - Message count tolerance percentage (null if not set)
+- `error` - Error details (null if no error)
 
 ---
 
@@ -685,10 +685,12 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 
 ## Migration ID Format
 
-Migration IDs are base64url-encoded Erlang terms containing:
-- Timestamp
-- Node name
-- Unique identifier
+Migration IDs are base64url-encoded Erlang terms. Each ID encodes a 2-tuple of:
+
+- **Timestamp** - milliseconds since the epoch (`erlang:system_time(millisecond)`)
+- **Node name** - the Erlang node atom on which the migration was started (`node()`)
+
+Source: `rqm_util:generate_migration_id/0` and `rqm_util:format_migration_id/1`.
 
 **Example:**
 ```

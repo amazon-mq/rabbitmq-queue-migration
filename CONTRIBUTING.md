@@ -17,7 +17,7 @@ To build this plugin in your RabbitMQ development environment:
 git clone https://github.com/rabbitmq/rabbitmq-server.git
 cd rabbitmq-server
 git clone https://github.com/amazon-mq/rabbitmq-queue-migration.git deps/rabbitmq_queue_migration
-make -C deps/aws
+make -C deps/rabbitmq_queue_migration
 ```
 
 To run RabbitMQ with this plugin:
