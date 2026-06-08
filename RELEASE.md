@@ -38,7 +38,7 @@ make
 make -C deps/rabbitmq_queue_migration
 make -C deps/rabbitmq_queue_migration DIST_AS_EZS=true dist
 cd deps/rabbitmq_queue_migration
-gh release create "$VER" --verify-tag --title "rabbitmq-queue-migration $VER" --latest --generate-notes "./plugins/rabbitmq-queue-migration-$VER.ez"
+gh release create "$VER" --verify-tag --title "rabbitmq-queue-migration $VER" --latest --generate-notes "./plugins/rabbitmq_queue_migration-$VER.ez"
 ```
 
 * (Optional) Update generated release on GitHub to add GitHub milestone
