@@ -35,15 +35,30 @@ This will:
 1. Build the plugin as an ez file
 2. Create custom Docker images with the plugin
 3. Start a 3-node RabbitMQ cluster
-4. Run end-to-end migration test (10 queues, 1000 messages)
-5. Validate migration success
+4. Run six end-to-end test scenarios against that cluster:
+   - `end-to-end` - default migration (10 queues, 1000 messages)
+   - `interrupt-test` - interrupting a migration mid-flight and resuming
+   - `skip-unsuitable-test` - migration with `skip_unsuitable_queues=true`
+   - `batch-test` - batch migration
+   - `empty-queue-test` - migration of zero-message queues (fast path)
+   - `already-quorum-test` - migration when destination type is already quorum
+5. Validate each scenario's success
 6. Stop the cluster
 
-**Duration:** ~2-3 minutes
+**Duration:** ~10-15 minutes for the full six-scenario run; the
+`end-to-end` scenario alone is ~2-3 minutes.
 
 ## What Gets Tested
 
-### Test Phases
+The `integration-test` target runs six scenarios against the same
+3-node Docker cluster: `end-to-end`, `interrupt-test`,
+`skip-unsuitable-test`, `batch-test`, `empty-queue-test`, and
+`already-quorum-test`. The phase breakdown below describes the
+`end-to-end` scenario, which is the most thorough; the other
+scenarios reuse most of the same setup and validation but with
+narrower payloads or specific options.
+
+### Test Phases (`end-to-end`)
 
 **Phase 0: Cleanup**
 - Removes previous test artifacts (queues, exchanges, policies)
@@ -89,7 +104,7 @@ Setup complete in 5165 ms
 Pre-migration: 10 classic queues, 1000 total messages
 
 === Phase 3: Triggering queue migration ===
-Migration started: g2gCbgYA8U2NKJsBdxhyYWJiaXQtMUBTRUEtM0xHNUhWSlVXSks
+Migration started: <base64-encoded-migration-id>
 
 === Phase 4: Monitoring migration progress ===
 [00:00:05] Migration in progress: 20% (2/10 queues)
@@ -185,7 +200,7 @@ The integration test supports various configurations. See [test/integration/READ
 ### Hostname Resolution Fails
 
 ```
-ERROR: node0: Temporary failure in name resolution
+ERROR: rmq0: Temporary failure in name resolution
 ```
 
 **Solution:** Add `/etc/hosts` entries for rmq0, rmq1, rmq2
