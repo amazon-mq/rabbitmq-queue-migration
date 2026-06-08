@@ -4,8 +4,6 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 
 ## Overview
 
-A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in RabbitMQ 3.13.x clusters.
-
 - Two-phase migration algorithm with message-by-message transfer
 - Automatic binding preservation and rollback support
 - Selective migration by queue name or batch size
@@ -44,6 +42,7 @@ Restarting any broker node, performing a full cluster reboot, or applying a main
 - [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
 - [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration if EBS snapshots are used
 - [Performance Reference](docs/PERFORMANCE.md) - Real-world migration timing data
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Error messages, diagnostics, and recovery
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
 
