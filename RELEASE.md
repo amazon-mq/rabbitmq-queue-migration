@@ -31,8 +31,8 @@ git push --tags
 * Ensure that Erlang/OTP 26.x and Elixir 1.16.x are in your `PATH`
 
 ```
-git clone --branch v4.2.x https://github.com/rabbitmq/rabbitmq-server.git rabbitmq-server_4.2.x
-cd rabbitmq-server_4.2.x
+git clone --branch v3.13.7 https://github.com/rabbitmq/rabbitmq-server.git rabbitmq-server_v3.13.7
+cd rabbitmq-server_v3.13.7
 git clone --branch "$VER" https://github.com/amazon-mq/rabbitmq-queue-migration.git deps/rabbitmq_queue_migration
 make
 make -C deps/rabbitmq_queue_migration
