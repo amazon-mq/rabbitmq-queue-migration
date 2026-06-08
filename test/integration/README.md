@@ -71,7 +71,7 @@ java -jar target/migration-test-setup-1.0.0.jar end-to-end \
 |--------|-------------|---------|
 | `--queue-count=N` | Number of queues to create | 10 |
 | `--total-messages=N` | Total messages across all queues | 5,500 |
-| `--migration-timeout=N` | Migration timeout in seconds | 3600 |
+| `--migration-timeout=N` | Migration timeout in seconds | 300 |
 | `--exchange-count=N` | Number of topic exchanges | 5 |
 | `--bindings-per-queue=N` | Bindings per queue | 6 |
 
@@ -168,7 +168,7 @@ Setup complete in 5165 ms
 Pre-migration: 10 classic queues, 5500 total messages
 
 === Phase 3: Triggering queue migration ===
-Migration started: g2gCbgYA8U2NKJsBdxhyYWJiaXQtMUBTRUEtM0xHNUhWSlVXSks
+Migration started: <base64-encoded-migration-id>
 
 === Phase 4: Monitoring migration progress ===
 [00:00:05] Migration in progress: 20% (2/10 queues)
@@ -201,7 +201,7 @@ HTTP 404 Not Found: /api/queue-migration/start
 
 ### Migration Timeout
 ```
-❌ Migration did not complete within 3600 seconds
+❌ Migration did not complete within 300 seconds
 ```
 **Solution:** Increase timeout with `--migration-timeout=7200`
 
@@ -255,9 +255,9 @@ java -jar target/migration-test-setup-1.0.0.jar --test-connection
 
 ## Dependencies
 
-- RabbitMQ AMQP Client 5.25.0
-- RabbitMQ HTTP Client 5.4.0
-- Jackson 2.18.2 (JSON processing)
+- RabbitMQ AMQP Client 5.31.0
+- RabbitMQ HTTP Client 5.5.0
+- Jackson 2.22.0 (JSON processing)
 - SLF4J + Logback (logging)
 - JUnit 5 (testing)
 
