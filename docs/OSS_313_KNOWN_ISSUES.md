@@ -1,7 +1,5 @@
 # Known Issues on Open-Source RabbitMQ 3.13.7
 
-**Last Updated:** April 24, 2026
-
 This document describes upstream issues that affect migrations performed by this
 plugin when running on open-source RabbitMQ 3.13.7 (the final release in the
 3.13.x series).
@@ -10,11 +8,12 @@ plugin when running on open-source RabbitMQ 3.13.7 (the final release in the
 
 ## Overview
 
-This plugin targets RabbitMQ 3.13.x because mirrored classic queues (the subject
-of migration) exist only in that series. During development and testing of the
-plugin, three upstream RabbitMQ issues were observed to occur more frequently
-under migration workloads. The fixes for these issues are not present in any
-open-source 3.13.x release.
+This plugin targets RabbitMQ 3.13.x because mirrored classic queues (the
+subject of migration) are deprecated in 3.13.x and removed in 4.0; 3.13.x
+is the final series in which they can be migrated. During development and
+testing of the plugin, three upstream RabbitMQ issues were observed to occur
+more frequently under migration workloads. The fixes for these issues are not
+present in any open-source 3.13.x release.
 
 ---
 
