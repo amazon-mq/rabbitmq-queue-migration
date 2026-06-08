@@ -1,7 +1,5 @@
 # Migration Guide
 
-**Last Updated:** January 21, 2026
-
 This guide explains how the RabbitMQ Queue Migration Plugin works, including the migration process, validation checks, and queue eligibility requirements.
 
 ---
@@ -33,6 +31,7 @@ These checks always block migration if they fail:
 1. **Plugin Requirements**
    - Validates `rabbitmq_shovel` plugin is enabled
    - Validates Khepri is disabled (not compatible with classic queue migration)
+   - Validates `rabbitmq_queue_migration` plugin reports `ready` on every running cluster node (the plugin's async init must have finished on each node before migration can proceed)
 
 2. **Configuration**
    - Checks `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
@@ -255,10 +254,34 @@ This overflow policy is **not compatible** with quorum queues and will cause the
 - Or use `skip_unsuitable_queues` mode to skip these queues
 - Consider alternative dead lettering approaches for quorum queues
 
+**`x-message-ttl` (queue-level TTL)**
+
+A queue with a queue-level message TTL (`x-message-ttl` argument or `message-ttl` policy) is marked as unsuitable.
+
+**Why Unsuitable:**
+- Messages can expire and be removed during the migration window
+- Expired messages cause the source-vs-destination message count check to fail verification
+
+**Solution:**
+- Remove the `x-message-ttl` argument or `message-ttl` policy before migration
+- Use the `tolerance` migration option to allow a per-queue percentage difference (see [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md))
+- Or use `skip_unsuitable_queues` mode to skip these queues and migrate them later
+
+**`x-expires` (queue expiry)**
+
+A queue with `x-expires` argument or `expires` policy is marked as unsuitable.
+
+**Why Unsuitable:**
+- The queue itself can expire and be deleted during migration
+- A queue that disappears mid-migration causes the migration to fail for that queue
+
+**Solution:**
+- Remove the `x-expires` argument or `expires` policy before migration
+- Or use `skip_unsuitable_queues` mode to skip these queues
+
 ### Preserved Arguments
 
 Arguments that are compatible with quorum queues are preserved:
-- `x-message-ttl` - Message TTL
 - `x-max-length` - Maximum queue length
 - `x-max-length-bytes` - Maximum queue size in bytes
 - `x-overflow: drop-head` - Drop oldest messages when limit reached
