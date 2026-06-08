@@ -10,7 +10,7 @@ github_changelog_generator --future-release "$VER" --user amazon-mq --project ra
 
 # Optional - remove last line of CHANGELOG.md
 
-git add CHANGELOG.md
+git add Makefile CHANGELOG.md
 git commit -a -m "rabbitmq-queue-migration $VER"
 git push -u origin "rabbitmq-queue-migration-$VER"
 gh pr create --fill

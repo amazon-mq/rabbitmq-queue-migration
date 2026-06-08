@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.1.0) (2026-06-08)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.6...1.1.0)
+
+**Implemented enhancements:**
+
+- Review all documentation for technical correctness [\#72](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/72) ([lukebakken](https://github.com/lukebakken))
+- Make plugin table init asynchronous; never abort RabbitMQ broker boot [\#70](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/70) ([lukebakken](https://github.com/lukebakken))
+
+**Closed issues:**
+
+- Do not start plugin in Khepri environments. [\#60](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/60)
+
+**Merged pull requests:**
+
+- Bump the maven group across 1 directory with 5 updates [\#68](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/68) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump actions/checkout from 6.0.2 to 6.0.3 in the github-actions group [\#67](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/67) ([dependabot[bot]](https://github.com/apps/dependabot))
+
 ## [1.0.6](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.6) (2026-05-19)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.5...1.0.6)
@@ -11,13 +29,14 @@
 
 **Merged pull requests:**
 
-- Do not set default queue type after migration [\#64](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/64) ([lukebakken](https://github.com/lukebakken))
-- Use `PROJECT_VERSION` [\#62](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/62) ([lukebakken](https://github.com/lukebakken))
 - docs: Add prominent Mnesia-only compatibility notice [\#59](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/59) ([sauravonwww](https://github.com/sauravonwww))
 - Bump the maven group in /test/integration with 2 updates [\#58](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/58) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Document OSS RabbitMQ 3.13.7 known issues [\#57](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/57) ([lukebakken](https://github.com/lukebakken))
 - Bump the github-actions group across 1 directory with 3 updates [\#56](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/56) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump com.rabbitmq:amqp-client from 5.29.0 to 5.30.0 in /test/integration [\#55](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/55) ([dependabot[bot]](https://github.com/apps/dependabot))
+- rabbitmq-queue-migration 1.0.6 [\#65](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/65) ([lukebakken](https://github.com/lukebakken))
+- Do not set default queue type after migration [\#64](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/64) ([lukebakken](https://github.com/lukebakken))
+- Use `PROJECT_VERSION` [\#62](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/62) ([lukebakken](https://github.com/lukebakken))
 
 ## [1.0.5](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.5) (2026-04-02)
 
