@@ -11,7 +11,6 @@ The RabbitMQ queue migration plugin requires EC2 API access to:
 - Query attached EBS volumes (`ec2:DescribeVolumes`)
 - Create snapshots of those volumes (`ec2:CreateSnapshot`)
 - Check snapshot status (`ec2:DescribeSnapshots`)
-- Tag snapshots for identification (`ec2:CreateTags`)
 - Delete snapshots after successful migration (`ec2:DeleteSnapshot`)
 
 When running on EC2 instances, the `rabbitmq_aws` SDK automatically retrieves temporary credentials (including session tokens) from the
@@ -77,7 +76,6 @@ aws iam put-role-policy \
         "ec2:DescribeVolumes",
         "ec2:CreateSnapshot",
         "ec2:DescribeSnapshots",
-        "ec2:CreateTags",
         "ec2:DeleteSnapshot"
       ],
       "Resource": "*"
@@ -97,7 +95,6 @@ restricting permissions to specific volumes or using condition keys to limit sco
       "ec2:DescribeVolumes",
       "ec2:CreateSnapshot",
       "ec2:DescribeSnapshots",
-      "ec2:CreateTags",
       "ec2:DeleteSnapshot"
     ],
     "Resource": "*",
@@ -232,8 +229,7 @@ VOLUME_ID=$(aws ec2 describe-volumes \
 aws ec2 create-snapshot \
   --region us-east-1 \
   --volume-id "$VOLUME_ID" \
-  --description "Test snapshot for RabbitMQ queue migration" \
-  --tag-specifications "ResourceType=snapshot,Tags=[{Key=Purpose,Value=Test}]"
+  --description "Test snapshot for RabbitMQ queue migration"
 ```
 
 If successful, you'll receive a snapshot ID. Clean up the test snapshot:
@@ -307,9 +303,10 @@ The `rabbitmq_queue_migration` plugin performs the following operations during m
 
 1. **Query Volumes**: Calls `ec2:DescribeVolumes` to find EBS volumes attached to the instance
 2. **Create Snapshots**: Calls `ec2:CreateSnapshot` to create crash-consistent snapshots before migration
-3. **Tag Snapshots**: Calls `ec2:CreateTags` to label snapshots with migration metadata
-4. **Monitor Progress**: Calls `ec2:DescribeSnapshots` to check snapshot completion status
-5. **Cleanup Snapshots**: Calls `ec2:DeleteSnapshot` to remove snapshots after successful migration (when `cleanup_snapshots_on_success` is enabled)
+3. **Monitor Progress**: Calls `ec2:DescribeSnapshots` to check snapshot completion status
+4. **Cleanup Snapshots**: Calls `ec2:DeleteSnapshot` to remove snapshots after successful migration (when `cleanup_snapshots_on_success` is enabled)
+
+Snapshots are created with a `Description` of the form `RabbitMQ migration snapshot <timestamp> on <node>`, but the plugin does not attach EC2 tags to them (`ec2:CreateTags` is not required).
 
 The plugin uses the AWS SDK's default credential provider chain, which automatically:
 - Queries the EC2 instance metadata service at `http://169.254.169.254/latest/meta-data/iam/security-credentials/`
@@ -340,8 +337,7 @@ EBS snapshots incur storage costs. Monitor snapshot usage:
 ```bash
 aws ec2 describe-snapshots \
   --owner-ids self \
-  --filters "Name=tag:Purpose,Values=RabbitMQ-Migration" \
-  --query 'Snapshots[].[SnapshotId,VolumeSize,StartTime]' \
+  --query 'Snapshots[?starts_with(Description, `RabbitMQ migration snapshot`)].[SnapshotId,VolumeSize,StartTime,Description]' \
   --output table
 ```
 
@@ -350,7 +346,7 @@ aws ec2 describe-snapshots \
 After completing these steps, your RabbitMQ EC2 instances will have the necessary IAM permissions to:
 - Query attached EBS volumes
 - Create snapshots during queue migration
-- Tag and monitor snapshot progress
+- Monitor snapshot status and delete snapshots after migration completes
 
 The `rabbitmq_aws` library used by this plugin will automatically retrieve temporary credentials from the instance metadata
 service, including the required session token, without any explicit configuration.
