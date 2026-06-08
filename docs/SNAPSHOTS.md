@@ -147,8 +147,8 @@ queue_migration.snapshot_mode = none
 
 ### `cleanup_snapshots_on_success`
 
-**Type:** Boolean  
-**Default:** true  
+**Type:** Boolean\
+**Default:** true\
 **Description:** Whether to delete snapshots after successful migration
 
 **Using `rabbitmq.conf`:**

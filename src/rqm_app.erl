@@ -3,9 +3,20 @@
 %% vim:ft=erlang:
 %% -*- mode: erlang; -*-
 
--module(rqm_app).
+%% @doc Plugin application callback module.
+%%
+%% start/2 is intentionally kept thin: it calls rqm_config:setup_defaults/0
+%% (idempotent application:set_env calls) and starts rqm_sup. All Mnesia
+%% table setup is handled asynchronously by rqm_init_state under rqm_sup,
+%% so this module never blocks on broker boot.
+%%
+%% Any failure in start/2 is logged and converted to `ignore`, which is a
+%% documented application:start/2 return that means "started ok, no top
+%% supervisor". The application controller does not treat `ignore` as an
+%% error, so the broker continues to boot. This is the belt-and-braces
+%% guarantee that a plugin start failure NEVER aborts broker boot.
 
--include("rqm.hrl").
+-module(rqm_app).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -14,43 +25,32 @@
 -export([start/2, stop/1]).
 
 -spec start(application:start_type(), term()) ->
-    {ok, pid()} | {ok, pid(), State :: term()} | {error, Reason :: term()}.
+    {ok, pid()} | ignore.
 start(_Type, _StartArgs) ->
-    ok = setup_schema(),
-    ok = setup_default_config(),
-    WorkerPoolSize = rqm_config:calculate_worker_pool_size(),
-    ?LOG_DEBUG("rqm: starting worker pool with size ~tp on node ~tp", [WorkerPoolSize, node()]),
-    worker_pool_sup:start_link(WorkerPoolSize, rqm_config:worker_pool_name()).
+    try
+        ok = rqm_config:setup_defaults(),
+        case rqm_sup:start_link() of
+            {ok, Pid} ->
+                {ok, Pid};
+            ignore ->
+                ?LOG_ERROR("rqm: rqm_sup:start_link/0 returned `ignore`"),
+                ignore;
+            {error, Reason} ->
+                ?LOG_ERROR(
+                    "rqm: rqm_sup:start_link/0 returned {error, ~tp}",
+                    [Reason]
+                ),
+                ignore
+        end
+    catch
+        Class:CaughtReason:Stack ->
+            ?LOG_ERROR(
+                "rqm: application start raised ~tp:~tp~n~tp",
+                [Class, CaughtReason, Stack]
+            ),
+            ignore
+    end.
 
--spec stop(Application) -> ok | {error, Reason} when Application :: atom(), Reason :: term().
+-spec stop(term()) -> ok.
 stop(_State) ->
     ok.
-
-%%----------------------------------------------------------------------------
-
-setup_schema() ->
-    ?LOG_DEBUG("rqm: setting up schema"),
-    Tables =
-        [
-            {queue_migration, [
-                {record_name, queue_migration},
-                {attributes, record_info(fields, queue_migration)},
-                {disc_copies, [node()]},
-                {type, set}
-            ]},
-            {queue_migration_status, [
-                {record_name, queue_migration_status},
-                {attributes, record_info(fields, queue_migration_status)},
-                {disc_copies, [node()]},
-                {type, ordered_set}
-            ]}
-        ],
-    lists:foreach(
-        fun({Table, Def}) -> ok = rabbit_table:create(Table, Def) end,
-        Tables
-    ),
-    TableNames = [queue_migration, queue_migration_status],
-    ok = rabbit_table:wait(TableNames).
-
-setup_default_config() ->
-    rqm_config:setup_defaults().

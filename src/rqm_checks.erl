@@ -18,6 +18,7 @@
     check_system_migration_readiness/1,
     check_snapshot_not_in_progress/0,
     check_cluster_partitions/0,
+    check_plugin_ready_on_all_nodes/0,
     check_active_alarms/0,
     check_memory_usage/0,
     get_mirrored_classic_queues/1
@@ -493,6 +494,36 @@ check_cluster_partitions() ->
             {error, nodes_down};
         {_, _Partitions} ->
             {error, partitions_detected}
+    end.
+
+%% @doc Check that the rabbitmq_queue_migration plugin is `ready` on every
+%% running cluster node.
+%%
+%% Local node: call rqm_init_state:status/0 directly.
+%% Remote nodes: erpc:call with a 5-second timeout. Any non-`ready` outcome -
+%% including erpc errors such as `{erpc, timeout}` or `{erpc, noconnection}` -
+%% is reported here so that a migration is never started while we cannot
+%% confirm a peer's plugin readiness.
+-spec check_plugin_ready_on_all_nodes() ->
+    ok
+    | {error, {plugin_not_ready_on_nodes, [{node(), atom() | {rpc_error, term()}}]}}.
+check_plugin_ready_on_all_nodes() ->
+    Nodes = rabbit_nodes:list_running(),
+    Results = [{N, plugin_status_on(N)} || N <- Nodes],
+    BadNodes = [{N, S} || {N, S} <- Results, S =/= ready],
+    case BadNodes of
+        [] -> ok;
+        _ -> {error, {plugin_not_ready_on_nodes, BadNodes}}
+    end.
+
+plugin_status_on(Node) when Node =:= node() ->
+    rqm_init_state:status();
+plugin_status_on(Node) ->
+    try
+        erpc:call(Node, rqm_init_state, status, [], 5000)
+    catch
+        error:{erpc, Reason} -> {rpc_error, Reason};
+        Class:Reason -> {rpc_error, {Class, Reason}}
     end.
 
 %% @doc Check if any RabbitMQ alarms are active

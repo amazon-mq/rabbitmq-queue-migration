@@ -51,6 +51,11 @@
 
 -define(THIRTY_SECONDS_MS, 30000).
 
+%% Plugin init retry configuration (used by rqm_init_state)
+% 10 attempts of 30 seconds each, 5 minutes total to set up Mnesia tables
+-define(INIT_RETRY_ATTEMPTS, 10).
+-define(INIT_RETRY_INTERVAL_MS, ?THIRTY_SECONDS_MS).
+
 -define(DEFAULT_EBS_VOLUME_DEVICE, "/dev/sdh").
 
 %% Records for tracking migration progress

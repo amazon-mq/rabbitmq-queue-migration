@@ -105,6 +105,10 @@ pre_migration_validation(memory_usage, Opts) ->
     handle_check_memory_usage(rqm_checks:check_memory_usage(), Opts);
 pre_migration_validation(snapshot_not_in_progress, Opts) ->
     handle_check_snapshot_not_in_progress(rqm_checks:check_snapshot_not_in_progress(), Opts);
+pre_migration_validation(plugin_ready_on_all_nodes, Opts) ->
+    handle_check_plugin_ready_on_all_nodes(
+        rqm_checks:check_plugin_ready_on_all_nodes(), Opts
+    );
 pre_migration_validation(cluster_partitions, Opts) ->
     handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
@@ -222,7 +226,7 @@ handle_check_memory_usage({error, {memory_usage_too_high, Details}}, _Opts) ->
     {error, {memory_usage_too_high, Details}}.
 
 handle_check_snapshot_not_in_progress(ok, Opts) ->
-    pre_migration_validation(cluster_partitions, Opts);
+    pre_migration_validation(plugin_ready_on_all_nodes, Opts);
 handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, _Opts) ->
     VolumeId = maps:get(volume_id, Details, "unknown"),
     SnapshotId = maps:get(snapshot_id, Details, "unknown"),
@@ -232,6 +236,21 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
         [SnapshotId, VolumeId]
     ),
     {error, {snapshot_in_progress, Details}}.
+
+handle_check_plugin_ready_on_all_nodes(ok, Opts) ->
+    pre_migration_validation(cluster_partitions, Opts);
+handle_check_plugin_ready_on_all_nodes(
+    {error, {plugin_not_ready_on_nodes, BadNodes}}, _Opts
+) ->
+    NodeCount = length(BadNodes),
+    ?LOG_ERROR(
+        "rqm: ~p node(s) cannot confirm queue-migration plugin readiness: ~tp. "
+        "On each affected node, recover with: "
+        "'rabbitmq-plugins disable rabbitmq_queue_migration' followed by "
+        "'rabbitmq-plugins enable rabbitmq_queue_migration'.",
+        [NodeCount, BadNodes]
+    ),
+    {error, {plugin_not_ready_on_nodes, BadNodes}}.
 
 handle_check_cluster_partitions({ok, Nodes}, Opts) ->
     handle_check_eligible_queue_count(rqm_checks:check_eligible_queue_count(Opts), Nodes);

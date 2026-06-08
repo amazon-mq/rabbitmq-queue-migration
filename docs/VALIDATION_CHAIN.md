@@ -20,10 +20,11 @@ The validation chain is implemented as a series of recursive function calls. Eac
 8. `active_alarms` - Check no active alarms
 9. `memory_usage` - Check memory usage within limits
 10. `snapshot_not_in_progress` - Check no EBS snapshots in progress
-11. `cluster_partitions` - Check no cluster partitions
-12. `eligible_queue_count` - Check at least one queue eligible for migration
+11. `plugin_ready_on_all_nodes` - Check rabbitmq_queue_migration plugin reports `ready` on every running node
+12. `cluster_partitions` - Check no cluster partitions
+13. `eligible_queue_count` - Check at least one queue eligible for migration
 
-### Terminal Behavior (Step 12)
+### Terminal Behavior (Step 13)
 
 The `eligible_queue_count` check is ONLY called by `cluster_partitions` at the end of the chain. It has different behavior based on mode:
 
@@ -33,7 +34,7 @@ The `eligible_queue_count` check is ONLY called by `cluster_partitions` at the e
 - Does NOT start migration
 
 **Migration Mode (`migration`):**
-- Calls `start_with_new_migration_id` to begin migration
+- Calls `start_migration/2` to begin migration
 - Returns result of migration
 
 ### Code Flow
@@ -56,9 +57,11 @@ handle_check_cluster_partitions({ok, Nodes}, Opts) ->
 % Mode-dependent terminal behavior
 handle_check_eligible_queue_count({ok, #migration_opts{mode = validation_only}}, _Nodes) ->
     ok;
-handle_check_eligible_queue_count({ok, Opts}, Nodes) ->
-    MigrationResult = start_with_new_migration_id(Nodes, Opts, generate_migration_id()),
-    handle_migration_result(MigrationResult, Opts#migration_opts.vhost).
+handle_check_eligible_queue_count({ok, #migration_opts{vhost = VHost} = Opts}, Nodes) ->
+    MigrationResult = start_migration(Nodes, Opts),
+    handle_migration_result(MigrationResult, VHost);
+handle_check_eligible_queue_count({error, _} = Error, _Nodes) ->
+    Error.
 ```
 
 ## Common Mistakes and How to Avoid Them
@@ -71,7 +74,7 @@ handle_check_eligible_queue_count({ok, Opts}, Nodes) ->
 cluster_partitions -> eligible_queue_count -> queue_suitability -> ... -> cluster_partitions
 ```
 
-**How to avoid:** 
+**How to avoid:**
 - `eligible_queue_count` is SPECIAL - it's only called at the end by `cluster_partitions`
 - Never add it as a regular `pre_migration_validation` clause
 - Never call it from any handler except `handle_check_cluster_partitions`
@@ -143,18 +146,19 @@ validation_checks() ->
         {shovel_plugin, fun rqm_checks:check_shovel_plugin/0},
         {khepri_disabled, fun rqm_checks:check_khepri_disabled/0},
         {relaxed_checks, fun rqm_checks:check_relaxed_checks_setting/0},
-        {leader_balance, fun(Opts) -> 
+        {leader_balance, fun(Opts) ->
             rqm_checks:check_leader_balance(Opts#migration_opts.vhost) end},
-        {queue_sync, fun(Opts) -> 
+        {queue_sync, fun(Opts) ->
             rqm_checks:check_queue_synchronization(Opts#migration_opts.vhost) end},
-        {queue_suitability, fun(Opts) -> 
+        {queue_suitability, fun(Opts) ->
             rqm_checks:check_queue_suitability(Opts#migration_opts.vhost) end},
-        {disk_space, fun(Opts) -> 
-            rqm_checks:check_disk_space(Opts#migration_opts.vhost, 
+        {disk_space, fun(Opts) ->
+            rqm_checks:check_disk_space(Opts#migration_opts.vhost,
                                         Opts#migration_opts.unsuitable_queues) end},
         {active_alarms, fun rqm_checks:check_active_alarms/0},
         {memory_usage, fun rqm_checks:check_memory_usage/0},
         {snapshot, fun rqm_checks:check_snapshot_not_in_progress/0},
+        {plugin_ready, fun rqm_checks:check_plugin_ready_on_all_nodes/0},
         {cluster_partitions, fun rqm_checks:check_cluster_partitions/0},
         {eligible_queue_count, fun rqm_checks:check_eligible_queue_count/1}
     ].
@@ -166,14 +170,14 @@ run_validation_chain([], Opts, _Nodes) ->
     {ok, Opts};
 run_validation_chain([{CheckName, CheckFun} | Rest], Opts, Nodes) ->
     case apply_check(CheckFun, Opts) of
-        ok -> 
+        ok ->
             run_validation_chain(Rest, Opts, Nodes);
-        {ok, UpdatedOpts} -> 
+        {ok, UpdatedOpts} ->
             run_validation_chain(Rest, UpdatedOpts, Nodes);
         {ok, Nodes} when CheckName =:= cluster_partitions ->
             % Terminal: cluster_partitions returns nodes, proceed to final check
             run_validation_chain(Rest, Opts, Nodes);
-        {error, _} = Error -> 
+        {error, _} = Error ->
             Error
     end.
 
@@ -181,7 +185,7 @@ run_validation_chain([{CheckName, CheckFun} | Rest], Opts, Nodes) ->
 finalize_validation({ok, Opts}, Nodes) ->
     case Opts#migration_opts.mode of
         validation_only -> ok;
-        migration -> start_with_new_migration_id(Nodes, Opts, generate_migration_id())
+        migration -> start_migration(Nodes, Opts)
     end.
 ```
 
