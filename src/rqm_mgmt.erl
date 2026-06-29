@@ -572,10 +572,14 @@ parse_batch_size(Json, Opts) ->
 
 parse_batch_order(Json, Opts) ->
     case maps:get(<<"batch_order">>, Json, undefined) of
-        undefined -> {ok, Opts};
-        <<"smallest_first">> -> {ok, Opts#{batch_order => smallest_first}};
-        <<"largest_first">> -> {ok, Opts#{batch_order => largest_first}};
-        _ -> invalid_option(<<"batch_order">>, <<"must be \"smallest_first\" or \"largest_first\"">>)
+        undefined ->
+            {ok, Opts};
+        <<"smallest_first">> ->
+            {ok, Opts#{batch_order => smallest_first}};
+        <<"largest_first">> ->
+            {ok, Opts#{batch_order => largest_first}};
+        _ ->
+            invalid_option(<<"batch_order">>, <<"must be \"smallest_first\" or \"largest_first\"">>)
     end.
 
 parse_queue_names(Json, Opts) ->
