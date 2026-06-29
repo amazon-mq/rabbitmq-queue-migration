@@ -69,18 +69,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
-    AllowMessageTtl = maps:get(allow_message_ttl, OptsMap, false),
-    %% Opting in to migrating message-TTL queues means accepting that any or
-    %% all messages in those queues may expire during migration. Force the
-    %% message-count tolerance to 100% (both directions) so verification never
-    %% fails on the resulting count difference, overriding any explicit
-    %% tolerance. Note this is migration-wide: it relaxes count verification
-    %% for every queue in this run, not only the message-TTL queues.
-    Tolerance =
-        case AllowMessageTtl of
-            true -> 100.0;
-            false -> maps:get(tolerance, OptsMap, undefined)
-        end,
+    {AllowMessageTtl, Tolerance} = message_ttl_opts(OptsMap),
     #migration_opts{
         vhost = VHost,
         mode = Mode,
@@ -92,6 +81,27 @@ build_migration_opts(Mode, OptsMap) ->
         tolerance = Tolerance,
         allow_message_ttl = AllowMessageTtl
     }.
+
+%% Resolve the coupled `allow_message_ttl` and `tolerance` options together,
+%% since the former determines the latter.
+%%
+%% Opting in to migrating message-TTL queues means accepting that any or all
+%% messages in those queues may expire during migration. In that case force the
+%% tolerance to 100% (both directions) so verification never fails on the
+%% resulting count difference, overriding any explicit tolerance the caller
+%% passed. Note this is migration-wide: it relaxes count verification for every
+%% queue in the run, not only the message-TTL queues.
+%%
+%% Otherwise use the caller-supplied tolerance, or undefined to fall back to the
+%% configured defaults.
+-spec message_ttl_opts(map()) -> {boolean(), float() | undefined}.
+message_ttl_opts(OptsMap) ->
+    message_ttl_opts(maps:get(allow_message_ttl, OptsMap, false), OptsMap).
+
+message_ttl_opts(true, _OptsMap) ->
+    {true, 100.0};
+message_ttl_opts(false, OptsMap) ->
+    {false, maps:get(tolerance, OptsMap, undefined)}.
 
 pre_migration_validation(shovel_plugin, Opts) ->
     handle_check_shovel_plugin(rqm_checks:check_shovel_plugin(), Opts);
