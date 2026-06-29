@@ -93,8 +93,14 @@ pre_migration_validation(queue_synchronization, #migration_opts{vhost = VHost} =
     handle_check_queue_synchronization(
         rqm_checks:check_queue_synchronization(VHost), Opts
     );
-pre_migration_validation(queue_suitability, #migration_opts{vhost = VHost} = Opts) ->
-    handle_check_queue_suitability(rqm_checks:check_queue_suitability(VHost), Opts);
+pre_migration_validation(
+    queue_suitability,
+    #migration_opts{vhost = VHost, allow_message_ttl = AllowMessageTtl} = Opts
+) ->
+    handle_check_queue_suitability(
+        rqm_checks:check_queue_suitability(VHost, #{allow_message_ttl => AllowMessageTtl}),
+        Opts
+    );
 pre_migration_validation(
     disk_space, #migration_opts{vhost = VHost, unsuitable_queues = UnsuitableQueues} = Opts
 ) ->

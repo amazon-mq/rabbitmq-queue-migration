@@ -12,7 +12,7 @@
 %% Public API
 -export([
     check_all_vhosts/0, check_all_vhosts/1,
-    check_vhost/1, check_vhost/2,
+    check_vhost/1, check_vhost/2, check_vhost/3,
     check_queue/1,
     check_migration_readiness/1,
     check_migration_readiness/2
@@ -33,38 +33,41 @@ check_all_vhosts(FilterMode) ->
     [
         {VHost, Results, Summary}
      || {VHost, Results, Summary} <- [
-            check_vhost_internal(VHost, Queues, FilterMode)
+            check_vhost_internal(VHost, Queues, FilterMode, #{})
          || {VHost, Queues} <- QueuesByVHost
         ]
     ].
 
 %% Check all queues in a specific vhost
 check_vhost(VHost) ->
-    check_vhost(VHost, all).
+    check_vhost(VHost, all, #{}).
 
-check_vhost(VHost, FilterMode) when is_binary(VHost) ->
+check_vhost(VHost, FilterMode) ->
+    check_vhost(VHost, FilterMode, #{}).
+
+check_vhost(VHost, FilterMode, Opts) when is_binary(VHost) ->
     % Get all classic queues directly using rqm_db_queue:get_all_by_vhost_and_type/2
     VHostClassicQueues = rqm_db_queue:get_all_by_vhost_and_type(VHost, rabbit_classic_queue),
 
     % Check queues with the specified filter mode
-    check_vhost_internal(VHost, VHostClassicQueues, FilterMode).
+    check_vhost_internal(VHost, VHostClassicQueues, FilterMode, Opts).
 
 %% Check a specific queue for compatibility with quorum queues
 check_queue(Queue) ->
     VHost = vhost_from_queue(Queue),
-    SuitabilityResult = rqm_checks:check_queue_suitability(VHost),
-    check_queue_internal(Queue, SuitabilityResult).
+    SuitabilityResult = rqm_checks:check_queue_suitability(VHost, #{}),
+    check_queue_internal(Queue, SuitabilityResult, #{}).
 
 %% Private functions
 
 %% Helper function to check all queues in a vhost and return summary statistics
-check_vhost_internal(VHost, Queues, FilterMode) ->
+check_vhost_internal(VHost, Queues, FilterMode, Opts) ->
     % FIRST: Check overall queue suitability (operational constraints)
-    SuitabilityResult = rqm_checks:check_queue_suitability(VHost),
+    SuitabilityResult = rqm_checks:check_queue_suitability(VHost, Opts),
 
     % THEN: Check all queues with both technical and operational criteria
     AllResults = [
-        {amqqueue:get_name(Q), check_queue_internal(Q, SuitabilityResult)}
+        {amqqueue:get_name(Q), check_queue_internal(Q, SuitabilityResult, Opts)}
      || Q <- Queues
     ],
 
@@ -111,11 +114,11 @@ count_compatible_queues(Results) ->
     ).
 
 %% Internal function to check a queue's compatibility, considering suitability results
-check_queue_internal(Queue, SuitabilityResult) ->
+check_queue_internal(Queue, SuitabilityResult, Opts) ->
     % Standard per-queue compatibility issues
     StandardIssues = lists:flatten([
         check_exclusive(Queue),
-        check_critical_arguments(Queue)
+        check_critical_arguments(Queue, Opts)
     ]),
 
     % Add suitability issues if they apply to this queue
@@ -215,7 +218,7 @@ check_exclusive(Queue) ->
 
 %% Check critical arguments that will be validated even with relaxed checks
 %% These are the arguments checked in perform_limited_equivalence_checks_on_qq_redeclaration
-check_critical_arguments(Queue) ->
+check_critical_arguments(Queue, Opts) ->
     Args = amqqueue:get_arguments(Queue),
     CriticalArgChecks = [
         check_critical_overflow_behavior(Args),
@@ -223,7 +226,7 @@ check_critical_arguments(Queue) ->
         check_critical_expires(Args, Queue),
         check_critical_max_length_args(Args),
         check_critical_single_active_consumer(Args),
-        check_critical_message_ttl(Args, Queue)
+        check_critical_message_ttl(Args, Queue, Opts)
     ],
     lists:flatten(CriticalArgChecks).
 
@@ -287,8 +290,11 @@ check_critical_single_active_consumer(Args) ->
     end.
 
 %% Check message TTL argument or policy - queues with message TTL are unsuitable for migration
-%% because messages could expire during the migration process, causing count mismatches
-check_critical_message_ttl(Args, Queue) ->
+%% because messages could expire during the migration process, causing count mismatches.
+%% Skipped when the caller opted in to migrating message-TTL queues.
+check_critical_message_ttl(_Args, _Queue, #{allow_message_ttl := true}) ->
+    [];
+check_critical_message_ttl(Args, Queue, _Opts) ->
     HasTtlArg = rabbit_misc:table_lookup(Args, <<"x-message-ttl">>) =/= undefined,
     HasTtlPolicy = has_message_ttl_policy(Queue),
     case HasTtlArg orelse HasTtlPolicy of
@@ -321,7 +327,7 @@ check_migration_readiness(VHost, OptsMap) ->
     SkipUnsuitableQueues = maps:get(skip_unsuitable_queues, OptsMap, false),
 
     % Run all system checks (never stops early)
-    AllChecks = rqm_checks:check_system_migration_readiness(VHost),
+    AllChecks = rqm_checks:check_system_migration_readiness(VHost, OptsMap),
 
     % Separate true system checks from queue-level checks
     QueueLevelCheckTypes = [queue_synchronization, queue_suitability, message_count],
@@ -333,7 +339,7 @@ check_migration_readiness(VHost, OptsMap) ->
     ),
 
     % Run queue compatibility checks
-    {VHost, QueueResults, QueueSummary} = check_vhost(VHost, unsuitable_only),
+    {VHost, QueueResults, QueueSummary} = check_vhost(VHost, unsuitable_only, OptsMap),
 
     % Determine overall readiness
     TrueSystemReady = lists:all(fun(#{status := Status}) -> Status =:= passed end, SystemChecks),
