@@ -519,7 +519,8 @@ parse_all_options(Opts0, Json) ->
     Opts2 = parse_batch_size(Json, Opts1),
     Opts3 = parse_batch_order(Json, Opts2),
     Opts4 = parse_queue_names(Json, Opts3),
-    parse_tolerance(Json, Opts4).
+    Opts5 = parse_tolerance(Json, Opts4),
+    parse_allow_message_ttl(Json, Opts5).
 
 parse_skip_unsuitable_queues(Json, Opts) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
@@ -561,6 +562,13 @@ parse_tolerance(Json, Opts) ->
             Opts#{tolerance => float(V)};
         _ ->
             Opts
+    end.
+
+parse_allow_message_ttl(Json, Opts) ->
+    case maps:get(<<"allow_message_ttl">>, Json, false) of
+        true -> Opts#{allow_message_ttl => true};
+        false -> Opts#{allow_message_ttl => false};
+        _ -> Opts
     end.
 
 not_found_reply(ReqData, State) ->
