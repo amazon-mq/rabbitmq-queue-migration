@@ -69,7 +69,18 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
-    Tolerance = maps:get(tolerance, OptsMap, undefined),
+    AllowMessageTtl = maps:get(allow_message_ttl, OptsMap, false),
+    %% Opting in to migrating message-TTL queues means accepting that any or
+    %% all messages in those queues may expire during migration. Force the
+    %% message-count tolerance to 100% (both directions) so verification never
+    %% fails on the resulting count difference, overriding any explicit
+    %% tolerance. Note this is migration-wide: it relaxes count verification
+    %% for every queue in this run, not only the message-TTL queues.
+    Tolerance =
+        case AllowMessageTtl of
+            true -> 100.0;
+            false -> maps:get(tolerance, OptsMap, undefined)
+        end,
     #migration_opts{
         vhost = VHost,
         mode = Mode,
@@ -78,7 +89,8 @@ build_migration_opts(Mode, OptsMap) ->
         batch_order = BatchOrder,
         queue_names = QueueNames,
         migration_id = MigrationId,
-        tolerance = Tolerance
+        tolerance = Tolerance,
+        allow_message_ttl = AllowMessageTtl
     }.
 
 pre_migration_validation(shovel_plugin, Opts) ->
