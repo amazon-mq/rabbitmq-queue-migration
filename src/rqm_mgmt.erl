@@ -164,9 +164,17 @@ do_accept_content(_VHost, ReqData, {interrupt, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
     accept_interrupt(MigrationIdUrlEncoded, ReqData, {interrupt, Context}).
 
-accept_migration_start(VHost, ReqData, {EndpointType, Context}) ->
+accept_migration_start(VHost, ReqData, {EndpointType, Context} = ContextArg) ->
     % Parse request body for options
-    Opts0 = parse_migration_options(VHost, ReqData),
+    case parse_migration_options(VHost, ReqData) of
+        {ok, Opts0} ->
+            start_validated_migration(Opts0, ReqData, {EndpointType, Context});
+        {error, Reason} ->
+            ErrorJson = rabbit_json:encode(#{error => bad_request, reason => Reason}),
+            bad_request(ErrorJson, ReqData, ContextArg)
+    end.
+
+start_validated_migration(Opts0, ReqData, {EndpointType, Context}) ->
     % First, run validation synchronously to catch errors before spawning
     case rqm:validate_migration(Opts0) of
         ok ->
@@ -486,8 +494,13 @@ format_snapshot({Node, SnapshotId, VolumeId, InstanceId}) ->
     }.
 
 parse_migration_options(VHost, ReqData) ->
-    Opts = #{vhost => VHost},
-    maybe_parse_json_body(Opts, read_body(ReqData)).
+    maybe_parse_json_body(#{vhost => VHost}, read_body(ReqData)).
+
+%% Parse only the body options (no vhost), for the compatibility check endpoint
+%% which receives the vhost separately. Uses the same parser as the start
+%% endpoints so the two cannot diverge.
+parse_options_from_body(ReqData) ->
+    maybe_parse_json_body(#{}, read_body(ReqData)).
 
 read_body(ReqData) ->
     HasBody = cowboy_req:has_body(ReqData),
@@ -512,64 +525,78 @@ try_decode_json(_) ->
 maybe_parse_json_body(Opts, {ok, Json}) ->
     parse_all_options(Opts, Json);
 maybe_parse_json_body(Opts, empty) ->
-    Opts.
+    {ok, Opts}.
 
+%% Validate and apply every option in turn, stopping at the first invalid
+%% value. An absent option keeps its default; a present-but-invalid value is
+%% rejected so misuse fails loudly rather than being silently ignored.
 parse_all_options(Opts0, Json) ->
-    Opts1 = parse_skip_unsuitable_queues(Json, Opts0),
-    Opts2 = parse_batch_size(Json, Opts1),
-    Opts3 = parse_batch_order(Json, Opts2),
-    Opts4 = parse_queue_names(Json, Opts3),
-    Opts5 = parse_tolerance(Json, Opts4),
-    parse_allow_message_ttl(Json, Opts5).
+    Parsers = [
+        fun parse_skip_unsuitable_queues/2,
+        fun parse_batch_size/2,
+        fun parse_batch_order/2,
+        fun parse_queue_names/2,
+        fun parse_tolerance/2,
+        fun parse_allow_message_ttl/2
+    ],
+    lists:foldl(
+        fun
+            (Parser, {ok, Opts}) -> Parser(Json, Opts);
+            (_Parser, {error, _} = Error) -> Error
+        end,
+        {ok, Opts0},
+        Parsers
+    ).
 
 parse_skip_unsuitable_queues(Json, Opts) ->
     case maps:get(<<"skip_unsuitable_queues">>, Json, false) of
-        true -> Opts#{skip_unsuitable_queues => true};
-        false -> Opts#{skip_unsuitable_queues => false};
-        _ -> Opts
+        V when is_boolean(V) -> {ok, Opts#{skip_unsuitable_queues => V}};
+        _ -> invalid_option(<<"skip_unsuitable_queues">>, <<"must be a boolean">>)
     end.
 
 parse_batch_size(Json, Opts) ->
     case maps:get(<<"batch_size">>, Json, undefined) of
-        undefined -> Opts;
-        <<"all">> -> Opts#{batch_size => all};
-        0 -> Opts#{batch_size => all};
-        N when is_integer(N), N > 0 -> Opts#{batch_size => N};
-        _ -> Opts
+        undefined -> {ok, Opts};
+        <<"all">> -> {ok, Opts#{batch_size => all}};
+        0 -> {ok, Opts#{batch_size => all}};
+        N when is_integer(N), N > 0 -> {ok, Opts#{batch_size => N}};
+        _ -> invalid_option(<<"batch_size">>, <<"must be \"all\" or a non-negative integer">>)
     end.
 
 parse_batch_order(Json, Opts) ->
     case maps:get(<<"batch_order">>, Json, undefined) of
-        <<"smallest_first">> -> Opts#{batch_order => smallest_first};
-        <<"largest_first">> -> Opts#{batch_order => largest_first};
-        _ -> Opts
+        undefined -> {ok, Opts};
+        <<"smallest_first">> -> {ok, Opts#{batch_order => smallest_first}};
+        <<"largest_first">> -> {ok, Opts#{batch_order => largest_first}};
+        _ -> invalid_option(<<"batch_order">>, <<"must be \"smallest_first\" or \"largest_first\"">>)
     end.
 
 parse_queue_names(Json, Opts) ->
     case maps:get(<<"queue_names">>, Json, undefined) of
         undefined ->
-            Opts;
+            {ok, Opts};
         Names when is_list(Names) ->
             QueueNames = [rqm_util:to_unicode(N) || N <- Names],
-            Opts#{queue_names => QueueNames};
+            {ok, Opts#{queue_names => QueueNames}};
         _ ->
-            Opts
+            invalid_option(<<"queue_names">>, <<"must be a list of queue names">>)
     end.
 
 parse_tolerance(Json, Opts) ->
     case maps:get(<<"tolerance">>, Json, undefined) of
-        V when is_number(V), V >= 0.0, V =< 100.0 ->
-            Opts#{tolerance => float(V)};
-        _ ->
-            Opts
+        undefined -> {ok, Opts};
+        V when is_number(V), V >= 0.0, V =< 100.0 -> {ok, Opts#{tolerance => float(V)}};
+        _ -> invalid_option(<<"tolerance">>, <<"must be a number between 0.0 and 100.0">>)
     end.
 
 parse_allow_message_ttl(Json, Opts) ->
     case maps:get(<<"allow_message_ttl">>, Json, false) of
-        true -> Opts#{allow_message_ttl => true};
-        false -> Opts#{allow_message_ttl => false};
-        _ -> Opts
+        V when is_boolean(V) -> {ok, Opts#{allow_message_ttl => V}};
+        _ -> invalid_option(<<"allow_message_ttl">>, <<"must be a boolean">>)
     end.
+
+invalid_option(Option, Detail) ->
+    {error, <<"Invalid value for option '", Option/binary, "': ", Detail/binary>>}.
 
 not_found_reply(ReqData, State) ->
     ErrorJson = rabbit_json:encode(#{error => <<"Migration not found">>}),
@@ -586,43 +613,30 @@ accept_compatibility_check(<<"all">>, ReqData, ContextArg) ->
 accept_compatibility_check(VHost, ReqData, ContextArg) when is_binary(VHost) ->
     do_accept_compatibility_check(VHost, ReqData, ContextArg).
 
-do_accept_compatibility_check(VHost, ReqData, {EndpointType, Context}) ->
-    OptsMap = parse_skip_unsuitable_queues_from_body(ReqData),
-    case VHost of
-        all_vhosts ->
-            AllVhosts = rabbit_vhost:list(),
-            Results = [
-                format_readiness(rqm_compat_checker:check_migration_readiness(VH, OptsMap))
-             || VH <- AllVhosts
-            ],
-            Json = rabbit_json:encode(#{vhost => <<"all">>, vhost_results => Results}),
-            {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}};
-        _ ->
-            Result = rqm_compat_checker:check_migration_readiness(VHost, OptsMap),
-            Json = rabbit_json:encode(format_readiness(Result)),
-            {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}}
+do_accept_compatibility_check(VHost, ReqData, {EndpointType, Context} = ContextArg) ->
+    % Parse the same options as the start endpoints so the compatibility check
+    % passes or fails exactly as the actual migration would (for example,
+    % allow_message_ttl must be honored identically).
+    case parse_options_from_body(ReqData) of
+        {ok, OptsMap} ->
+            run_compatibility_check(VHost, OptsMap, ReqData, {EndpointType, Context});
+        {error, Reason} ->
+            ErrorJson = rabbit_json:encode(#{error => bad_request, reason => Reason}),
+            bad_request(ErrorJson, ReqData, ContextArg)
     end.
 
-parse_skip_unsuitable_queues_from_body(ReqData) ->
-    case cowboy_req:has_body(ReqData) of
-        true ->
-            {ok, Body, _} = cowboy_req:read_body(ReqData),
-            case Body of
-                <<>> ->
-                    #{};
-                _ ->
-                    case rabbit_json:try_decode(Body) of
-                        {ok, #{<<"skip_unsuitable_queues">> := true}} ->
-                            #{skip_unsuitable_queues => true};
-                        {ok, _} ->
-                            #{skip_unsuitable_queues => false};
-                        _ ->
-                            #{}
-                    end
-            end;
-        false ->
-            #{}
-    end.
+run_compatibility_check(all_vhosts, OptsMap, ReqData, {EndpointType, Context}) ->
+    AllVhosts = rabbit_vhost:list(),
+    Results = [
+        format_readiness(rqm_compat_checker:check_migration_readiness(VH, OptsMap))
+     || VH <- AllVhosts
+    ],
+    Json = rabbit_json:encode(#{vhost => <<"all">>, vhost_results => Results}),
+    {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}};
+run_compatibility_check(VHost, OptsMap, ReqData, {EndpointType, Context}) ->
+    Result = rqm_compat_checker:check_migration_readiness(VHost, OptsMap),
+    Json = rabbit_json:encode(format_readiness(Result)),
+    {true, cowboy_req:set_resp_body(Json, ReqData), {EndpointType, Context}}.
 
 format_readiness(#{
     vhost := VHost,
