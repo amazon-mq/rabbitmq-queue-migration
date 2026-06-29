@@ -24,6 +24,13 @@
     start_migration_on_node/4
 ]).
 
+%% Exported for testing
+-ifdef(TEST).
+-export([
+    message_ttl_opts/1
+]).
+-endif.
+
 %% Public API
 
 start(OptsMap) when is_map(OptsMap) ->

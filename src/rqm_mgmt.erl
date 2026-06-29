@@ -19,6 +19,13 @@
     accept_content/2
 ]).
 
+%% Exported for testing
+-ifdef(TEST).
+-export([
+    parse_all_options/2
+]).
+-endif.
+
 -import(rabbit_misc, [pget/2]).
 
 -include("rqm.hrl").
