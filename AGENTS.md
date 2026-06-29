@@ -72,6 +72,16 @@ This plugin provides a production-ready solution for migrating mirrored classic 
 }).
 ```
 
+#### Mnesia Schema Compatibility (READ BEFORE CHANGING THESE RECORDS)
+
+The `queue_migration` and `queue_migration_status` records are persisted as Mnesia tables (`disc_copies`), created in `rqm_init_state:try_setup_schema/0` with `{attributes, record_info(fields, Record)}`. Changing these records has upgrade implications that are easy to get wrong:
+
+- **Mnesia rows are bare tuples; reads/writes are positional by arity.** Adding, removing, or reordering a field changes the record's tuple arity. On a node upgraded over an existing on-disk table, the new code's records no longer match the table's stored arity, and `mnesia:dirty_write` of the new shape fails with `{aborted, {bad_type, ...}}`. A fresh install hides this completely, because the table is created with the new arity from the start. So "it builds and works on my fresh cluster" does NOT prove upgrade safety.
+- **Field names live in schema metadata, frozen at table-creation time.** `mnesia:table_info(Table, attributes)` returns the names from whoever first created the table; `rabbit_table:create/2` on an existing table is a no-op (`already_exists`) and does NOT update them. Renaming a field therefore leaves the on-disk attribute names diverged from the record forever on upgraded nodes. This is invisible to this plugin today only because the plugin's init path uses `rabbit_table:create/2` + `rabbit_table:wait/1`, and `rabbit_table:check_attributes` / `check_schema_integrity` (which would flag `table_attributes_mismatch`) only runs over core tables in `rabbit_table:definitions()`, never this plugin's tables. Do not rely on that without re-checking it.
+- **Migrating an existing table requires `mnesia:transform_table/4`**, which rewrites every row and updates the schema attributes. It is a schema transaction (Mnesia serializes it cluster-wide), but running it safely during a live rolling upgrade needs care and an idempotent guard (transform only when `table_info(..., attributes)` still shows the old shape). The community-recommended safe path for clusters is to coordinate the upgrade rather than transform a live table casually.
+- **Preferred pattern for evolvable options:** store options/extensible data as a single `map()` under one record field. Adding or removing a key is then a value change with no arity or schema change, avoiding `transform_table` entirely. Secondary indexes still require real record fields, but options are not indexed. See the follow-up issue on persisting migration options as a map.
+- **Worked example:** `allow_message_ttl` (added 2026) is deliberately NOT persisted in `queue_migration` for exactly these reasons. It lives only in the transient `migration_opts` record. The migration still reflects it indirectly via the persisted `tolerance` (the option forces tolerance to 100).
+
 ## Migration Process
 
 ### Prerequisites (BEFORE Migration)
