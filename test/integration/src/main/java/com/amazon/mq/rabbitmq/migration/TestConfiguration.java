@@ -29,6 +29,8 @@ public class TestConfiguration {
   private Integer batchSize = null; // null means "all"
   private String batchOrder = "smallest_first";
   private boolean allowMessageTtl = false; // Allow migrating queues with a queue-level message TTL
+  // Set the vhost default queue type after a successful migration ("quorum" or "classic"); null = unchanged
+  private String setDefaultQueueType = null;
 
   // Per-message TTL configuration
   private int perMessageTtlPercent = 0; // Percentage of messages with per-message TTL
@@ -111,13 +113,16 @@ public class TestConfiguration {
 
   /** Create a QueueMigrationClient configured for this topology. */
   public QueueMigrationClient createMigrationClient() {
-    return new QueueMigrationClient(
-        getHttpHost(),
-        getHttpPort(),
-        clusterTopology.getUsername(),
-        clusterTopology.getPassword(),
-        virtualHost,
-        getSslContext());
+    QueueMigrationClient client =
+        new QueueMigrationClient(
+            getHttpHost(),
+            getHttpPort(),
+            clusterTopology.getUsername(),
+            clusterTopology.getPassword(),
+            virtualHost,
+            getSslContext());
+    client.setDefaultQueueType(setDefaultQueueType);
+    return client;
   }
 
   public int getSmallMessageSize() {
@@ -392,6 +397,14 @@ public class TestConfiguration {
 
   public void setAllowMessageTtl(boolean allowMessageTtl) {
     this.allowMessageTtl = allowMessageTtl;
+  }
+
+  public String getSetDefaultQueueType() {
+    return setDefaultQueueType;
+  }
+
+  public void setSetDefaultQueueType(String setDefaultQueueType) {
+    this.setDefaultQueueType = setDefaultQueueType;
   }
 
   public Integer getBatchSize() {

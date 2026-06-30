@@ -76,6 +76,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
+    SetDefaultQueueType = maps:get(set_default_queue_type, OptsMap, undefined),
     {AllowMessageTtl, Tolerance} = message_ttl_opts(OptsMap),
     #migration_opts{
         vhost = VHost,
@@ -86,7 +87,8 @@ build_migration_opts(Mode, OptsMap) ->
         queue_names = QueueNames,
         migration_id = MigrationId,
         tolerance = Tolerance,
-        allow_message_ttl = AllowMessageTtl
+        allow_message_ttl = AllowMessageTtl,
+        set_default_queue_type = SetDefaultQueueType
     }.
 
 %% Resolve the coupled `allow_message_ttl` and `tolerance` options together,
@@ -338,7 +340,8 @@ start_with_lock(
         skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
         migration_id = MigrationId,
-        tolerance = Tolerance
+        tolerance = Tolerance,
+        set_default_queue_type = SetDefaultQueueType
     } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
@@ -361,6 +364,11 @@ start_with_lock(
         ok = post_migration_restore(Nodes, PreparationState, VHost),
 
         ok = post_migration_stats(Nodes, MigrationId, MigrationDuration, CompletionStatus),
+
+        %% The migration succeeded; optionally set the vhost default queue type.
+        %% This is best-effort: a failure here is logged but does not fail the
+        %% migration, which has already completed and restored normal operations.
+        maybe_set_default_queue_type(VHost, SetDefaultQueueType),
         ok
     catch
         Class:Reason:Stack ->
@@ -369,6 +377,44 @@ start_with_lock(
             {error, {Class, Reason}}
     after
         global:del_lock(GlobalLockId)
+    end.
+
+%% Optionally set the virtual host's default queue type after a successful
+%% migration. `undefined` (the default) leaves the vhost metadata untouched.
+%% The value was validated to `<<"quorum">>` or `<<"classic">>` when the option
+%% was parsed. Overwrites any existing default queue type.
+%%
+%% This is strictly best-effort and MUST never fail the migration, which has
+%% already completed and restored normal operations by this point. Both the
+%% `{error, _}` return and any raised exception (rabbit_vhost:update_metadata
+%% throws if its Mnesia transaction fails) are caught and logged; this function
+%% always returns ok.
+maybe_set_default_queue_type(_VHost, undefined) ->
+    ok;
+maybe_set_default_queue_type(VHost, QueueType) when is_binary(QueueType) ->
+    ?LOG_INFO(
+        "rqm: setting default queue type of vhost ~ts to ~ts", [VHost, QueueType]
+    ),
+    try
+        rabbit_vhost:update_metadata(VHost, #{default_queue_type => QueueType}, <<"internal_user">>)
+    of
+        ok ->
+            ok;
+        {error, Reason} ->
+            ?LOG_ERROR(
+                "rqm: failed to set default queue type of vhost ~ts to ~ts: ~tp. "
+                "Migration succeeded; set the default queue type manually if needed.",
+                [VHost, QueueType, Reason]
+            ),
+            ok
+    catch
+        Class:CatchReason:Stack ->
+            ?LOG_ERROR(
+                "rqm: error setting default queue type of vhost ~ts to ~ts: ~tp:~tp. "
+                "Migration succeeded; set the default queue type manually if needed.~n~tp",
+                [VHost, QueueType, Class, CatchReason, Stack]
+            ),
+            ok
     end.
 
 -spec handle_migration_exception_on_nodes([node()], atom(), term()) -> ok.

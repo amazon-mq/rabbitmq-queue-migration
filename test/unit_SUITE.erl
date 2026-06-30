@@ -76,6 +76,7 @@
     parse_options_allow_message_ttl_test/1,
     parse_options_defaults_test/1,
     parse_options_invalid_values_rejected_test/1,
+    parse_options_set_default_queue_type_test/1,
     message_ttl_opts_forces_tolerance_test/1,
     message_ttl_opts_without_flag_test/1
 ]).
@@ -150,6 +151,7 @@ groups() ->
             parse_options_allow_message_ttl_test,
             parse_options_defaults_test,
             parse_options_invalid_values_rejected_test,
+            parse_options_set_default_queue_type_test,
             message_ttl_opts_forces_tolerance_test,
             message_ttl_opts_without_flag_test
         ]}
@@ -786,6 +788,32 @@ parse_options_invalid_values_rejected_test(_Config) ->
     ?assertMatch(
         {error, _},
         rqm_mgmt:parse_all_options(#{}, #{<<"batch_size">> => -5})
+    ),
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"set_default_queue_type">> => <<"stream">>})
+    ).
+
+%% set_default_queue_type accepts only "quorum" or "classic"; absent leaves it unset.
+parse_options_set_default_queue_type_test(_Config) ->
+    {ok, OptsQuorum} = rqm_mgmt:parse_all_options(#{}, #{
+        <<"set_default_queue_type">> => <<"quorum">>
+    }),
+    ?assertEqual(<<"quorum">>, maps:get(set_default_queue_type, OptsQuorum)),
+
+    {ok, OptsClassic} = rqm_mgmt:parse_all_options(#{}, #{
+        <<"set_default_queue_type">> => <<"classic">>
+    }),
+    ?assertEqual(<<"classic">>, maps:get(set_default_queue_type, OptsClassic)),
+
+    %% Absent: the key is not added (downstream treats this as "leave unchanged").
+    {ok, OptsAbsent} = rqm_mgmt:parse_all_options(#{}, #{}),
+    ?assertEqual(false, maps:is_key(set_default_queue_type, OptsAbsent)),
+
+    %% An invalid value is rejected.
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"set_default_queue_type">> => <<"bogus">>})
     ).
 
 %% allow_message_ttl forces tolerance to 100.0, overriding any supplied value.

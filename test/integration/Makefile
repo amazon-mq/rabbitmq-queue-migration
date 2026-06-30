@@ -47,6 +47,7 @@ integration-end-to-end: package
 		--queue-count=10 \
 		--total-messages=1000 \
 		--migration-timeout=300 \
+		--set-default-queue-type=quorum \
 		--hostname=localhost \
 		--port=15672
 
