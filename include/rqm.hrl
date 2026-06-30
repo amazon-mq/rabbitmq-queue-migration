@@ -165,5 +165,6 @@
     queue_names = undefined :: undefined | [binary()],
     migration_id = undefined :: undefined | {integer(), atom()},
     tolerance = undefined :: undefined | float(),
-    allow_message_ttl = false :: boolean()
+    allow_message_ttl = false :: boolean(),
+    set_default_queue_type = undefined :: undefined | binary()
 }).

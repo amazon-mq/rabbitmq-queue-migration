@@ -76,6 +76,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
+    SetDefaultQueueType = maps:get(set_default_queue_type, OptsMap, undefined),
     {AllowMessageTtl, Tolerance} = message_ttl_opts(OptsMap),
     #migration_opts{
         vhost = VHost,
@@ -86,7 +87,8 @@ build_migration_opts(Mode, OptsMap) ->
         queue_names = QueueNames,
         migration_id = MigrationId,
         tolerance = Tolerance,
-        allow_message_ttl = AllowMessageTtl
+        allow_message_ttl = AllowMessageTtl,
+        set_default_queue_type = SetDefaultQueueType
     }.
 
 %% Resolve the coupled `allow_message_ttl` and `tolerance` options together,
