@@ -28,6 +28,7 @@ public class TestConfiguration {
   private boolean skipUnsuitableQueues = false;
   private Integer batchSize = null; // null means "all"
   private String batchOrder = "smallest_first";
+  private boolean allowMessageTtl = false; // Allow migrating queues with a queue-level message TTL
 
   // Per-message TTL configuration
   private int perMessageTtlPercent = 0; // Percentage of messages with per-message TTL
@@ -383,6 +384,14 @@ public class TestConfiguration {
 
   public void setSkipUnsuitableQueues(boolean skipUnsuitableQueues) {
     this.skipUnsuitableQueues = skipUnsuitableQueues;
+  }
+
+  public boolean isAllowMessageTtl() {
+    return allowMessageTtl;
+  }
+
+  public void setAllowMessageTtl(boolean allowMessageTtl) {
+    this.allowMessageTtl = allowMessageTtl;
   }
 
   public Integer getBatchSize() {

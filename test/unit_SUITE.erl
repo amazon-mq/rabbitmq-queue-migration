@@ -70,7 +70,14 @@
     queue_naming_looks_like_temp_test/1,
     queue_naming_empty_test/1,
     queue_naming_long_name_test/1,
-    queue_naming_different_migration_ids_test/1
+    queue_naming_different_migration_ids_test/1,
+
+    % allow_message_ttl option tests
+    parse_options_allow_message_ttl_test/1,
+    parse_options_defaults_test/1,
+    parse_options_invalid_values_rejected_test/1,
+    message_ttl_opts_forces_tolerance_test/1,
+    message_ttl_opts_without_flag_test/1
 ]).
 
 %% Test groups
@@ -83,7 +90,8 @@ all() ->
         {group, padding_tests},
         {group, compatibility_tests},
         {group, migration_checks},
-        {group, queue_naming}
+        {group, queue_naming},
+        {group, allow_message_ttl_options}
     ].
 
 groups() ->
@@ -137,6 +145,13 @@ groups() ->
             queue_naming_empty_test,
             queue_naming_long_name_test,
             queue_naming_different_migration_ids_test
+        ]},
+        {allow_message_ttl_options, [parallel], [
+            parse_options_allow_message_ttl_test,
+            parse_options_defaults_test,
+            parse_options_invalid_values_rejected_test,
+            message_ttl_opts_forces_tolerance_test,
+            message_ttl_opts_without_flag_test
         ]}
     ].
 
@@ -722,3 +737,73 @@ queue_naming_different_migration_ids_test(_Config) ->
 
     Restored2 = rqm_queue_naming:remove_temp_prefix(Temp2, MigrationId2),
     ?assertEqual(Original, Restored2).
+
+%%--------------------------------------------------------------------
+%% allow_message_ttl option tests
+%%--------------------------------------------------------------------
+
+%% allow_message_ttl is parsed from the request body as a boolean.
+parse_options_allow_message_ttl_test(_Config) ->
+    {ok, OptsTrue} = rqm_mgmt:parse_all_options(#{}, #{<<"allow_message_ttl">> => true}),
+    ?assertEqual(true, maps:get(allow_message_ttl, OptsTrue)),
+
+    {ok, OptsFalse} = rqm_mgmt:parse_all_options(#{}, #{<<"allow_message_ttl">> => false}),
+    ?assertEqual(false, maps:get(allow_message_ttl, OptsFalse)).
+
+%% An empty body succeeds. The two boolean options are always materialized
+%% (defaulting to false); the value-typed options (batch_size, batch_order,
+%% queue_names, tolerance) stay absent so their downstream defaults apply.
+parse_options_defaults_test(_Config) ->
+    ?assertEqual(
+        {ok, #{skip_unsuitable_queues => false, allow_message_ttl => false}},
+        rqm_mgmt:parse_all_options(#{}, #{})
+    ),
+
+    %% A value-typed option is only present when supplied.
+    {ok, Opts} = rqm_mgmt:parse_all_options(#{}, #{<<"skip_unsuitable_queues">> => true}),
+    ?assertEqual(true, maps:get(skip_unsuitable_queues, Opts)),
+    ?assertEqual(false, maps:is_key(tolerance, Opts)).
+
+%% A present-but-invalid value for any option is rejected rather than silently
+%% ignored.
+parse_options_invalid_values_rejected_test(_Config) ->
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"allow_message_ttl">> => <<"yes">>})
+    ),
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"skip_unsuitable_queues">> => <<"nope">>})
+    ),
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"batch_order">> => <<"random">>})
+    ),
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"tolerance">> => 150.0})
+    ),
+    ?assertMatch(
+        {error, _},
+        rqm_mgmt:parse_all_options(#{}, #{<<"batch_size">> => -5})
+    ).
+
+%% allow_message_ttl forces tolerance to 100.0, overriding any supplied value.
+message_ttl_opts_forces_tolerance_test(_Config) ->
+    ?assertEqual({true, 100.0}, rqm:message_ttl_opts(#{allow_message_ttl => true})),
+
+    %% An explicit tolerance is overridden when the flag is set.
+    ?assertEqual(
+        {true, 100.0},
+        rqm:message_ttl_opts(#{allow_message_ttl => true, tolerance => 10.0})
+    ).
+
+%% Without the flag, tolerance is the supplied value, or undefined to fall back
+%% to the configured defaults.
+message_ttl_opts_without_flag_test(_Config) ->
+    ?assertEqual({false, undefined}, rqm:message_ttl_opts(#{})),
+    ?assertEqual({false, undefined}, rqm:message_ttl_opts(#{allow_message_ttl => false})),
+    ?assertEqual(
+        {false, 10.0},
+        rqm:message_ttl_opts(#{allow_message_ttl => false, tolerance => 10.0})
+    ).

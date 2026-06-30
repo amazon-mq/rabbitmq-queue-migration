@@ -64,7 +64,10 @@ public class EndToEndMigrationTest {
       QueueMigrationClient migrationClient = createMigrationClient(config);
       QueueMigrationClient.MigrationResponse migrationResponse =
           migrationClient.startMigration(
-              config.isSkipUnsuitableQueues(), config.getBatchSize(), config.getBatchOrder());
+              config.isSkipUnsuitableQueues(),
+              config.getBatchSize(),
+              config.getBatchOrder(),
+              config.isAllowMessageTtl());
       logger.info("Migration start response: {}", migrationResponse);
 
       // Phase 4: Wait for migration to start, then monitor progress

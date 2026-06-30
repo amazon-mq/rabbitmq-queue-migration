@@ -103,16 +103,18 @@ POST /api/queue-migration/start/:vhost
   "skip_unsuitable_queues": true,
   "tolerance": 10.0,
   "batch_size": 10,
-  "batch_order": "smallest_first"
+  "batch_order": "smallest_first",
+  "allow_message_ttl": false
 }
 ```
 
 **Request Body Fields:**
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, skip queues that fail validation checks instead of blocking the entire migration. Defaults to `false`.
-- `tolerance` (optional, number) - Message count tolerance percentage (0.0-100.0) for per-queue verification. When set, a queue passes verification if the destination message count is within this percentage of the source count. Use this when publishers set per-message TTL that may cause messages to expire during migration. Defaults to `0.0` (exact match required).
+- `tolerance` (optional, number) - Message count tolerance percentage (0.0-100.0) for per-queue verification. A queue passes verification if the destination message count is within this percentage of the source count. Use this when publishers set per-message TTL that may cause messages to expire during migration. When unset, the configured defaults apply: 5.0% over-delivery and 0.0% under-delivery (exact match for lost messages).
 - `batch_size` (optional, integer or `"all"`) - Number of queues to migrate in this batch. Use `0` or `"all"` to migrate all eligible queues. Defaults to `all`. Ignored if `queue_names` is specified.
 - `batch_order` (optional, string) - Order to select queues for batching: `"smallest_first"` or `"largest_first"`. Defaults to `"smallest_first"`. Ignored if `queue_names` is specified.
 - `queue_names` (optional, array of strings) - Specific queue names to migrate. When provided, only these queues are migrated. Takes precedence over `batch_size` and `batch_order`. Non-existent or ineligible queues are logged and skipped.
+- `allow_message_ttl` (optional, boolean) - When `true`, queues that have a queue-level message TTL (the `x-message-ttl` queue argument or the `message-ttl` policy key) are allowed to migrate instead of being treated as unsuitable. Defaults to `false`. **This forces the message count `tolerance` to 100% in both directions (overriding any `tolerance` value supplied), because opting in means accepting that any or all messages in these queues may expire during migration.** Note that `tolerance` is migration-wide, so enabling this disables message-count verification for **every** queue in the run, not only the queues with a message TTL. The migrated quorum queue retains its `x-message-ttl` argument.
 
 **Request:**
 ```bash
@@ -160,6 +162,12 @@ curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"tolerance": 10.0}' \
   http://localhost:15672/api/queue-migration/start/%2F
+
+# Allow queues with a queue-level message TTL to migrate (forces tolerance to 100%)
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"allow_message_ttl": true}' \
+  http://localhost:15672/api/queue-migration/start/%2F
 ```
 
 > **Common Mistake:** Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
@@ -181,6 +189,14 @@ curl -u guest:guest -X POST \
 **Error Responses:**
 
 **400 Bad Request** - Validation failed or invalid parameters:
+
+Invalid option value (any request body option that is present but has an invalid value is rejected; the option is not silently ignored):
+```json
+{
+  "error": "bad_request",
+  "reason": "Invalid value for option 'allow_message_ttl': must be a boolean"
+}
+```
 
 Shovel plugin not enabled:
 ```json
@@ -295,7 +311,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
   - `rollback_pending` - Requires rollback
   - `rollback_completed` - Rollback completed
 - `skip_unsuitable_queues` - Whether skip mode was enabled
-- `tolerance` - Message count tolerance percentage (null if not set)
+- `tolerance` - Message count tolerance percentage (null if not set). A migration started with `allow_message_ttl: true` reports `tolerance` as `100.0`, since that option forces the tolerance. The `allow_message_ttl` option itself is not persisted and is not reported in status.
 - `error` - Error details (null if no error)
 
 ---
@@ -465,12 +481,17 @@ POST /api/queue-migration/check/:vhost
 **Request Body (optional):**
 ```json
 {
-  "skip_unsuitable_queues": true
+  "skip_unsuitable_queues": true,
+  "allow_message_ttl": false
 }
 ```
 
 **Request Body Fields:**
+
+The check endpoint accepts the **same** request body options as the start endpoints (`skip_unsuitable_queues`, `tolerance`, `batch_size`, `batch_order`, `queue_names`, `allow_message_ttl`) and validates them the same way (an invalid option value returns `400`, see below). This is deliberate: a compatibility check passes or fails exactly as the actual migration would for the same options. The options most relevant to a check are:
+
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, unsuitable queues are shown as informational and don't affect overall readiness. Defaults to `false`.
+- `allow_message_ttl` (optional, boolean) - When `true`, queues with a queue-level message TTL are reported as suitable rather than unsuitable, matching how a migration started with the same option would treat them. Defaults to `false`.
 
 **Request:**
 ```bash
@@ -490,6 +511,12 @@ curl -u guest:guest -X POST \
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
+  http://localhost:15672/api/queue-migration/check/%2F
+
+# Check as a message-TTL-allowing migration would (queues with x-message-ttl reported suitable)
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"allow_message_ttl": true}' \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 

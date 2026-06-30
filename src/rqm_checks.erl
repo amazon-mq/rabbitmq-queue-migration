@@ -12,10 +12,10 @@
     check_leader_balance/1,
     check_leader_balance/2,
     check_queue_synchronization/1,
-    check_queue_suitability/1,
+    check_queue_suitability/2,
     check_eligible_queue_count/1,
     check_disk_space/2,
-    check_system_migration_readiness/1,
+    check_system_migration_readiness/2,
     check_snapshot_not_in_progress/0,
     check_cluster_partitions/0,
     check_plugin_ready_on_all_nodes/0,
@@ -642,9 +642,9 @@ check_eligible_queue_count(
                 }}}
     end.
 
--spec check_queue_suitability(rabbit_types:vhost()) ->
+-spec check_queue_suitability(rabbit_types:vhost(), map()) ->
     ok | {error, {unsuitable_queues, map()}}.
-check_queue_suitability(VHost) ->
+check_queue_suitability(VHost, Opts) ->
     % Get ALL classic queues in the vhost (not just mirrored ones)
     % because any classic queue could have unsuitable arguments
     AllClassicQueues = rqm_db_queue:get_all_by_vhost_and_type(VHost, rabbit_classic_queue),
@@ -661,7 +661,7 @@ check_queue_suitability(VHost) ->
             ok;
         _ ->
             % Collect ALL issues instead of stopping at the first one
-            AllIssues = collect_all_suitability_issues(AllClassicQueues, VHost),
+            AllIssues = collect_all_suitability_issues(AllClassicQueues, Opts),
             case AllIssues of
                 [] -> ok;
                 _ -> {error, {unsuitable_queues, #{problematic_queues => AllIssues}}}
@@ -669,16 +669,21 @@ check_queue_suitability(VHost) ->
     end.
 
 %% @doc Collect all suitability issues from all queues
--spec collect_all_suitability_issues([amqqueue:amqqueue()], rabbit_types:vhost()) -> list().
-collect_all_suitability_issues(AllClassicQueues, _VHost) ->
+-spec collect_all_suitability_issues([amqqueue:amqqueue()], map()) -> list().
+collect_all_suitability_issues(AllClassicQueues, Opts) ->
     % Check for reject-publish-dlx issues
     RejectPublishDlxIssues = collect_reject_publish_dlx_issues(AllClassicQueues),
 
     % Check for queue expiry issues
     QueueExpiresIssues = collect_queue_expires_issues(AllClassicQueues),
 
-    % Check for message TTL issues
-    MessageTtlIssues = collect_message_ttl_issues(AllClassicQueues),
+    % Check for message TTL issues, unless the caller opted in to migrating
+    % queues with a queue-level message TTL.
+    MessageTtlIssues =
+        case maps:get(allow_message_ttl, Opts, false) of
+            true -> [];
+            false -> collect_message_ttl_issues(AllClassicQueues)
+        end,
 
     % For remaining checks, only consider mirrored classic queues
     MirroredClassicQueues = lists:filter(fun rqm_util:has_ha_policy/1, AllClassicQueues),
@@ -803,13 +808,13 @@ has_message_ttl_policy(Queue) ->
 
 %% @doc Run all system-level migration readiness checks
 %% Returns list of all check results (both passed and failed)
--spec check_system_migration_readiness(rabbit_types:vhost()) -> [map()].
-check_system_migration_readiness(VHost) ->
+-spec check_system_migration_readiness(rabbit_types:vhost(), map()) -> [map()].
+check_system_migration_readiness(VHost, Opts) ->
     % Run all checks independently and collect results
     RelaxedChecksResult = check_relaxed_checks_result(),
     LeaderBalanceResult = check_leader_balance_result(VHost),
     QueueSynchronizationResult = check_queue_synchronization_result(VHost),
-    QueueSuitabilityResult = check_queue_suitability_result(VHost),
+    QueueSuitabilityResult = check_queue_suitability_result(VHost, Opts),
     DiskSpaceResult = check_disk_space_result(VHost),
     ActiveAlarmsResult = check_active_alarms_result(),
     MemoryUsageResult = check_memory_usage_result(),
@@ -885,8 +890,8 @@ check_queue_synchronization_result(VHost) ->
             }
     end.
 
-check_queue_suitability_result(VHost) ->
-    case check_queue_suitability(VHost) of
+check_queue_suitability_result(VHost, Opts) ->
+    case check_queue_suitability(VHost, Opts) of
         ok ->
             #{
                 check_type => queue_suitability,
