@@ -680,6 +680,9 @@ public class EndToEndMigrationTest {
     validationPassed &=
         validateQueueProperties(preMigrationDefs, postMigrationDefs, config.getQueuePrefix());
 
+    // If set_default_queue_type was requested, verify the vhost default was set.
+    validationPassed &= validateDefaultQueueType(httpClient, config);
+
     // Calculate migration duration
     long migrationDurationSeconds = (System.currentTimeMillis() - migrationStartTime) / 1000;
 
@@ -1013,6 +1016,29 @@ public class EndToEndMigrationTest {
     }
 
     return passed;
+  }
+
+  /**
+   * If --set-default-queue-type was requested, verify the vhost default queue type was set to the
+   * requested value after migration. Returns true (no-op) when the option was not requested.
+   */
+  private static boolean validateDefaultQueueType(Client httpClient, TestConfiguration config)
+      throws Exception {
+    String expected = config.getSetDefaultQueueType();
+    if (expected == null) {
+      return true;
+    }
+
+    QueueMigrationClient migrationClient = config.createMigrationClient();
+    String actual = migrationClient.getVhostDefaultQueueType(config.getVirtualHost());
+
+    if (expected.equals(actual)) {
+      logger.info("✅ Vhost default queue type set to '{}' as requested", expected);
+      return true;
+    }
+
+    logger.error("❌ Expected vhost default queue type '{}', got '{}'", expected, actual);
+    return false;
   }
 
   /** Compare argument values, handling numeric type differences */
