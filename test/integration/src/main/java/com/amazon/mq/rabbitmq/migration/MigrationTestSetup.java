@@ -273,6 +273,14 @@ public class MigrationTestSetup {
         config.setSkipUnsuitableQueues(true);
       } else if (arg.equals("--allow-message-ttl")) {
         config.setAllowMessageTtl(true);
+      } else if (arg.startsWith("--set-default-queue-type=")) {
+        String dqt = arg.substring("--set-default-queue-type=".length());
+        if (dqt.equals("quorum") || dqt.equals("classic")) {
+          config.setSetDefaultQueueType(dqt);
+        } else {
+          logger.error("Invalid --set-default-queue-type: {} (must be quorum or classic)", dqt);
+          System.exit(1);
+        }
       } else if (arg.startsWith("--batch-size=")) {
         try {
           int batchSize = Integer.parseInt(arg.substring(13));
@@ -387,6 +395,9 @@ public class MigrationTestSetup {
     System.out.println(
         "  --allow-message-ttl        Allow migrating queues with a queue-level message TTL"
             + " (forces tolerance to 100%)");
+    System.out.println(
+        "  --set-default-queue-type=TYPE  Set the vhost default queue type after a successful"
+            + " migration (quorum or classic)");
     System.out.println(
         "  --batch-size=N             Number of queues to migrate per batch (default: all)");
     System.out.println(
