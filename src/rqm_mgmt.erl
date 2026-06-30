@@ -544,7 +544,8 @@ parse_all_options(Opts0, Json) ->
         fun parse_batch_order/2,
         fun parse_queue_names/2,
         fun parse_tolerance/2,
-        fun parse_allow_message_ttl/2
+        fun parse_allow_message_ttl/2,
+        fun parse_set_default_queue_type/2
     ],
     lists:foldl(
         fun
@@ -604,6 +605,14 @@ parse_allow_message_ttl(Json, Opts) ->
     case maps:get(<<"allow_message_ttl">>, Json, false) of
         V when is_boolean(V) -> {ok, Opts#{allow_message_ttl => V}};
         _ -> invalid_option(<<"allow_message_ttl">>, <<"must be a boolean">>)
+    end.
+
+parse_set_default_queue_type(Json, Opts) ->
+    case maps:get(<<"set_default_queue_type">>, Json, undefined) of
+        undefined -> {ok, Opts};
+        <<"quorum">> -> {ok, Opts#{set_default_queue_type => <<"quorum">>}};
+        <<"classic">> -> {ok, Opts#{set_default_queue_type => <<"classic">>}};
+        _ -> invalid_option(<<"set_default_queue_type">>, <<"must be \"quorum\" or \"classic\"">>)
     end.
 
 invalid_option(Option, Detail) ->
