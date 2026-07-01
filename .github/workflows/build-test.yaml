@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: restore-rabbitmq-server-cache
-        uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/rabbitmq-server
           key: rmq-v3.13.7-otp-26-elixir-1.16
@@ -27,7 +27,7 @@ jobs:
         with:
           script: |
             core.setFailed('could not restore cached rabbitmq-server build');
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           otp-version: 26
           elixir-version: 1.16
@@ -57,7 +57,7 @@ jobs:
         with:
           name: rabbitmq_queue_migration.ez
           path: ${{ github.workspace }}/test/integration/docker
-      - uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+      - uses: actions/setup-java@1bcf9fb12cf4aa7d266a90ae39939e61372fe520 # v5.4.0
         with:
           distribution: 'temurin'
           java-version: '21'
