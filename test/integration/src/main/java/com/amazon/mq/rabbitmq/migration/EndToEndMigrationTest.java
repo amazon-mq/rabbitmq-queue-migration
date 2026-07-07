@@ -606,8 +606,24 @@ public class EndToEndMigrationTest {
       logger.info("✅ Queue count validation passed: {}", testQueueCount);
     }
 
-    // Check message count
-    if (totalMessages != preMigrationStats.totalMessages) {
+    // Check message count. With allow_message_ttl the plugin forces tolerance to
+    // 100%, so any or all messages may expire during migration; asserting exact
+    // preservation is wrong. In that case only require that no messages were
+    // gained (0 <= destination <= source). Otherwise assert exact preservation.
+    if (config.isAllowMessageTtl()) {
+      if (totalMessages < 0 || totalMessages > preMigrationStats.totalMessages) {
+        logger.error(
+            "❌ Message count out of range with allow_message_ttl: expected 0..{}, found {}",
+            preMigrationStats.totalMessages,
+            totalMessages);
+        validationPassed = false;
+      } else {
+        logger.info(
+            "✅ Message count within allow_message_ttl range: {}/{} (message loss permitted)",
+            totalMessages,
+            preMigrationStats.totalMessages);
+      }
+    } else if (totalMessages != preMigrationStats.totalMessages) {
       logger.error(
           "❌ Message count mismatch: expected {}, found {}",
           preMigrationStats.totalMessages,
@@ -694,7 +710,8 @@ public class EndToEndMigrationTest {
         classicQueueCount,
         quorumQueueCount,
         migrationDurationSeconds,
-        expectedQuorumCount);
+        expectedQuorumCount,
+        config.isAllowMessageTtl());
 
     if (!validationPassed) {
       throw new RuntimeException("Migration validation failed");
@@ -710,7 +727,8 @@ public class EndToEndMigrationTest {
       int postClassicCount,
       int postQuorumCount,
       long migrationDurationSeconds,
-      int expectedQuorumCount) {
+      int expectedQuorumCount,
+      boolean allowMessageTtl) {
 
     System.out.println();
     System.out.println("=== MIGRATION TEST SUMMARY ===");
@@ -732,9 +750,13 @@ public class EndToEndMigrationTest {
     int successRate = expectedQuorumCount > 0 ? (postQuorumCount * 100 / expectedQuorumCount) : 100;
     System.out.println("  Migration success rate: " + successRate + "%");
 
-    boolean allValidationsPassed =
-        postQuorumCount == expectedQuorumCount
-            && postTotalMessages == preMigrationStats.totalMessages;
+    // With allow_message_ttl, message loss is permitted, so only require that no
+    // messages were gained. Otherwise require exact message preservation.
+    boolean messageCountOk =
+        allowMessageTtl
+            ? (postTotalMessages >= 0 && postTotalMessages <= preMigrationStats.totalMessages)
+            : (postTotalMessages == preMigrationStats.totalMessages);
+    boolean allValidationsPassed = postQuorumCount == expectedQuorumCount && messageCountOk;
 
     System.out.println();
     System.out.println(
