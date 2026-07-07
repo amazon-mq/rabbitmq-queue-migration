@@ -412,6 +412,20 @@ curl -u guest:guest -X POST \
 
 **Resolution:** Define quorum-compatible policies scoped `apply-to: quorum_queues` (or `apply-to: queues`) containing only attributes supported by quorum queues, and remove classic-only attributes such as HA settings. See [Policy Applicability After Migration](MIGRATION_GUIDE.md#policy-applicability-after-migration) in the Migration Guide for the full behavior, the list of unsupported attributes, and effective-policy examples.
 
+### Queue Redeclaration Fails With 406 PRECONDITION_FAILED
+
+**Symptom:** After a successful migration, a client fails to redeclare a migrated queue with:
+
+```
+406 PRECONDITION_FAILED - inequivalent arg 'x-queue-type' for queue '<name>' in vhost '<vhost>': received none but current is the value 'quorum' of type 'longstr'
+```
+
+The connection and channel open normally; only the queue declaration fails.
+
+**Cause:** The queue is now `quorum`, but the client declares it without an explicit `x-queue-type` and the virtual host has no default queue type set, so the declaration carries no type and fails the equivalence check against the existing `quorum` queue.
+
+**Resolution:** Set the virtual host default queue type to `quorum` (via the `set_default_queue_type` migration option, `rabbitmqctl update_vhost_metadata`, or the management HTTP API). See [Client Redeclaration After Migration](MIGRATION_GUIDE.md#client-redeclaration-after-migration) in the Migration Guide for the full behavior matrix and recommendations.
+
 ---
 
 ## Performance Issues
