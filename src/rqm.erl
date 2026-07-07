@@ -337,8 +337,12 @@ start_with_lock(
         vhost = VHost,
         skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
+        batch_size = BatchSize,
+        batch_order = BatchOrder,
+        queue_names = QueueNames,
         migration_id = MigrationId,
-        tolerance = Tolerance
+        tolerance = Tolerance,
+        allow_message_ttl = AllowMessageTtl
     } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
@@ -350,6 +354,23 @@ start_with_lock(
         SkipUnsuitableQueues,
         SkippedCount,
         Tolerance
+    ),
+    %% Log the resolved options so a completed migration can be audited
+    %% retroactively for exactly which options were in effect.
+    ?LOG_INFO(
+        "rqm: starting migration ~s for vhost ~ts with options: "
+        "skip_unsuitable_queues=~w, batch_size=~w, batch_order=~w, "
+        "queue_names=~tp, tolerance=~w, allow_message_ttl=~w",
+        [
+            format_migration_id(MigrationId),
+            VHost,
+            SkipUnsuitableQueues,
+            BatchSize,
+            BatchOrder,
+            QueueNames,
+            Tolerance,
+            AllowMessageTtl
+        ]
     ),
     try
         {ok, PreparationState} = pre_migration_preparation(Nodes, VHost),
