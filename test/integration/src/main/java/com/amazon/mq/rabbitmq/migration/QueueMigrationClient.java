@@ -83,9 +83,16 @@ public class QueueMigrationClient {
     return startMigration(false, batchSize, batchOrder);
   }
 
-  /** Start queue migration with all options */
+  /** Start queue migration with skip/batch options */
   public MigrationResponse startMigration(
       boolean skipUnsuitableQueues, Integer batchSize, String batchOrder)
+      throws IOException, InterruptedException {
+    return startMigration(skipUnsuitableQueues, batchSize, batchOrder, false);
+  }
+
+  /** Start queue migration with all options */
+  public MigrationResponse startMigration(
+      boolean skipUnsuitableQueues, Integer batchSize, String batchOrder, boolean allowMessageTtl)
       throws IOException, InterruptedException {
     Map<String, Object> options = new HashMap<>();
 
@@ -99,6 +106,10 @@ public class QueueMigrationClient {
 
     if (batchOrder != null) {
       options.put("batch_order", batchOrder);
+    }
+
+    if (allowMessageTtl) {
+      options.put("allow_message_ttl", true);
     }
 
     String requestBody = objectMapper.writeValueAsString(options);

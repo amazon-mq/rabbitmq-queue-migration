@@ -271,6 +271,8 @@ public class MigrationTestSetup {
         config.setExchangePrefix(arg.substring(18));
       } else if (arg.equals("--skip-unsuitable-queues")) {
         config.setSkipUnsuitableQueues(true);
+      } else if (arg.equals("--allow-message-ttl")) {
+        config.setAllowMessageTtl(true);
       } else if (arg.startsWith("--batch-size=")) {
         try {
           int batchSize = Integer.parseInt(arg.substring(13));
@@ -382,6 +384,9 @@ public class MigrationTestSetup {
     System.out.println("  --skip-cleanup             Skip cleanup phase in end-to-end mode");
     System.out.println("  --skip-setup               Skip setup phase in end-to-end mode");
     System.out.println("  --skip-unsuitable-queues   Skip unsuitable queues during migration");
+    System.out.println(
+        "  --allow-message-ttl        Allow migrating queues with a queue-level message TTL"
+            + " (forces tolerance to 100%)");
     System.out.println(
         "  --batch-size=N             Number of queues to migrate per batch (default: all)");
     System.out.println(

@@ -164,5 +164,6 @@
     batch_order = smallest_first :: smallest_first | largest_first,
     queue_names = undefined :: undefined | [binary()],
     migration_id = undefined :: undefined | {integer(), atom()},
-    tolerance = undefined :: undefined | float()
+    tolerance = undefined :: undefined | float(),
+    allow_message_ttl = false :: boolean()
 }).

@@ -24,6 +24,13 @@
     start_migration_on_node/4
 ]).
 
+%% Exported for testing
+-ifdef(TEST).
+-export([
+    message_ttl_opts/1
+]).
+-endif.
+
 %% Public API
 
 start(OptsMap) when is_map(OptsMap) ->
@@ -69,7 +76,7 @@ build_migration_opts(Mode, OptsMap) ->
     BatchOrder = maps:get(batch_order, OptsMap, smallest_first),
     QueueNames = maps:get(queue_names, OptsMap, undefined),
     MigrationId = maps:get(migration_id, OptsMap, undefined),
-    Tolerance = maps:get(tolerance, OptsMap, undefined),
+    {AllowMessageTtl, Tolerance} = message_ttl_opts(OptsMap),
     #migration_opts{
         vhost = VHost,
         mode = Mode,
@@ -78,8 +85,30 @@ build_migration_opts(Mode, OptsMap) ->
         batch_order = BatchOrder,
         queue_names = QueueNames,
         migration_id = MigrationId,
-        tolerance = Tolerance
+        tolerance = Tolerance,
+        allow_message_ttl = AllowMessageTtl
     }.
+
+%% Resolve the coupled `allow_message_ttl` and `tolerance` options together,
+%% since the former determines the latter.
+%%
+%% Opting in to migrating message-TTL queues means accepting that any or all
+%% messages in those queues may expire during migration. In that case force the
+%% tolerance to 100% (both directions) so verification never fails on the
+%% resulting count difference, overriding any explicit tolerance the caller
+%% passed. Note this is migration-wide: it relaxes count verification for every
+%% queue in the run, not only the message-TTL queues.
+%%
+%% Otherwise use the caller-supplied tolerance, or undefined to fall back to the
+%% configured defaults.
+-spec message_ttl_opts(map()) -> {boolean(), float() | undefined}.
+message_ttl_opts(OptsMap) ->
+    message_ttl_opts(maps:get(allow_message_ttl, OptsMap, false), OptsMap).
+
+message_ttl_opts(true, _OptsMap) ->
+    {true, 100.0};
+message_ttl_opts(false, OptsMap) ->
+    {false, maps:get(tolerance, OptsMap, undefined)}.
 
 pre_migration_validation(shovel_plugin, Opts) ->
     handle_check_shovel_plugin(rqm_checks:check_shovel_plugin(), Opts);
@@ -93,8 +122,14 @@ pre_migration_validation(queue_synchronization, #migration_opts{vhost = VHost} =
     handle_check_queue_synchronization(
         rqm_checks:check_queue_synchronization(VHost), Opts
     );
-pre_migration_validation(queue_suitability, #migration_opts{vhost = VHost} = Opts) ->
-    handle_check_queue_suitability(rqm_checks:check_queue_suitability(VHost), Opts);
+pre_migration_validation(
+    queue_suitability,
+    #migration_opts{vhost = VHost, allow_message_ttl = AllowMessageTtl} = Opts
+) ->
+    handle_check_queue_suitability(
+        rqm_checks:check_queue_suitability(VHost, #{allow_message_ttl => AllowMessageTtl}),
+        Opts
+    );
 pre_migration_validation(
     disk_space, #migration_opts{vhost = VHost, unsuitable_queues = UnsuitableQueues} = Opts
 ) ->
@@ -302,8 +337,12 @@ start_with_lock(
         vhost = VHost,
         skip_unsuitable_queues = SkipUnsuitableQueues,
         unsuitable_queues = UnsuitableQueues,
+        batch_size = BatchSize,
+        batch_order = BatchOrder,
+        queue_names = QueueNames,
         migration_id = MigrationId,
-        tolerance = Tolerance
+        tolerance = Tolerance,
+        allow_message_ttl = AllowMessageTtl
     } = Opts
 ) ->
     %% Create migration record FIRST so failures are always tracked
@@ -315,6 +354,23 @@ start_with_lock(
         SkipUnsuitableQueues,
         SkippedCount,
         Tolerance
+    ),
+    %% Log the resolved options so a completed migration can be audited
+    %% retroactively for exactly which options were in effect.
+    ?LOG_INFO(
+        "rqm: starting migration ~s for vhost ~ts with options: "
+        "skip_unsuitable_queues=~w, batch_size=~w, batch_order=~w, "
+        "queue_names=~tp, tolerance=~w, allow_message_ttl=~w",
+        [
+            format_migration_id(MigrationId),
+            VHost,
+            SkipUnsuitableQueues,
+            BatchSize,
+            BatchOrder,
+            QueueNames,
+            Tolerance,
+            AllowMessageTtl
+        ]
     ),
     try
         {ok, PreparationState} = pre_migration_preparation(Nodes, VHost),
