@@ -363,7 +363,8 @@ start_with_lock(
     ?LOG_INFO(
         "rqm: starting migration ~s for vhost ~ts with options: "
         "skip_unsuitable_queues=~w, batch_size=~w, batch_order=~w, "
-        "queue_names=~tp, tolerance=~w, allow_message_ttl=~w",
+        "queue_names=~tp, tolerance=~w, allow_message_ttl=~w, "
+        "set_default_queue_type=~tp",
         [
             format_migration_id(MigrationId),
             VHost,
@@ -372,7 +373,8 @@ start_with_lock(
             BatchOrder,
             QueueNames,
             Tolerance,
-            AllowMessageTtl
+            AllowMessageTtl,
+            SetDefaultQueueType
         ]
     ),
     try
