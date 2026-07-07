@@ -31,6 +31,11 @@ public class QueueMigrationClient {
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
 
+  // Optional vhost default queue type ("quorum" or "classic") to request on every
+  // migration this client starts; null means do not send the option. This is a
+  // global option applied to whatever migration a test triggers, not a per-call argument.
+  private String setDefaultQueueType = null;
+
   public QueueMigrationClient(String host, int port, String username, String password) {
     this(host, port, username, password, TestConfiguration.getDefaultVirtualHost(), null);
   }
@@ -64,6 +69,15 @@ public class QueueMigrationClient {
     this.objectMapper = new ObjectMapper();
 
     logger.info("Queue Migration Client initialized for {}:{}", host, port);
+  }
+
+  /**
+   * Set the vhost default queue type ("quorum" or "classic") to request on every migration this
+   * client starts. Null leaves the option unset. Applied globally so it rides along with whatever
+   * migration a test triggers, without changing the startMigration call signatures.
+   */
+  public void setDefaultQueueType(String setDefaultQueueType) {
+    this.setDefaultQueueType = setDefaultQueueType;
   }
 
   /** Start queue migration for the default virtual host */
@@ -110,6 +124,10 @@ public class QueueMigrationClient {
 
     if (allowMessageTtl) {
       options.put("allow_message_ttl", true);
+    }
+
+    if (setDefaultQueueType != null) {
+      options.put("set_default_queue_type", setDefaultQueueType);
     }
 
     String requestBody = objectMapper.writeValueAsString(options);
@@ -213,6 +231,38 @@ public class QueueMigrationClient {
     }
 
     return parseMigrationDetails(response.body());
+  }
+
+  /**
+   * Return the `default_queue_type` of a virtual host as reported by the management API. The broker
+   * reports the string "undefined" when no default queue type is set.
+   */
+  public String getVhostDefaultQueueType(String vhostName)
+      throws IOException, InterruptedException {
+    String encodedVhost = URLEncoder.encode(vhostName, StandardCharsets.UTF_8);
+    HttpRequest request =
+        HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + "/vhosts/" + encodedVhost))
+            .header("Authorization", authHeader)
+            .GET()
+            .timeout(Duration.ofSeconds(10))
+            .build();
+
+    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+    if (response.statusCode() != 200) {
+      throw new IOException(
+          "Failed to get vhost "
+              + vhostName
+              + ". Status: "
+              + response.statusCode()
+              + ", Body: "
+              + response.body());
+    }
+
+    JsonNode root = objectMapper.readTree(response.body());
+    JsonNode dqt = root.get("default_queue_type");
+    return (dqt == null || dqt.isNull()) ? null : dqt.asText();
   }
 
   private MigrationDetailResponse parseMigrationDetails(String responseBody) throws IOException {

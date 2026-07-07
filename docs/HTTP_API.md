@@ -104,7 +104,8 @@ POST /api/queue-migration/start/:vhost
   "tolerance": 10.0,
   "batch_size": 10,
   "batch_order": "smallest_first",
-  "allow_message_ttl": false
+  "allow_message_ttl": false,
+  "set_default_queue_type": "quorum"
 }
 ```
 
@@ -115,6 +116,7 @@ POST /api/queue-migration/start/:vhost
 - `batch_order` (optional, string) - Order to select queues for batching: `"smallest_first"` or `"largest_first"`. Defaults to `"smallest_first"`. Ignored if `queue_names` is specified.
 - `queue_names` (optional, array of strings) - Specific queue names to migrate. When provided, only these queues are migrated. Takes precedence over `batch_size` and `batch_order`. Non-existent or ineligible queues are logged and skipped.
 - `allow_message_ttl` (optional, boolean) - When `true`, queues that have a queue-level message TTL (the `x-message-ttl` queue argument or the `message-ttl` policy key) are allowed to migrate instead of being treated as unsuitable. Defaults to `false`. **This forces the message count `tolerance` to 100% in both directions (overriding any `tolerance` value supplied), because opting in means accepting that any or all messages in these queues may expire during migration.** Note that `tolerance` is migration-wide, so enabling this disables message-count verification for **every** queue in the run, not only the queues with a message TTL. The migrated quorum queue retains its `x-message-ttl` argument.
+- `set_default_queue_type` (optional, string) - When set to `"quorum"` or `"classic"`, the virtual host's default queue type is set to that value after the migration completes successfully. Any other value is rejected. When unset, the vhost default queue type is left unchanged. This is useful after migrating to quorum so that clients which declare queues without an explicit `x-queue-type` (relying on the vhost default) resolve to the migrated queue type instead of failing redeclaration. It overwrites any existing default queue type, and only affects newly declared or redeclared queues, not existing ones. Setting the default is best-effort: if it fails, the failure is logged but the migration is still reported as successful.
 
 **Request:**
 ```bash
@@ -167,6 +169,12 @@ curl -u guest:guest -X POST \
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"allow_message_ttl": true}' \
+  http://localhost:15672/api/queue-migration/start/%2F
+
+# Set the vhost default queue type to quorum after a successful migration
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"set_default_queue_type": "quorum"}' \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
@@ -488,7 +496,7 @@ POST /api/queue-migration/check/:vhost
 
 **Request Body Fields:**
 
-The check endpoint accepts the **same** request body options as the start endpoints (`skip_unsuitable_queues`, `tolerance`, `batch_size`, `batch_order`, `queue_names`, `allow_message_ttl`) and validates them the same way (an invalid option value returns `400`, see below). This is deliberate: a compatibility check passes or fails exactly as the actual migration would for the same options. The options most relevant to a check are:
+The check endpoint accepts the **same** request body options as the start endpoints (`skip_unsuitable_queues`, `tolerance`, `batch_size`, `batch_order`, `queue_names`, `allow_message_ttl`, `set_default_queue_type`) and validates them the same way (an invalid option value returns `400`, see below). This is deliberate: a compatibility check passes or fails exactly as the actual migration would for the same options. Note that `set_default_queue_type` has no effect on a check, since a check does not modify the vhost. The options most relevant to a check are:
 
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, unsuitable queues are shown as informational and don't affect overall readiness. Defaults to `false`.
 - `allow_message_ttl` (optional, boolean) - When `true`, queues with a queue-level message TTL are reported as suitable rather than unsuitable, matching how a migration started with the same option would treat them. Defaults to `false`.
