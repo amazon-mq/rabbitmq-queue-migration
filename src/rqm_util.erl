@@ -305,25 +305,15 @@ is_valid_utf8(_) ->
 filter_by_queue_names(Queues, undefined) ->
     Queues;
 filter_by_queue_names(Queues, QueueNames) when is_list(QueueNames) ->
-    FilteredQueues = [
+    %% Pure filter. Callers that see the full cluster-wide queue set are
+    %% responsible for warning about specified names that match nothing; a
+    %% per-node caller only sees its locally hosted queues, so it cannot tell
+    %% "not found anywhere" from "hosted on another node" and must not warn.
+    [
         Q
      || Q <- Queues,
         begin
             #resource{name = QName} = amqqueue:get_name(Q),
             lists:member(QName, QueueNames)
         end
-    ],
-    SpecifiedButNotFound =
-        QueueNames --
-            [
-                begin
-                    #resource{name = QName} = amqqueue:get_name(Q),
-                    QName
-                end
-             || Q <- FilteredQueues
-            ],
-    _ = [
-        ?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
-     || QName <- SpecifiedButNotFound
-    ],
-    FilteredQueues.
+    ].
