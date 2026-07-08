@@ -12,6 +12,7 @@ This guide explains how the RabbitMQ Queue Migration Plugin works, including the
 4. [Queue Eligibility](#queue-eligibility)
 5. [Automatic Argument Conversion](#automatic-argument-conversion)
 6. [Policy Applicability After Migration](#policy-applicability-after-migration)
+7. [Client Redeclaration After Migration](#client-redeclaration-after-migration)
 
 ---
 
@@ -330,6 +331,42 @@ The following shows the effective policy on a queue named `orders` after it has 
 To keep attributes such as `dead-letter-exchange` and `max-length` in effect on quorum queues, define quorum-compatible policies scoped `apply-to: quorum_queues` (or `apply-to: queues`) that contain only attributes supported by quorum queues. Remove HA and other classic-only attributes from any policy that must continue to apply after migration.
 
 Manage these policies in the same place they are defined today (for example application code or infrastructure as code), so they remain the source of truth and do not drift. The plugin deliberately does not generate a companion policy at migration time, because a generated policy cannot stay in sync with externally managed ones.
+
+## Client Redeclaration After Migration
+
+After a classic queue is migrated, it keeps its name but its type is now `quorum`, and it carries `x-queue-type: quorum` in its arguments. When a client redeclares that queue, RabbitMQ applies its queue equivalence checks, comparing the arguments the client sends against the arguments of the existing queue. The outcome depends on what the client sends for `x-queue-type`.
+
+### Clients That Omit `x-queue-type`
+
+A client that declares queues **without** an explicit `x-queue-type` argument relies on the virtual host's default queue type. What happens after migration depends on whether a vhost default queue type is set:
+
+- **No vhost default queue type:** the declaration carries no type, and RabbitMQ rejects it because the requested (absent) type is not equivalent to the existing `quorum` type. The redeclaration fails with:
+
+  ```
+  406 PRECONDITION_FAILED - inequivalent arg 'x-queue-type' for queue '<name>' in vhost '<vhost>': received none but current is the value 'quorum' of type 'longstr'
+  ```
+
+- **Vhost default queue type set to `quorum`:** the broker injects `x-queue-type: quorum` into the declaration, which matches the existing queue, and the redeclaration succeeds.
+
+The connection and channel open successfully in both cases; the failure, when it occurs, is on the queue redeclaration, not on connect.
+
+**Recommendation:** set the virtual host default queue type to `quorum` as part of the migration workflow so that clients which omit `x-queue-type` continue to work after migration. The start endpoint accepts a `set_default_queue_type` option that does this for you when the migration completes successfully; see [HTTP_API](HTTP_API.md). You can also set it independently with `rabbitmqctl update_vhost_metadata` or the management HTTP API.
+
+### Clients That Declare `x-queue-type: classic`
+
+A client that explicitly redeclares the migrated queue as `x-queue-type: classic` is covered by the `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` setting, which the plugin requires to be enabled before migration (see [Pre-Migration Validation](#pre-migration-validation)). With that setting enabled, redeclaring a migrated queue as `classic` succeeds instead of failing the equivalence check.
+
+Note that this relaxed setting applies only when a client explicitly declares `classic`. It does **not** cover clients that omit `x-queue-type` entirely; those are governed by the vhost default queue type as described above.
+
+### Behavior Summary
+
+For a migrated queue (now `quorum`), redeclaration behaves as follows:
+
+| Client sends | No vhost default | Vhost default `quorum` |
+|--------------|------------------|------------------------|
+| no `x-queue-type` | `406 PRECONDITION_FAILED` | succeeds |
+| `x-queue-type: quorum` | succeeds | succeeds |
+| `x-queue-type: classic` | succeeds (relaxed checks) | succeeds (relaxed checks) |
 
 ---
 
