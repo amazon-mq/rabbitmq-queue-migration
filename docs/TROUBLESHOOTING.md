@@ -9,8 +9,9 @@ This guide covers potential issues, error messages, and solutions when using the
 1. [Pre-Migration Issues](#pre-migration-issues)
 2. [Plugin Initialization](#plugin-initialization)
 3. [Migration Failures](#migration-failures)
-4. [Performance Issues](#performance-issues)
-5. [Rollback and Recovery](#rollback-and-recovery)
+4. [Post-Migration Issues](#post-migration-issues)
+5. [Performance Issues](#performance-issues)
+6. [Rollback and Recovery](#rollback-and-recovery)
 
 ---
 
@@ -398,6 +399,18 @@ curl -u guest:guest \
 curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
+
+---
+
+## Post-Migration Issues
+
+### Queue Attributes (DLX, max-length) No Longer In Effect
+
+**Symptom:** After a successful migration, attributes such as `dead-letter-exchange`, `max-length`, or `message-ttl` that were in effect on a queue via a policy are no longer applied to the migrated (now quorum) queue. The queue's effective policy is empty or missing attributes it had as a classic queue.
+
+**Cause:** RabbitMQ matches policies to queues by both pattern and queue type, and a policy applies all-or-nothing. A policy scoped `apply-to: classic_queues` stops matching once the queue is quorum. A policy scoped `apply-to: queues` (or `quorum_queues`) that contains even one attribute quorum queues do not support (for example `ha-mode`) becomes inapplicable in full, dropping its supported attributes too.
+
+**Resolution:** Define quorum-compatible policies scoped `apply-to: quorum_queues` (or `apply-to: queues`) containing only attributes supported by quorum queues, and remove classic-only attributes such as HA settings. See [Policy Applicability After Migration](MIGRATION_GUIDE.md#policy-applicability-after-migration) in the Migration Guide for the full behavior, the list of unsupported attributes, and effective-policy examples.
 
 ---
 

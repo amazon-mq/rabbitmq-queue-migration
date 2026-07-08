@@ -11,6 +11,7 @@ This guide explains how the RabbitMQ Queue Migration Plugin works, including the
 3. [Connection Handling](#connection-handling-during-migration)
 4. [Queue Eligibility](#queue-eligibility)
 5. [Automatic Argument Conversion](#automatic-argument-conversion)
+6. [Policy Applicability After Migration](#policy-applicability-after-migration)
 
 ---
 
@@ -286,6 +287,49 @@ Arguments that are compatible with quorum queues are preserved:
 - `x-max-length-bytes` - Maximum queue size in bytes
 - `x-overflow: drop-head` - Drop oldest messages when limit reached
 - `x-overflow: reject-publish` - Reject new messages when limit reached (no DLX)
+
+---
+
+## Policy Applicability After Migration
+
+The migration plugin does not create, modify, or delete policies; it only reads them. However, a queue's *effective* policy can change after migration, because RabbitMQ matches policies to queues by both pattern and queue type, and a policy applies all-or-nothing. As a result, attributes such as `dead-letter-exchange` or `max-length` that were in effect on a classic queue may silently stop applying once the queue is quorum.
+
+Two behaviors combine to cause this.
+
+### Type Scoping
+
+A policy's `apply-to` scope is matched against the queue's type:
+
+- `apply-to: classic_queues` matches only classic queues. The moment a queue becomes `quorum`, it no longer matches, and any attributes defined only in that policy stop applying. The policy itself is unchanged; the queue simply no longer matches it.
+- `apply-to: queues` matches all queue types, including quorum, so it continues to apply after migration (subject to the all-or-none rule below).
+- `apply-to: quorum_queues` matches only quorum queues.
+
+### All-or-None Applicability
+
+A policy is applicable to a queue only if *every* attribute in its definition is supported by that queue's type (see `rabbit_queue_type:is_policy_applicable/2`). If a policy that otherwise matches a quorum queue, including an `apply-to: queues` policy, contains even one attribute that quorum queues do not support, the entire policy becomes inapplicable, and all of its attributes, including supported ones like `dead-letter-exchange`, are dropped from the queue's effective policy.
+
+Quorum queues do not support these policy attributes:
+
+`max-priority`, `queue-mode`, `single-active-consumer`, `ha-mode`, `ha-params`, `ha-sync-mode`, `ha-promote-on-shutdown`, `ha-promote-on-failure`, `queue-master-locator`, `max-age`, `stream-max-segment-size-bytes`, `initial-cluster-size`.
+
+So a policy that worked for a classic queue may apply nothing at all to the same queue once it is quorum: a `classic_queues`-scoped policy no longer matches by type, and a `queues`-scoped (or `quorum_queues`-scoped) policy that contains even one unsupported attribute, such as an HA attribute, is rejected in full.
+
+### Effective Policy Examples
+
+The following shows the effective policy on a queue named `orders` after it has been migrated to quorum, for policies that all match the queue by pattern:
+
+| Policy definition | `apply-to` | Effective on the migrated (quorum) queue |
+|-------------------|------------|-------------------------------------------|
+| `{"max-length": 1000}` | `classic_queues` | Not applied (no longer matches by type) |
+| `{"max-length": 1000}` | `queues` | Applied: `max-length` in effect |
+| `{"max-length": 1000, "ha-mode": "all"}` | `queues` | Not applied: the unsupported `ha-mode` drops the whole policy, including `max-length` |
+| `{"max-length": 1000}` | `quorum_queues` | Applied: `max-length` in effect |
+
+### Recommendation
+
+To keep attributes such as `dead-letter-exchange` and `max-length` in effect on quorum queues, define quorum-compatible policies scoped `apply-to: quorum_queues` (or `apply-to: queues`) that contain only attributes supported by quorum queues. Remove HA and other classic-only attributes from any policy that must continue to apply after migration.
+
+Manage these policies in the same place they are defined today (for example application code or infrastructure as code), so they remain the source of truth and do not drift. The plugin deliberately does not generate a companion policy at migration time, because a generated policy cannot stay in sync with externally managed ones.
 
 ---
 
