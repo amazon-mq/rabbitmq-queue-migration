@@ -613,6 +613,7 @@ determine_insufficient_space_reason(
 check_eligible_queue_count(
     #migration_opts{
         vhost = VHost,
+        mode = Mode,
         unsuitable_queues = UnsuitableQueues,
         skip_unsuitable_queues = Skipped,
         queue_names = QueueNames
@@ -621,8 +622,18 @@ check_eligible_queue_count(
     AllQueues = get_mirrored_classic_queues(VHost),
     FilteredQueues =
         case QueueNames of
-            undefined -> AllQueues;
-            _ -> rqm_util:filter_by_queue_names(AllQueues, QueueNames)
+            undefined ->
+                AllQueues;
+            _ ->
+                Filtered = rqm_util:filter_by_queue_names(AllQueues, QueueNames),
+                %% This check runs on the coordinator over the cluster-wide queue
+                %% set, so a specified name that matches nothing here is genuinely
+                %% not found anywhere in the cluster and is worth a single warning.
+                %% Warn only for an actual migration: a migration start runs this
+                %% chain twice (a synchronous validation_only pass, then the
+                %% migration), and warning in both would double-log.
+                warn_unmatched_queue_names(Mode, Filtered, QueueNames),
+                Filtered
         end,
     EligibleCount = length(FilteredQueues) - length(UnsuitableQueues),
     case EligibleCount > 0 of
@@ -641,6 +652,30 @@ check_eligible_queue_count(
                     skipped => Skipped
                 }}}
     end.
+
+%% @doc Warn about specified queue names that match no queue in the cluster-wide
+%% set. Only call this from a coordinator context that sees all queues; a
+%% per-node caller cannot distinguish "not found anywhere" from "hosted
+%% elsewhere". Warn only in migration mode: a migration start runs the check
+%% chain twice (validation_only, then migration), so warning in both double-logs.
+-spec warn_unmatched_queue_names(
+    validation_only | migration, [amqqueue:amqqueue()], [binary()]
+) -> ok.
+warn_unmatched_queue_names(validation_only, _FilteredQueues, _QueueNames) ->
+    ok;
+warn_unmatched_queue_names(migration, FilteredQueues, QueueNames) ->
+    FoundNames = [
+        begin
+            #resource{name = QName} = amqqueue:get_name(Q),
+            QName
+        end
+     || Q <- FilteredQueues
+    ],
+    _ = [
+        ?LOG_WARNING("rqm: specified queue '~ts' not found or not eligible for migration", [QName])
+     || QName <- QueueNames -- FoundNames
+    ],
+    ok.
 
 -spec check_queue_suitability(rabbit_types:vhost(), map()) ->
     ok | {error, {unsuitable_queues, map()}}.

@@ -134,8 +134,11 @@ verify_started(VHost, ShovelName, Attempts, Delay) ->
                     ?LOG_ERROR("rqm: shovel ~ts in unexpected state ~p", [ShovelName, State]),
                     {error, shovel_not_started};
                 _ ->
+                    %% The status entry exists but is not yet populated with a
+                    %% state tuple. This is normal immediately after the shovel is
+                    %% declared; it becomes available within a poll or two.
                     ?LOG_DEBUG(
-                        "rqm: shovel ~ts status format unexpected, retrying (~p attempts left)", [
+                        "rqm: shovel ~ts status not ready yet, retrying (~p attempts left)", [
                             ShovelName, Attempts - 1
                         ]
                     ),
