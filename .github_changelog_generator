@@ -1,5 +1,5 @@
 user=amazon-mq
 project=rabbitmq-queue-migration
 header_label=# Changelog
-unreleased=false
+unreleased=true
 exclude-labels=duplicate,question,invalid,wontfix,dependencies
