@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.1](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.1) (2026-07-13)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.2.0...1.2.1)
+
+**Closed issues:**
+
+- Migration tables not replicated: disc\_copies live on a single node [\#96](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/96)
+
+**Merged pull requests:**
+
+- Add `release.sh` to automate the release process [\#98](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/98) ([lukebakken](https://github.com/lukebakken))
+- Replicate migration tables as `disc_copies` on all cluster nodes [\#97](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/97) ([lukebakken](https://github.com/lukebakken))
+
 ## [1.2.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.0) (2026-07-13)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.1.0...1.2.0)
@@ -16,18 +29,13 @@
 
 **Merged pull requests:**
 
-- Bump the maven group in /test/integration with 2 updates [\#94](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/94) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/setup-java from 5.4.0 to 5.5.0 in the github-actions group [\#93](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/93) ([dependabot[bot]](https://github.com/apps/dependabot))
+- rabbitmq-queue-migration 1.2.0 [\#95](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/95) ([lukebakken](https://github.com/lukebakken))
 - Document how policy applicability changes after migration [\#92](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/92) ([lukebakken](https://github.com/lukebakken))
 - Document client redeclaration behavior after migration [\#91](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/91) ([lukebakken](https://github.com/lukebakken))
 - Fix per-node warning noise and misleading shovel status log [\#90](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/90) ([lukebakken](https://github.com/lukebakken))
 - Make e2e message-count validation aware of `allow_message_ttl` [\#89](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/89) ([lukebakken](https://github.com/lukebakken))
-- Bump the github-actions group with 4 updates [\#88](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/88) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump the maven group in /test/integration with 3 updates [\#87](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/87) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Add `set_default_queue_type` migration option [\#86](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/86) ([lukebakken](https://github.com/lukebakken))
 - Add `allow_message_ttl` migration option [\#85](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/85) ([lukebakken](https://github.com/lukebakken))
-- Bump the maven group in /test/integration with 2 updates [\#76](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/76) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump the github-actions group across 1 directory with 3 updates [\#75](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/75) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 ## [1.1.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.1.0) (2026-06-08)
 
@@ -41,8 +49,6 @@
 
 **Merged pull requests:**
 
-- Bump the maven group across 1 directory with 5 updates [\#68](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/68) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/checkout from 6.0.2 to 6.0.3 in the github-actions group [\#67](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/67) ([dependabot[bot]](https://github.com/apps/dependabot))
 - rabbitmq-queue-migration 1.1.0 [\#73](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/73) ([lukebakken](https://github.com/lukebakken))
 - Review all documentation for technical correctness [\#72](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/72) ([lukebakken](https://github.com/lukebakken))
 - Make plugin table init asynchronous; never abort RabbitMQ broker boot [\#70](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/70) ([lukebakken](https://github.com/lukebakken))
@@ -59,10 +65,7 @@
 **Merged pull requests:**
 
 - docs: Add prominent Mnesia-only compatibility notice [\#59](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/59) ([sauravonwww](https://github.com/sauravonwww))
-- Bump the maven group in /test/integration with 2 updates [\#58](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/58) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Document OSS RabbitMQ 3.13.7 known issues [\#57](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/57) ([lukebakken](https://github.com/lukebakken))
-- Bump the github-actions group across 1 directory with 3 updates [\#56](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/56) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump com.rabbitmq:amqp-client from 5.29.0 to 5.30.0 in /test/integration [\#55](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/55) ([dependabot[bot]](https://github.com/apps/dependabot))
 - rabbitmq-queue-migration 1.0.6 [\#65](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/65) ([lukebakken](https://github.com/lukebakken))
 - Do not set default queue type after migration [\#64](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/64) ([lukebakken](https://github.com/lukebakken))
 - Use `PROJECT_VERSION` [\#62](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/62) ([lukebakken](https://github.com/lukebakken))
@@ -73,14 +76,8 @@
 
 **Merged pull requests:**
 
-- Bump erlef/setup-beam from 1.21.0 to 1.24.0 [\#50](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/50) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Validate vhost binding is valid UTF-8 before processing [\#51](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/51) ([lukebakken](https://github.com/lukebakken))
 - Fix documentation accuracy across all docs [\#49](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/49) ([lukebakken](https://github.com/lukebakken))
-- Bump com.fasterxml.jackson.core:jackson-databind from 2.21.1 to 2.21.2 in /test/integration [\#48](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/48) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump com.rabbitmq:http-client from 5.4.0 to 5.5.0 in /test/integration [\#47](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/47) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/cache from 5.0.3 to 5.0.4 [\#46](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/46) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/download-artifact from 8.0.0 to 8.0.1 [\#41](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/41) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump org.apache.maven.plugins:maven-shade-plugin from 3.6.1 to 3.6.2 in /test/integration [\#39](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/39) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 ## [1.0.4](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.4) (2026-03-19)
 
@@ -103,13 +100,6 @@
 **Merged pull requests:**
 
 - Handle 3-tuple EBS snapshot state in `cleanup_node_snapshots` [\#37](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/37) ([lukebakken](https://github.com/lukebakken))
-- Bump actions/upload-artifact from 6.0.0 to 7.0.0 [\#36](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/36) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump com.rabbitmq:amqp-client from 5.28.0 to 5.29.0 in /test/integration [\#35](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/35) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/download-artifact from 7.0.0 to 8.0.0 [\#34](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/34) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump erlef/setup-beam from 1.20.4 to 1.21.0 [\#33](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/33) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump com.fasterxml.jackson.core:jackson-databind from 2.21.0 to 2.21.1 in /test/integration [\#31](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/31) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump org.apache.maven.plugins:maven-surefire-plugin from 3.5.4 to 3.5.5 in /test/integration [\#30](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/30) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump ch.qos.logback:logback-classic from 1.5.27 to 1.5.32 in /test/integration [\#29](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/29) ([dependabot[bot]](https://github.com/apps/dependabot))
 
 ## [1.0.2](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.2) (2026-02-28)
 
@@ -126,11 +116,6 @@
 **Merged pull requests:**
 
 - Add load balancer support for RabbitMQ cluster connections [\#26](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/26) ([lukebakken](https://github.com/lukebakken))
-- Bump ch.qos.logback:logback-classic from 1.5.25 to 1.5.27 in /test/integration [\#25](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/25) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump org.apache.maven.plugins:maven-compiler-plugin from 3.14.1 to 3.15.0 in /test/integration [\#24](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/24) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/cache from 5.0.2 to 5.0.3 [\#23](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/23) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/setup-java from 5.1.0 to 5.2.0 [\#21](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/21) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/checkout from 6.0.1 to 6.0.2 [\#20](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/20) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Query quorum queue leader directly for message counts [\#27](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/27) ([lukebakken](https://github.com/lukebakken))
 
 ## [1.0.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.0) (2026-01-26)
@@ -147,12 +132,6 @@
 - Add empty queue migration integration test [\#14](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/14) ([lukebakken](https://github.com/lukebakken))
 - Add batch migration integration test and fix batch\_size bug [\#13](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/13) ([lukebakken](https://github.com/lukebakken))
 - Fix migration skipped queue count bug and add skip unsuitable queues integration test [\#12](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/12) ([lukebakken](https://github.com/lukebakken))
-- Bump org.apache.maven.plugins:maven-surefire-plugin from 3.5.2 to 3.5.4 in /test/integration [\#11](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/11) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump ch.qos.logback:logback-classic from 1.5.22 to 1.5.25 in /test/integration [\#10](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/10) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump org.apache.maven.plugins:maven-compiler-plugin from 3.13.0 to 3.14.1 in /test/integration [\#9](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/9) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump org.apache.maven.plugins:maven-shade-plugin from 3.6.0 to 3.6.1 in /test/integration [\#8](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/8) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump actions/cache from 5.0.1 to 5.0.2 [\#7](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/7) ([dependabot[bot]](https://github.com/apps/dependabot))
-- Bump com.fasterxml.jackson.core:jackson-databind from 2.20.1 to 2.21.0 in /test/integration [\#6](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/6) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Add migration interruption integration test [\#5](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/5) ([lukebakken](https://github.com/lukebakken))
 - Standardize terminology: replace "incompatible" with "unsuitable" [\#4](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/4) ([lukebakken](https://github.com/lukebakken))
 - Add integration tests and documentation for 1.0.0 release [\#3](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/3) ([lukebakken](https://github.com/lukebakken))
