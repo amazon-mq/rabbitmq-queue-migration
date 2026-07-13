@@ -1,22 +1,51 @@
 # Changelog
 
+## [1.2.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.0) (2026-07-13)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.1.0...1.2.0)
+
+**Closed issues:**
+
+- EndToEndMigrationTest message-count validation ignores tolerance and allow\_message\_ttl [\#84](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/84)
+- Misleading 'shovel status format unexpected' debug log on every migration [\#83](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/83)
+- Spurious per-node WARNING for queue\_names not hosted locally during successful migration [\#82](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/82)
+- Add opt-in option to migrate queues with a queue-level message TTL [\#80](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/80)
+- Add opt-in flag to set the vhost default queue type to `quorum` after migration [\#79](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/79)
+- Document how policy applicability changes when migrating classic queues to quorum queues [\#78](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/78)
+- Document post-migration queue redeclaration behavior for clients that omit `x-queue-type` [\#77](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/77)
+
+**Merged pull requests:**
+
+- Bump the maven group in /test/integration with 2 updates [\#94](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/94) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump actions/setup-java from 5.4.0 to 5.5.0 in the github-actions group [\#93](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/93) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Document how policy applicability changes after migration [\#92](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/92) ([lukebakken](https://github.com/lukebakken))
+- Document client redeclaration behavior after migration [\#91](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/91) ([lukebakken](https://github.com/lukebakken))
+- Fix per-node warning noise and misleading shovel status log [\#90](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/90) ([lukebakken](https://github.com/lukebakken))
+- Make e2e message-count validation aware of `allow_message_ttl` [\#89](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/89) ([lukebakken](https://github.com/lukebakken))
+- Bump the github-actions group with 4 updates [\#88](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/88) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump the maven group in /test/integration with 3 updates [\#87](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/87) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Add `set_default_queue_type` migration option [\#86](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/86) ([lukebakken](https://github.com/lukebakken))
+- Add `allow_message_ttl` migration option [\#85](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/85) ([lukebakken](https://github.com/lukebakken))
+- Bump the maven group in /test/integration with 2 updates [\#76](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/76) ([dependabot[bot]](https://github.com/apps/dependabot))
+- Bump the github-actions group across 1 directory with 3 updates [\#75](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/75) ([dependabot[bot]](https://github.com/apps/dependabot))
+
 ## [1.1.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.1.0) (2026-06-08)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.0.6...1.1.0)
 
-**Implemented enhancements:**
-
-- Review all documentation for technical correctness [\#72](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/72) ([lukebakken](https://github.com/lukebakken))
-- Make plugin table init asynchronous; never abort RabbitMQ broker boot [\#70](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/70) ([lukebakken](https://github.com/lukebakken))
-
 **Closed issues:**
 
+- Review all documentation for technical correctness [\#71](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/71)
+- Make plugin table init asynchronous; never abort RabbitMQ broker boot [\#69](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/69)
 - Do not start plugin in Khepri environments. [\#60](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/60)
 
 **Merged pull requests:**
 
 - Bump the maven group across 1 directory with 5 updates [\#68](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/68) ([dependabot[bot]](https://github.com/apps/dependabot))
 - Bump actions/checkout from 6.0.2 to 6.0.3 in the github-actions group [\#67](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/67) ([dependabot[bot]](https://github.com/apps/dependabot))
+- rabbitmq-queue-migration 1.1.0 [\#73](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/73) ([lukebakken](https://github.com/lukebakken))
+- Review all documentation for technical correctness [\#72](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/72) ([lukebakken](https://github.com/lukebakken))
+- Make plugin table init asynchronous; never abort RabbitMQ broker boot [\#70](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/70) ([lukebakken](https://github.com/lukebakken))
 
 ## [1.0.6](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.0.6) (2026-05-19)
 
