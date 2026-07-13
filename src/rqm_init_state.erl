@@ -185,7 +185,16 @@ try_setup_schema() ->
             ]}
         ],
         lists:foreach(
-            fun({Table, Def}) -> ok = rabbit_table:create(Table, Def) end,
+            fun({Table, Def}) ->
+                ok = rabbit_table:create(Table, Def),
+                %% rabbit_table:create/2 is a no-op on any node other than
+                %% the one that first created the table (already_exists ->
+                %% ok), so the {disc_copies, [node()]} in Def only ever
+                %% places a copy on that first node. Each node must add its
+                %% own local disc_copies replica so the tables are present
+                %% on all cluster members.
+                ok = rabbit_table:ensure_table_copy(Table, node(), disc_copies)
+            end,
             Tables
         ),
         TableNames = [queue_migration, queue_migration_status],
