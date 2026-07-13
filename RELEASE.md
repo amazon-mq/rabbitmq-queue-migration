@@ -1,44 +1,68 @@
 # `amazon-mq/rabbitmq-queue-migration` release process
 
-Here are the commands to run when releasing a new version of this project:
+Releases are driven by `release.sh`, which splits the process into four
+subcommands around the manual "merge the PR" gate. Run each phase in order.
+
+`release.sh` must be run from within a rabbitmq-server 3.13.x clone, checked
+out as `deps/rabbitmq_queue_migration`. That layout is what lets the `build`
+phase produce the `.ez` archive without a separate server clone.
+
+## Prerequisites
+
+* Erlang/OTP 26.x and Elixir 1.16.x in your `PATH`
+* `GITHUB_API_TOKEN` set (used by `prepare` and `publish`)
+* `GPG_KEY_ID` set to your signing key (used by `tag`)
+* `gh`, `git`, `make`, `gpg`, `sed`, and `github_changelog_generator` installed
+
+Preview any phase without making changes using `--dry-run`; skip the
+confirmation prompts before irreversible steps with `--yes`:
 
 ```
-readonly VER=0.2.0
-git checkout -b "rabbitmq-queue-migration-$VER"
-sed -i.bak "s/^PROJECT_VERSION =.*/PROJECT_VERSION = $VER/" Makefile
-github_changelog_generator --future-release "$VER" --user amazon-mq --project rabbitmq-queue-migration --token "$GITHUB_API_TOKEN"
-
-# Optional - remove last line of CHANGELOG.md
-
-git add Makefile CHANGELOG.md
-git commit -a -m "rabbitmq-queue-migration $VER"
-git push -u origin "rabbitmq-queue-migration-$VER"
-gh pr create --fill
+./release.sh --dry-run prepare 1.2.1
 ```
+
+## 1. Prepare the release PR
+
+```
+./release.sh prepare 1.2.1
+```
+
+This creates the `rabbitmq-queue-migration-1.2.1` branch, bumps
+`PROJECT_VERSION` in the `Makefile`, regenerates `CHANGELOG.md` (user,
+project, header, and excluded labels come from `.github_changelog_generator`;
+the trailing credit line is stripped automatically), commits, pushes, and
+opens a PR.
 
 * Ensure CI runs successfully for the PR
-* Merge PR
+* Merge the PR
+
+## 2. Tag the release
 
 ```
-git checkout main
-git pull origin main
-git remote prune origin
-git branch -d "rabbitmq-queue-migration-$VER"
-git tag --annotate --sign --local-user="$GPG_KEY_ID" --message="rabbitmq-queue-migration $VER" "$VER"
-git push --tags
+./release.sh tag 1.2.1
 ```
 
-* Ensure that Erlang/OTP 26.x and Elixir 1.16.x are in your `PATH`
+Updates `main`, deletes the merged release branch, and creates and pushes the
+GPG-signed annotated tag.
+
+## 3. Build the plugin archive
 
 ```
-git clone --branch v3.13.7 https://github.com/rabbitmq/rabbitmq-server.git rabbitmq-server_v3.13.7
-cd rabbitmq-server_v3.13.7
-git clone --branch "$VER" https://github.com/amazon-mq/rabbitmq-queue-migration.git deps/rabbitmq_queue_migration
-make
-make -C deps/rabbitmq_queue_migration
-make -C deps/rabbitmq_queue_migration DIST_AS_EZS=true dist
-cd deps/rabbitmq_queue_migration
-gh release create "$VER" --verify-tag --title "rabbitmq-queue-migration $VER" --latest --generate-notes "./plugins/rabbitmq_queue_migration-$VER.ez"
+./release.sh build 1.2.1
 ```
 
-* (Optional) Update generated release on GitHub to add GitHub milestone
+Runs `make DIST_AS_EZS=true dist` and verifies the archive at
+`plugins/rabbitmq_queue_migration-1.2.1.ez`. The build must run with the tag
+checked out; otherwise the archive is named with a `+dirty`/commit suffix and
+the version will not match.
+
+## 4. Publish the GitHub release
+
+```
+./release.sh publish 1.2.1
+```
+
+Creates the GitHub release from the tag, marks it `--latest`, and uploads the
+`.ez` archive.
+
+* (Optional) Update the generated release on GitHub to add the GitHub milestone
