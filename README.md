@@ -32,17 +32,29 @@ Restarting any broker node, performing a full cluster reboot, or applying a main
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
-## Getting Started
+## Documentation
 
-- [README](README.md) - This document! Overview, installation, and quick start
-- [Migration Guide](docs/MIGRATION_GUIDE.md) - Migration process and validation
-- [Snapshots Guide](docs/SNAPSHOTS.md) - Snapshot modes and configuration
-- [HTTP API](docs/HTTP_API.md) - Complete HTTP API reference
-- [API Examples](docs/API_EXAMPLES.md) - Practical API usage examples
-- [Configuration Reference](docs/CONFIGURATION.md) - Configuration parameter reference
-- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration if EBS snapshots are used
-- [Performance Reference](docs/PERFORMANCE.md) - Real-world migration timing data
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Error messages, diagnostics, and recovery
+Start with the guide for what you are doing:
+
+**Plan a migration** - understand how it works and what will bite you
+- [Migration Guide](docs/MIGRATION_GUIDE.md) - two-phase process, queue eligibility, argument conversion, policy and client-redeclaration behavior
+- [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) - message-count verification, tolerance, and per-message TTL (the most common cause of a failed migration)
+
+**Run a migration** - the operator path, start to finish
+- [Running a Migration](docs/RUNNING_A_MIGRATION.md) - check, start, monitor, interrupt, and every start option in one place
+- [Skip Unsuitable Queues](docs/SKIP_UNSUITABLE_QUEUES.md) - migrate the majority now and address problem queues later
+
+**Recover from a problem**
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - error messages, diagnostics, and recovery
+
+**Reference**
+- [HTTP API](docs/HTTP_API.md) - complete request/response schemas
+- [API Examples](docs/API_EXAMPLES.md) - practical API usage examples
+- [Configuration](docs/CONFIGURATION.md) - all configuration parameters and defaults
+- [Snapshots](docs/SNAPSHOTS.md) - snapshot modes and configuration
+- [EC2 Setup](docs/EC2_SETUP.md) - AWS EC2 and IAM configuration when EBS snapshots are used
+- [Performance](docs/PERFORMANCE.md) - real-world migration timing data
+- [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) - upstream issues affecting open-source builds
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
 
@@ -60,18 +72,9 @@ See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
 
 ### Per-Message TTL
 
-**This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing message count differences.
+**This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
 
-Use the `tolerance` parameter to allow acceptable message loss:
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"tolerance": 10.0}' \
-  http://localhost:15672/api/queue-migration/start/%2F
-```
-
-See [Per-Message TTL Limitation](docs/SKIP_UNSUITABLE_QUEUES.md#%EF%B8%8F-important-per-message-ttl-limitation) for details and recommendations.
+See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (set a `tolerance` or drain first).
 
 ## Web UI
 
@@ -116,42 +119,7 @@ curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2F
 
 > **Note:** The vhost must be specified in the URL path, not in the request body.
 
-To skip unsuitable queues instead of blocking migration:
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"skip_unsuitable_queues": true}' \
-  http://localhost:15672/api/queue-migration/start/%2F
-```
-
-To migrate queues in batches (useful for large vhosts):
-
-```bash
-# Migrate 10 queues at a time, smallest first
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"batch_size": 10, "batch_order": "smallest_first"}' \
-  http://localhost:15672/api/queue-migration/start/%2Fmy-vhost
-```
-
-To migrate specific queues by name:
-
-```bash
-# Migrate only specified queues
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"queue_names": ["orders", "payments", "notifications"]}' \
-  http://localhost:15672/api/queue-migration/start/%2Fproduction
-
-# queue_names takes precedence over batch_size
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"queue_names": ["queue1", "queue2"], "batch_size": 10}' \
-  http://localhost:15672/api/queue-migration/start/%2F
-```
-
-> **Note:** When `queue_names` is specified, `batch_size` and `batch_order` are ignored. Non-existent or ineligible queues are logged as warnings and skipped. If all specified queues are non-existent or ineligible, the migration fails with HTTP 400.
+To skip unsuitable queues, migrate in batches, migrate specific queues by name, set a message-count `tolerance`, or set the vhost default queue type, see [Running a Migration](docs/RUNNING_A_MIGRATION.md#start-options) for every start option.
 
 ### 3. Monitor Progress
 

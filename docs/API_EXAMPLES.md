@@ -264,7 +264,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-**Note:** Tolerance is a per-queue percentage. A queue with 100 source messages passes verification if the destination has 90-100 messages.
+**Note:** Tolerance is a per-queue percentage. A queue with 100 source messages passes verification if the destination has 90-100 messages. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for how tolerance works, the over- and under-delivery defaults, and per-message TTL.
 
 ---
 

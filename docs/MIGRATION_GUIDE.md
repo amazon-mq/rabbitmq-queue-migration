@@ -266,8 +266,10 @@ A queue with a queue-level message TTL (`x-message-ttl` argument or `message-ttl
 
 **Solution:**
 - Remove the `x-message-ttl` argument or `message-ttl` policy before migration
-- Use the `tolerance` migration option to allow a per-queue percentage difference (see [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md))
+- Use the `tolerance` migration option to allow a per-queue percentage difference (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md))
 - Or use `skip_unsuitable_queues` mode to skip these queues and migrate them later
+
+> **Note:** A *queue-level* TTL (the case above) is detected and blocked. TTL set by publishers on individual messages (the `expiration` property) is invisible to the plugin and is the most common cause of a failed migration; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
 
 **`x-expires` (queue expiry)**
 
