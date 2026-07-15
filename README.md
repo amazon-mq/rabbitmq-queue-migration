@@ -20,9 +20,17 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 
 **Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
 
+## Installation
+
+```shell
+rabbitmq-plugins enable rabbitmq_queue_migration
+```
+
+This plugin must be enabled on all cluster nodes for consistent behavior.
+
 ## Documentation
 
-Start with the guide for what you are doing:
+Once installed, follow [Running a Migration](docs/RUNNING_A_MIGRATION.md) for the full operator path. Otherwise start with the guide for what you are doing:
 
 **Plan a migration** - understand how it works and what will bite you
 - [Migration Guide](docs/MIGRATION_GUIDE.md) - two-phase process, queue eligibility, argument conversion, policy and client-redeclaration behavior
@@ -68,103 +76,6 @@ The plugin extends the RabbitMQ Management UI with:
 - Real-time progress monitoring
 - Migration history
 - Per-queue status details
-
-## Installation
-
-```shell
-rabbitmq-plugins enable rabbitmq_queue_migration
-```
-
-This plugin must be enabled on all cluster nodes for consistent behavior.
-
-## Quick Start
-
-### 1. Validate Migration Readiness
-
-Check if your cluster is ready for migration:
-
-```bash
-curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
-```
-
-### 2. Start Migration
-
-Migrate all mirrored classic queues on the default vhost (`/`):
-
-```bash
-curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start
-```
-
-To migrate a specific vhost, include it in the URL path (URL-encoded):
-
-```bash
-# Migrate vhost "/production"
-curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2Fproduction
-```
-
-> [!IMPORTANT]
-> The vhost must be specified in the URL path, not in the request body.
-
-To skip unsuitable queues, migrate in batches, migrate specific queues by name, set a message-count `tolerance`, or set the vhost default queue type, see [Running a Migration](docs/RUNNING_A_MIGRATION.md#start-options) for every start option.
-
-### 3. Monitor Progress
-
-Check migration status:
-
-```bash
-curl -u guest:guest http://localhost:15672/api/queue-migration/status
-```
-
-### 4. Interrupt Migration (Optional)
-
-Gracefully interrupt a running migration:
-
-```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/interrupt/:migration_id
-```
-
-In-flight queue migrations complete while remaining queues are skipped. The migration ends with status `interrupted`.
-
-See [HTTP API](docs/HTTP_API.md) for complete API reference.
-
-## Migration Process
-
-The plugin uses a two-phase migration process to safely convert classic queues to quorum queues:
-
-1. **Phase 1:** Classic → Temporary Quorum (with `tmp_<timestamp>_` prefix)
-2. **Phase 2:** Temporary → Final Quorum (original name)
-
-This approach ensures no name conflicts and allows safe rollback if issues occur. Empty queues use a fast path that skips the two-phase process.
-
-**Important:** Migration suspends non-HTTP listeners broker-wide and closes all client connections. Plan migration windows accordingly.
-
-See [Migration Guide](docs/MIGRATION_GUIDE.md) for complete details on the migration process, validation checks, queue eligibility, and argument conversion.
-
-## Configuration
-
-The plugin provides extensive configuration options for tuning performance, disk space management, and message count verification.
-
-See [Configuration Reference](docs/CONFIGURATION.md) for complete configuration reference including all parameters, defaults, and tuning examples.
-
-## Snapshot Support
-
-The plugin creates snapshots before migration to enable rollback if issues occur. Three modes are supported:
-
-- **EBS Mode** (default) - AWS EBS snapshots for production
-- **Tar Mode** - Tar archives for development/testing
-- **None Mode** - Disabled (snapshots handled externally)
-
-See [Snapshots Guide](docs/SNAPSHOTS.md) for complete snapshot configuration and [EC2 Setup](docs/EC2_SETUP.md) for AWS IAM setup.
-
-## Troubleshooting
-
-For troubleshooting guidance, see [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
-
-Quick checks:
-- **Migration fails to start:** Run compatibility check to identify issues
-- **Migration stuck:** Check status and broker logs
-- **Rollback required:** Manual cleanup needed (automatic rollback available on Amazon MQ for RabbitMQ only)
 
 ## Contributing
 
