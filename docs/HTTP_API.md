@@ -740,10 +740,7 @@ ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz
 
 ## Polling Recommendations
 
-When monitoring migration progress:
-- **Poll interval**: 5-10 seconds recommended
-- **Timeout**: Set based on queue count and message volume
-- **Exponential backoff**: Consider for long-running migrations
+Poll the status endpoint every 5-10 seconds. Set your overall timeout from the queue count and message volume, and consider exponential backoff for long-running migrations.
 
 **Example monitoring script:**
 ```bash

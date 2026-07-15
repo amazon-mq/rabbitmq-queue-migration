@@ -137,55 +137,11 @@ Queues with zero messages skip the two-phase process:
 
 ## Connection Handling During Migration
 
-### Pre-Migration Preparation
+When a migration starts, the plugin suspends all non-HTTP listeners (AMQP, MQTT, STOMP) and closes existing client connections. This is broker-wide, not limited to the vhost being migrated: every vhost is affected. Suspending listeners keeps publishers and consumers off the migrating queues so that message counts stay accurate. The HTTP API stays available throughout so you can monitor progress.
 
-**Listener Suspension:**
-- Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended broker-wide
-- All existing client connections are closed
-- HTTP API remains available for monitoring
+When the migration ends, all listeners are restored automatically and clients can reconnect. Messages and bindings are preserved; the only change is that the migrated queues are now quorum queues.
 
-**Why Suspend Listeners:**
-- Prevents new connections during migration
-- Ensures no active publishers/consumers on migrating queues
-- Guarantees accurate message counts
-
-### During Migration
-
-**Client Impact:**
-- Clients cannot connect to the broker (non-HTTP protocols)
-- Existing connections are closed
-- HTTP API remains accessible for monitoring migration progress
-
-**Monitoring:**
-- Use HTTP API to check migration status
-- View per-queue progress
-- Identify any issues
-
-### Post-Migration
-
-**Automatic Restoration:**
-- All listeners are restored automatically
-- Clients can reconnect to the broker
-- Migrated queues are now quorum queues
-
-**Queue State:**
-- All messages preserved
-- All bindings intact
-- Queue type changed from classic to quorum
-
-### Important Considerations
-
-**Broker-Wide Impact:**
-The connection suspension affects the entire broker, not just the vhost being migrated. This means:
-- All vhosts are affected
-- All client connections are closed
-- Plan migration windows accordingly
-- Consider maintenance windows for production systems
-
-**Reconnection:**
-- Clients with automatic reconnection will reconnect after migration
-- Applications should handle connection loss gracefully
-- Test reconnection behavior before production migration
+Because the entire broker goes offline to non-HTTP clients, plan a maintenance window. Clients with automatic reconnection will recover on their own once listeners are restored, but test that behavior before running a production migration.
 
 ---
 
@@ -217,11 +173,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 
-This returns:
-- Total queues in vhost
-- Compatible queues (eligible for migration)
-- Unsuitable queues (with reasons)
-- System check results
+This returns the total queues in the vhost, the compatible queues eligible for migration, the unsuitable queues with their reasons, and the system check results.
 
 ---
 
@@ -241,47 +193,16 @@ The plugin automatically converts or removes queue arguments during migration to
 
 ### Unsuitable Arguments
 
-**`x-overflow: reject-publish-dlx`**
+Three queue arguments have no safe quorum-queue equivalent, so a queue that uses any of them is marked unsuitable. In every case you can either fix the queue before migration or use `skip_unsuitable_queues` mode to migrate the rest now and come back to it later.
 
-This overflow policy is **not compatible** with quorum queues and will cause the queue to be marked as unsuitable.
-
-**Why Unsuitable:**
-- Quorum queues support `drop-head` and `reject-publish` overflow policies
-- `reject-publish` in quorum queues does NOT provide dead lettering
-- `reject-publish-dlx` behavior cannot be replicated in quorum queues
-
-**Solution:**
-- Change overflow policy before migration
-- Or use `skip_unsuitable_queues` mode to skip these queues
-- Consider alternative dead lettering approaches for quorum queues
-
-**`x-message-ttl` (queue-level TTL)**
-
-A queue with a queue-level message TTL (`x-message-ttl` argument or `message-ttl` policy) is marked as unsuitable.
-
-**Why Unsuitable:**
-- Messages can expire and be removed during the migration window
-- Expired messages cause the source-vs-destination message count check to fail verification
-
-**Solution:**
-- Remove the `x-message-ttl` argument or `message-ttl` policy before migration
-- Use the `tolerance` migration option to allow a per-queue percentage difference (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md))
-- Or use `skip_unsuitable_queues` mode to skip these queues and migrate them later
+| Argument | Why it is unsuitable | What to do |
+|----------|----------------------|------------|
+| `x-overflow: reject-publish-dlx` | Quorum queues support only `drop-head` and `reject-publish` overflow, and `reject-publish` provides no dead lettering, so this policy cannot be replicated. | Change the overflow policy (and rethink dead lettering) before migration, or skip the queue. |
+| `x-message-ttl` (queue-level TTL) | Messages can expire during the migration window, and expired messages fail the source-vs-destination count check. | Remove the `x-message-ttl` argument or `message-ttl` policy, set a `tolerance` (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md)), or skip the queue. |
+| `x-expires` (queue expiry) | The queue itself can expire and be deleted mid-migration, failing the migration for that queue. | Remove the `x-expires` argument or `expires` policy, or skip the queue. |
 
 > [!NOTE]
-> A *queue-level* TTL (the case above) is detected and blocked. TTL set by publishers on individual messages (the `expiration` property) is invisible to the plugin and is the most common cause of a failed migration; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
-
-**`x-expires` (queue expiry)**
-
-A queue with `x-expires` argument or `expires` policy is marked as unsuitable.
-
-**Why Unsuitable:**
-- The queue itself can expire and be deleted during migration
-- A queue that disappears mid-migration causes the migration to fail for that queue
-
-**Solution:**
-- Remove the `x-expires` argument or `expires` policy before migration
-- Or use `skip_unsuitable_queues` mode to skip these queues
+> A *queue-level* TTL (the `x-message-ttl` row above) is detected and blocked. TTL set by publishers on individual messages (the `expiration` property) is invisible to the plugin and is the most common cause of a failed migration; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
 
 ### Preserved Arguments
 

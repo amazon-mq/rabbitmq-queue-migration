@@ -287,9 +287,8 @@ curl -u guest:guest -X POST \
 
 ## Best Practices
 
-### 1. Run Compatibility Check First
+Always run the compatibility check in skip mode first. It reports which queues would be skipped, why, and how many would migrate successfully, without changing anything:
 
-Always check compatibility before migration:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -297,21 +296,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 
-This shows:
-- Which queues would be unsuitable
-- Why they would be unsuitable
-- How many queues would migrate successfully
+If any business-critical queues would be skipped, fix those first and migrate them without skip mode so a silent skip cannot leave them behind. For large deployments, combine skip mode with batching to make incremental progress, reduce resource pressure, and give yourself room to fix issues between batches:
 
-### 2. Address Critical Queues First
-
-If business-critical queues would be skipped:
-1. Fix those queues first
-2. Run migration without skip mode
-3. Ensures critical queues migrate successfully
-
-### 3. Use Batch Migration with Skip Mode
-
-For large deployments:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -323,26 +309,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-This provides:
-- Incremental progress
-- Reduced resource pressure
-- Ability to fix issues between batches
-
-### 4. Monitor Skipped Queue Count
-
-After migration:
-1. Check how many queues were skipped
-2. Review skip reasons
-3. Plan remediation for skipped queues
-4. Schedule follow-up migration
-
-### 5. Document Skipped Queues
-
-Keep track of:
-- Which queues were skipped
-- Why they were skipped
-- When issues will be addressed
-- Who is responsible for fixes
+After each run, review how many queues were skipped and why, and record which queues still need attention so a follow-up migration can pick them up once the underlying issues are addressed.
 
 ---
 
