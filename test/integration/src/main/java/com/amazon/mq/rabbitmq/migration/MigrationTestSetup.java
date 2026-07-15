@@ -76,7 +76,13 @@ public class MigrationTestSetup {
     }
   }
 
-  public static TestConfiguration parseArguments(String[] args) {
+  /**
+   * Build a {@link ClusterTopology} from the connection arguments shared by every test entry point:
+   * {@code --hostname}, {@code --port}, {@code --username}, {@code --password}, {@code --vhost},
+   * and {@code --load-balancer}. Centralizing this lets every test connect to a load-balanced, TLS,
+   * authenticated broker (such as Amazon MQ for RabbitMQ) rather than only the end-to-end command.
+   */
+  public static ClusterTopology topologyFromArgs(String[] args) {
     String hostname = "localhost";
     int port = 15672;
     boolean portSpecified = false;
@@ -85,32 +91,23 @@ public class MigrationTestSetup {
     String username = "guest";
     String password = "guest";
 
-    // Check for help first, then get hostname and port
     for (String arg : args) {
-      if (arg.equals("--help") || arg.equals("-h")) {
-        printUsage();
-        System.exit(0);
-      }
-    }
-
-    // Parse hostname/port/vhost/load-balancer from args to update config
-    for (String testArg : args) {
-      if (testArg.startsWith("--hostname=")) {
-        hostname = testArg.substring(11);
-      } else if (testArg.startsWith("--username=")) {
-        username = testArg.substring(11);
-      } else if (testArg.startsWith("--password=")) {
-        password = testArg.substring(11);
-      } else if (testArg.startsWith("--port=")) {
+      if (arg.startsWith("--hostname=")) {
+        hostname = arg.substring(11);
+      } else if (arg.startsWith("--username=")) {
+        username = arg.substring(11);
+      } else if (arg.startsWith("--password=")) {
+        password = arg.substring(11);
+      } else if (arg.startsWith("--port=")) {
         try {
-          port = Integer.parseInt(testArg.substring(7));
+          port = Integer.parseInt(arg.substring(7));
           portSpecified = true;
         } catch (NumberFormatException e) {
           // Use default port
         }
-      } else if (testArg.startsWith("--vhost=")) {
-        vhost = testArg.substring(8);
-      } else if (testArg.equals("--load-balancer")) {
+      } else if (arg.startsWith("--vhost=")) {
+        vhost = arg.substring(8);
+      } else if (arg.equals("--load-balancer")) {
         loadBalancer = true;
       }
     }
@@ -121,9 +118,21 @@ public class MigrationTestSetup {
       System.exit(1);
     }
 
+    return new ClusterTopology(hostname, port, username, password, vhost, loadBalancer);
+  }
+
+  public static TestConfiguration parseArguments(String[] args) {
+    // Check for help first, then build the cluster topology from connection args
+    for (String arg : args) {
+      if (arg.equals("--help") || arg.equals("-h")) {
+        printUsage();
+        System.exit(0);
+      }
+    }
+
     // Initialize config with defaults
-    ClusterTopology topology =
-        new ClusterTopology(hostname, port, username, password, vhost, loadBalancer);
+    ClusterTopology topology = topologyFromArgs(args);
+    String vhost = topology.getVirtualHost();
     TestConfiguration config = new TestConfiguration(topology);
     config.setVirtualHost(vhost);
 
@@ -224,23 +233,17 @@ public class MigrationTestSetup {
           System.exit(1);
         }
       } else if (arg.startsWith("--hostname=")) {
-        hostname = arg.substring(11);
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.startsWith("--username=")) {
-        // Already parsed in first loop
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.startsWith("--password=")) {
-        // Already parsed in first loop
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.startsWith("--port=")) {
-        try {
-          port = Integer.parseInt(arg.substring(7));
-        } catch (NumberFormatException e) {
-          logger.error("Invalid port: {}", arg);
-          printUsage();
-          System.exit(1);
-        }
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.startsWith("--vhost=")) {
-        // Already parsed in first loop
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.equals("--load-balancer")) {
-        // Already parsed in first loop
+        // Connection arg parsed by topologyFromArgs
       } else if (arg.equals("--no-ha")) {
         config.setEnableHA(false);
       } else if (arg.equals("--skip-cleanup")) {

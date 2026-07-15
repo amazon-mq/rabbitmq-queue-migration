@@ -28,19 +28,9 @@ public class InterruptionTest {
     try {
       logger.info("Starting migration interruption test");
 
-      // Parse hostname and port from args
-      String hostname = "localhost";
-      int port = 15672;
-      for (String arg : args) {
-        if (arg.startsWith("--hostname=")) {
-          hostname = arg.substring(11);
-        } else if (arg.startsWith("--port=")) {
-          port = Integer.parseInt(arg.substring(7));
-        }
-      }
-
-      // Create configuration directly
-      ClusterTopology topology = new ClusterTopology(hostname, port);
+      // Build the cluster topology from shared connection args (supports
+      // --load-balancer, --username, --password, --vhost).
+      ClusterTopology topology = MigrationTestSetup.topologyFromArgs(args);
       TestConfiguration config = new TestConfiguration(topology);
       config.setQueueCount(QUEUE_COUNT);
       config.setTotalMessages(TOTAL_MESSAGES);
