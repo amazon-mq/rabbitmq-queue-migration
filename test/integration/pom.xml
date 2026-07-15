@@ -24,14 +24,14 @@
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>amqp-client</artifactId>
-            <version>5.33.1</version>
+            <version>5.34.0</version>
         </dependency>
 
         <!-- RabbitMQ HTTP Client -->
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>http-client</artifactId>
-            <version>5.5.0</version>
+            <version>5.6.0</version>
         </dependency>
 
         <!-- Jackson for JSON processing -->
@@ -50,14 +50,14 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.37</version>
+            <version>1.5.38</version>
         </dependency>
 
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>6.1.1</version>
+            <version>6.1.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
