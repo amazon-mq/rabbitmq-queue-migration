@@ -95,7 +95,8 @@ POST /api/queue-migration/start/:vhost
 **Parameters:**
 - `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.**
 
-> **Important:** The vhost must be specified in the URL, not in the request body. The `/api/queue-migration/start` endpoint (without a vhost path parameter) defaults to the `/` vhost. To migrate a different vhost, you must use `/api/queue-migration/start/:vhost` with the vhost name URL-encoded in the path.
+> [!IMPORTANT]
+> The vhost must be specified in the URL, not in the request body. The `/api/queue-migration/start` endpoint (without a vhost path parameter) defaults to the `/` vhost. To migrate a different vhost, you must use `/api/queue-migration/start/:vhost` with the vhost name URL-encoded in the path.
 
 **Request Body (optional):**
 ```json
@@ -178,7 +179,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
-> **Common Mistake:** Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
+> [!CAUTION]
+> Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
 
 **Response (200 OK):**
 ```json
@@ -192,7 +194,8 @@ curl -u guest:guest -X POST \
 - `migration_id` - Base64url-encoded unique migration identifier. Use this ID to track the migration via the status endpoint.
 - `status` - Request status (`started`)
 
-> **Note:** The migration runs asynchronously. Use the returned `migration_id` with the `/api/queue-migration/status/:migration_id` endpoint to monitor progress.
+> [!NOTE]
+> The migration runs asynchronously. Use the returned `migration_id` with the `/api/queue-migration/status/:migration_id` endpoint to monitor progress.
 
 **Error Responses:**
 
@@ -484,7 +487,8 @@ POST /api/queue-migration/check/:vhost
 **Parameters:**
 - `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.** Use `all` to check all vhosts.
 
-> **Important:** Unlike the start endpoint, there is no default vhost for the check endpoint. You must always specify the vhost in the URL path.
+> [!IMPORTANT]
+> Unlike the start endpoint, there is no default vhost for the check endpoint. You must always specify the vhost in the URL path.
 
 **Request Body (optional):**
 ```json

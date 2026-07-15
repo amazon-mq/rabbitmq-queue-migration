@@ -12,6 +12,7 @@ Two things bite operators most often. Read these before your first run:
 
 - **Migration closes all client connections broker-wide.** Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended for the whole broker, not just the vhost being migrated, and are restored when the migration ends. Plan a maintenance window. See [Connection Handling](MIGRATION_GUIDE.md#connection-handling-during-migration).
 - **Per-message TTL can cause a `message_count_mismatch` failure.** If your publishers set the `expiration` property (common on dead-letter and `_error` queues), messages can expire mid-migration and fail the count check. Decide up front whether to set a `tolerance` or drain first. See [Message Count Verification and Message Loss](MESSAGE_LOSS_AND_VERIFICATION.md).
+- **Do not restart broker nodes while a migration is in progress.** Restarting a node, a full cluster reboot, or a maintenance-window restart mid-migration is not supported; recovery from the resulting partial state generally requires a snapshot restore. Only restart when no migration is in flight.
 
 ---
 

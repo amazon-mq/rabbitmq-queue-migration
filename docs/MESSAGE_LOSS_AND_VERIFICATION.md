@@ -75,6 +75,7 @@ Pick the approach that fits your risk tolerance:
 
 There is no way for the plugin to detect or pre-count per-message TTL, so it cannot warn you before you start. Decide up front whether your publishers set `expiration` and plan accordingly.
 
+> [!NOTE]
 > **Queue-level TTL is different.** A queue-level `x-message-ttl` or `message-ttl` policy **is** visible, and the plugin blocks such queues as unsuitable unless you pass `allow_message_ttl` (which forces `tolerance` to 100% for the whole migration). See the `message_ttl` skip reason in [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md).
 
 ---

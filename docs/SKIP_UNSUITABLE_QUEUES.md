@@ -181,6 +181,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
+> [!WARNING]
 > **Per-message TTL is different and invisible to the plugin.** The `message_ttl` reason above is for a *queue-level* TTL, which the plugin can see. TTL set by publishers on individual messages (the `expiration` property) cannot be detected, and is the most common cause of a failed migration. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for details and how to handle it.
 
 ---

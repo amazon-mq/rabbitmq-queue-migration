@@ -10,18 +10,6 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 - EBS or tar-based snapshots before migration
 - HTTP API and Web UI for control and monitoring
 
-## ⚠️ Mnesia-Only Compatibility
-
-> **This plugin requires Mnesia as the metadata store.**
->
-> The plugin manages two internal Mnesia tables (`queue_migration` and `queue_migration_status`). On brokers where Mnesia is unavailable - Khepri-enabled 3.13.x brokers, or any cluster where peer Mnesia replicas are unreachable at boot - the plugin's table initialisation will fail. Starting in 1.1.0, the plugin tolerates this gracefully: the broker boots normally, the plugin's HTTP API returns `503 Service Unavailable` with a JSON body identifying initialisation status (see [HTTP API](docs/HTTP_API.md#plugin-initialization-states)), and the UI shows the same state. To recover from a `failed` state, run `rabbitmq-plugins disable rabbitmq_queue_migration` followed by `rabbitmq-plugins enable rabbitmq_queue_migration` on each broker node.
->
-> **Before enabling this plugin, confirm your broker is using Mnesia (the default in RabbitMQ 3.13.x).**
-
-## ⚠️ Broker actions during migration
-
-Restarting any broker node, performing a full cluster reboot, or applying a maintenance window restart to a broker while a migration is in progress is not supported and is not tested. Mid-migration state is complex; recovery generally requires snapshot restore (see [Snapshots Guide](docs/SNAPSHOTS.md)). Only initiate broker restarts when no migration is in flight.
-
 ## Prerequisites
 
 - RabbitMQ 3.13.x
@@ -58,21 +46,18 @@ Start with the guide for what you are doing:
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 ### Open-Source RabbitMQ 3.13.7
 
-Three upstream RabbitMQ issues are known to affect migrations performed by this
-plugin when running on open-source RabbitMQ 3.13.7. There are no effective
-mitigations within the plugin. Migrating empty queues prevents these issues
-entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for
-RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
+Three upstream RabbitMQ issues are known to affect migrations performed by this plugin when running on open-source RabbitMQ 3.13.7. There are no effective mitigations within the plugin. Migrating empty queues prevents these issues entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
 
 See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
 
 ### Per-Message TTL
 
-**This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
+> [!WARNING]
+> **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
 
 See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (set a `tolerance` or drain first).
 
@@ -117,7 +102,8 @@ To migrate a specific vhost, include it in the URL path (URL-encoded):
 curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2Fproduction
 ```
 
-> **Note:** The vhost must be specified in the URL path, not in the request body.
+> [!IMPORTANT]
+> The vhost must be specified in the URL path, not in the request body.
 
 To skip unsuitable queues, migrate in batches, migrate specific queues by name, set a message-count `tolerance`, or set the vhost default queue type, see [Running a Migration](docs/RUNNING_A_MIGRATION.md#start-options) for every start option.
 

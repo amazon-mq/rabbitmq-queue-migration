@@ -15,9 +15,8 @@ This guide covers potential issues, error messages, and solutions when using the
 
 ---
 
-> **Note:** Users running open-source RabbitMQ 3.13.7 should also review
-> [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that
-> affect migration but cannot be worked around in this plugin.
+> [!NOTE]
+> Users running open-source RabbitMQ 3.13.7 should also review [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that affect migration but cannot be worked around in this plugin.
 
 ---
 
@@ -292,7 +291,7 @@ rabbitmq-plugins disable rabbitmq_queue_migration
 rabbitmq-plugins enable rabbitmq_queue_migration
 ```
 
-on each broker node. The plugin restarts its state machine from `initializing` and runs the same retry loop. See the [README's Mnesia-Only Compatibility section](../README.md#%EF%B8%8F-mnesia-only-compatibility) for the full lifecycle.
+on each broker node. The plugin restarts its state machine from `initializing` and runs the same retry loop.
 
 ---
 
