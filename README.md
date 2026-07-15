@@ -28,6 +28,21 @@ rabbitmq-plugins enable rabbitmq_queue_migration
 
 This plugin must be enabled on all cluster nodes for consistent behavior.
 
+## Known Limitations
+
+### Open-Source RabbitMQ 3.13.7
+
+Three upstream RabbitMQ issues are known to affect migrations performed by this plugin when running on open-source RabbitMQ 3.13.7. There are no effective mitigations within the plugin. Migrating empty queues prevents these issues entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
+
+See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
+
+### Per-Message TTL
+
+> [!WARNING]
+> **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
+
+See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (set a `tolerance` or drain first).
+
 ## Documentation
 
 Once installed, follow [Running a Migration](docs/RUNNING_A_MIGRATION.md) for the full operator path. Otherwise start with the guide for what you are doing:
@@ -53,29 +68,6 @@ Once installed, follow [Running a Migration](docs/RUNNING_A_MIGRATION.md) for th
 - [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) - upstream issues affecting open-source builds
 
 See [the `docs/` directory](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/main/docs).
-
-## Known Limitations
-
-### Open-Source RabbitMQ 3.13.7
-
-Three upstream RabbitMQ issues are known to affect migrations performed by this plugin when running on open-source RabbitMQ 3.13.7. There are no effective mitigations within the plugin. Migrating empty queues prevents these issues entirely; migrating shorter queues reduces their likelihood. **Amazon MQ for RabbitMQ** broker builds on the 3.13 series include backports of the fixes.
-
-See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
-
-### Per-Message TTL
-
-> [!WARNING]
-> **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
-
-See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (set a `tolerance` or drain first).
-
-## Web UI
-
-The plugin extends the RabbitMQ Management UI with:
-- **Queue Migration** tab in Admin section
-- Real-time progress monitoring
-- Migration history
-- Per-queue status details
 
 ## Contributing
 
