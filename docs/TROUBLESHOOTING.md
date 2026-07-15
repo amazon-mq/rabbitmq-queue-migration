@@ -153,7 +153,9 @@ Unsynchronized queues will be skipped and can be migrated later after synchroniz
 
 - `too_many_queues` - The vhost has more classic queues than the plugin will migrate in a single run (limit configured by `queue_migration.max_queues_for_migration`).
 - `unsuitable_overflow` - A queue uses `x-overflow=reject-publish-dlx`, which is not supported in quorum queues. Quorum queues support `drop-head` and `reject-publish` only.
-- `too_many_messages` / `too_many_bytes` - A queue exceeds the per-queue message-count or byte-size thresholds for safe migration.
+- `queue_expires` - A queue has an `x-expires` argument or `expires` policy, so the queue itself could expire during migration.
+- `message_ttl` - A queue has a queue-level `x-message-ttl` argument or `message-ttl` policy.
+- `unsynchronized` - A mirrored classic queue is not fully synchronized across its replicas.
 
 **Solutions:**
 

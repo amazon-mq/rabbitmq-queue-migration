@@ -172,7 +172,7 @@ rabbitmqctl clear_policy <policy_name>
 
 **Option C:** Accept that queue cannot be migrated and handle separately
 
-**Option D:** Migrate anyway with `allow_message_ttl`. Pass `{"allow_message_ttl": true}` in the start (or check) request body to treat `message_ttl` queues as suitable instead of blocking them. This is for callers who accept that any or all messages in these queues may expire during migration. It forces the message-count `tolerance` to 100% for the whole migration (see the warning under the `allow_message_ttl` option in HTTP_API.md), and the migrated quorum queue keeps its `x-message-ttl`.
+**Option D:** Migrate anyway with `allow_message_ttl`. Pass `{"allow_message_ttl": true}` in the start (or check) request body to treat `message_ttl` queues as suitable instead of blocking them. This is for callers who accept that any or all messages in these queues may expire during migration. It forces the message-count `tolerance` to 100% for the whole migration, disabling message-count verification for every queue in the run (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md)), and the migrated quorum queue keeps its `x-message-ttl`.
 
 ```bash
 curl -u guest:guest -X POST \

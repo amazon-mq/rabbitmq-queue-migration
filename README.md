@@ -5,7 +5,7 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 ## Overview
 
 - Two-phase migration algorithm with message-by-message transfer
-- Automatic binding preservation and rollback support
+- Automatic binding preservation and snapshot-based recovery
 - Selective migration by queue name or batch size
 - EBS or tar-based snapshots before migration
 - HTTP API for control and monitoring

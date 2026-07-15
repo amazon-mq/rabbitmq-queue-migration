@@ -70,7 +70,7 @@ All options go in the JSON request body and are optional. Any option that is pre
 | `skip_unsuitable_queues` | boolean | `false` | Skip queues that fail queue-level checks instead of blocking the whole migration. See [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md). |
 | `batch_size` | integer or `"all"` | `all` | Migrate at most this many queues this run. `0` or `"all"` means all eligible. Ignored if `queue_names` is set. |
 | `batch_order` | string | `"smallest_first"` | Selection order for batching: `"smallest_first"` or `"largest_first"`. Ignored if `queue_names` is set. |
-| `queue_names` | array of strings | (unset) | Migrate only these queues. Takes precedence over `batch_size`/`batch_order`. Non-existent or ineligible names are logged and skipped. |
+| `queue_names` | array of strings | (unset) | Migrate only these queues. Takes precedence over `batch_size`/`batch_order`. Non-existent or ineligible names are logged and skipped; if none are eligible, the request fails with `400`. |
 | `tolerance` | number 0.0-100.0 | (config defaults) | Per-queue message-count tolerance, applied to both under- and over-delivery. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-tolerance-migration-option). |
 | `allow_message_ttl` | boolean | `false` | Allow queues with a queue-level TTL to migrate. Forces `tolerance` to 100% for the entire run. See the `message_ttl` reason in [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md). |
 | `set_default_queue_type` | string | (unset) | After a successful migration, set the vhost default queue type to `"quorum"` or `"classic"`. See [Client Redeclaration](MIGRATION_GUIDE.md#client-redeclaration-after-migration). |
