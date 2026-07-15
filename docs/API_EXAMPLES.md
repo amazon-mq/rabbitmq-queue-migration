@@ -334,7 +334,7 @@ curl -u guest:guest \
 - `migrations` - Array of migration records (most recent first)
 
 **Migration Record Fields:**
-- `id` - Unique migration identifier (base64-encoded Erlang term)
+- `id` - Unique migration identifier (base64url-encoded Erlang term)
 - `display_id` - Human-readable identifier with vhost, timestamp, and node
 - `vhost` - Virtual host
 - `status` - Migration status (see status values below)

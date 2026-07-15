@@ -97,15 +97,6 @@ df -h /var/lib/rabbitmq
 du -sh /var/lib/rabbitmq/mnesia/rabbit@*/queues
 ```
 
-**Calculate safe minimum:**
-```
-Minimum free space = (total queue data × 3) + 2GB buffer
-```
-
-**Example:**
-- Total queue data: 10GB
-- Minimum free: (10GB × 3) + 2GB = **32GB**
-
 **Free up space:**
 ```bash
 # Remove old log files
@@ -381,7 +372,7 @@ curl -u guest:guest \
 
 **Cause:** Fewer (or more) messages ended up in the destination queue than the source held before transfer, and the difference exceeded the configured tolerance. By default under-delivery tolerance is 0.0%, so any missing message fails the migration. The most common cause of a large under-delivery is per-message TTL expiry on a dead-letter or `_error` queue: expired messages are counted in the source total but dropped as the shovel drains the queue.
 
-**Solution:** See [Message Count Verification and Message Loss](MESSAGE_LOSS_AND_VERIFICATION.md#the-message_count_mismatch-error) for how to read the numbers, confirm the cause, and re-run with an appropriate `tolerance` (or drain the queue first). Do not raise the tolerance to force a migration through when you cannot explain the missing messages.
+**Solution:** See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-message_count_mismatch-error) for how to read the numbers, confirm the cause, and re-run with an appropriate `tolerance` (or drain the queue first). Do not raise the tolerance to force a migration through when you cannot explain the missing messages.
 
 #### 2. Shovel Transfer Failed
 

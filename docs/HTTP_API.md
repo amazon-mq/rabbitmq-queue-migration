@@ -847,10 +847,10 @@ while true; do
     | jq -r '.migration.status')
 
   if [ "$STATUS" = "completed" ]; then
-    echo "✅ Migration completed successfully"
+    echo "Migration completed successfully"
     break
   elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "rollback_pending" ]; then
-    echo "❌ Migration failed: $STATUS"
+    echo "Migration failed: $STATUS"
     exit 1
   fi
 
@@ -870,5 +870,5 @@ curl -s -u guest:guest \
 
 ## See Also
 
-- [README](README.md) - Plugin overview and quick start
-- [test/integration/README](test/integration/README.md) - Integration testing guide
+- [README](../README.md) - Plugin overview and documentation map
+- [test/integration/README](../test/integration/README.md) - Integration testing guide
