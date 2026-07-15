@@ -1,483 +1,106 @@
 # API Examples - RabbitMQ Queue Migration Plugin
 
-This document provides practical examples for all HTTP API endpoints with actual response structures verified against a running broker.
+This is a task-oriented companion to the [HTTP API Reference](HTTP_API.md). It shows how to call and combine the endpoints; for full request and response schemas, field definitions, status codes, and error bodies, see the reference. For the end-to-end operator path, see [Running a Migration](RUNNING_A_MIGRATION.md).
+
+All examples use `guest:guest` and the default vhost (`/`, URL-encoded `%2F`). The vhost always goes in the URL path, URL-encoded, never in the request body.
 
 ---
 
 ## Table of Contents
 
-1. [Compatibility Check Examples](#compatibility-check-examples)
-2. [Migration Start Examples](#migration-start-examples)
-3. [Migration Status Examples](#migration-status-examples)
-4. [Migration Control Examples](#migration-control-examples)
+1. [Compatibility Check](#compatibility-check)
+2. [Starting a Migration](#starting-a-migration)
+3. [Checking Status](#checking-status)
+4. [Interrupting a Migration](#interrupting-a-migration)
 5. [Common Workflows](#common-workflows)
 
 ---
 
-## Compatibility Check Examples
+## Compatibility Check
 
-### Basic Compatibility Check
-
-Check if default vhost is ready for migration:
+Check whether a vhost is ready for migration without changing anything. For the full response shape (system checks and per-queue results), see [Check Compatibility](HTTP_API.md#check-compatibility).
 
 ```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/check/%2F
-```
+# Default vhost
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F
 
-**Response:**
-```json
-{
-  "vhost": "/",
-  "skip_unsuitable_queues": false,
-  "overall_ready": true,
-  "system_checks": {
-    "all_passed": true,
-    "checks": [
-      {
-        "check_type": "relaxed_checks_setting",
-        "status": "passed",
-        "message": "Relaxed checks setting is enabled"
-      },
-      {
-        "check_type": "leader_balance",
-        "status": "passed",
-        "message": "Queue leaders are balanced across cluster nodes"
-      },
-      {
-        "check_type": "queue_synchronization",
-        "status": "passed",
-        "message": "All mirrored classic queues are fully synchronized"
-      },
-      {
-        "check_type": "queue_suitability",
-        "status": "passed",
-        "message": "All queues are suitable for migration"
-      },
-      {
-        "check_type": "disk_space",
-        "status": "passed",
-        "message": "Sufficient disk space available for migration"
-      },
-      {
-        "check_type": "active_alarms",
-        "status": "passed",
-        "message": "No active alarms"
-      },
-      {
-        "check_type": "memory_usage",
-        "status": "passed",
-        "message": "Memory usage is within acceptable limits"
-      },
-      {
-        "check_type": "snapshot_not_in_progress",
-        "status": "passed",
-        "message": "No EBS snapshots in progress"
-      }
-    ]
-  },
-  "queue_checks": {
-    "summary": {
-      "total_queues": 50,
-      "compatible_queues": 50,
-      "unsuitable_queues": 0,
-      "compatibility_percentage": 100
-    },
-    "results": []
-  }
-}
-```
+# Specific vhost
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2Fproduction
 
----
-
-### Compatibility Check with Skip Mode
-
-Check compatibility and see which queues would be unsuitable:
-
-```bash
+# Skip mode: also report which queues would be skipped and why
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 
-**Response (with unsuitable queues):**
-```json
-{
-  "vhost": "/",
-  "skip_unsuitable_queues": true,
-  "overall_ready": true,
-  "system_checks": {
-    "all_passed": true,
-    "checks": [
-      {
-        "check_type": "relaxed_checks_setting",
-        "status": "passed",
-        "message": "Relaxed checks setting is enabled"
-      }
-    ]
-  },
-  "queue_checks": {
-    "summary": {
-      "total_queues": 50,
-      "compatible_queues": 45,
-      "unsuitable_queues": 5,
-      "compatibility_percentage": 90
-    },
-    "results": [
-      {
-        "name": "expires.queue.1",
-        "vhost": "/",
-        "compatible": false,
-        "issues": [
-          {
-            "type": "queue_expires",
-            "reason": "Queues with x-expires argument or expires policy are unsuitable for migration because the queue could expire during the process"
-          }
-        ]
-      },
-      {
-        "name": "reject.queue.1",
-        "vhost": "/",
-        "compatible": false,
-        "issues": [
-          {
-            "type": "unsuitable_overflow",
-            "reason": "x-overflow=reject-publish-dlx is not supported in quorum queues. Quorum queues support drop-head and reject-publish, but reject-publish does not provide dead lettering like reject-publish-dlx does in classic queues."
-          }
-        ]
-      },
-      {
-        "name": "too.many.queue.1",
-        "vhost": "/",
-        "compatible": false,
-        "issues": [
-          {
-            "type": "too_many_queues",
-            "reason": "Too many queues for migration (10001 found, max 10000)"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+Skip reasons in the response (`unsynchronized`, `too_many_queues`, `unsuitable_overflow`, `queue_expires`, `message_ttl`, `interrupted`) are documented in [Skip Unsuitable Queues](SKIP_UNSUITABLE_QUEUES.md).
 
 ---
 
-### Compatibility Check for Specific Virtual Host
+## Starting a Migration
+
+Every option goes in the JSON body and is optional; see [Start Migration](HTTP_API.md#start-migration) for the full field list and the response shape. The response returns a `migration_id` used to monitor progress.
 
 ```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/check/%2Fproduction
-```
+# Migrate all eligible queues in the default vhost
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start
 
-**Note:** Virtual host must be URL-encoded in the path (`/production` → `%2Fproduction`)
+# Specific vhost (vhost in the URL path, not the body)
+curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/start/%2Fproduction
 
----
-
-## Migration Start Examples
-
-### Basic Migration
-
-Migrate all eligible queues in default vhost:
-
-```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/start
-```
-
-**Response:**
-```json
-{
-  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=",
-  "status": "started"
-}
-```
-
----
-
-### Migration with Skip Mode
-
-Skip unsuitable queues and migrate the rest:
-
-```bash
+# Skip unsuitable queues and migrate the rest
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start
-```
 
----
-
-### Batch Migration (Smallest First)
-
-Migrate 50 smallest queues by message count:
-
-```bash
+# Batch: migrate the 50 smallest queues (use "largest_first" to reverse)
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"batch_size": 50, "batch_order": "smallest_first"}' \
   http://localhost:15672/api/queue-migration/start
-```
 
----
-
-### Batch Migration (Largest First)
-
-Migrate 50 largest queues by message count:
-
-```bash
+# Specific queues by name (takes precedence over batch_size and batch_order)
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
-  -d '{"batch_size": 50, "batch_order": "largest_first"}' \
+  -d '{"queue_names": ["queue1", "queue2", "queue3"]}' \
   http://localhost:15672/api/queue-migration/start
-```
 
----
-
-### Combined: Skip Mode + Batch Migration
-
-Migrate 100 smallest suitable queues:
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
-    "skip_unsuitable_queues": true,
-    "batch_size": 100,
-    "batch_order": "smallest_first"
-  }' \
-  http://localhost:15672/api/queue-migration/start
-```
-
----
-
-### Migration with Message Count Tolerance
-
-Allow up to 10% message count difference per queue (useful when publishers set per-message TTL):
-
-```bash
+# Allow a per-queue message count tolerance (useful with per-message TTL)
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"tolerance": 10.0}' \
   http://localhost:15672/api/queue-migration/start
 ```
 
-**Note:** Tolerance is a per-queue percentage. A queue with 100 source messages passes verification if the destination has 90-100 messages. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for how tolerance works, the over- and under-delivery defaults, and per-message TTL.
+Tolerance is a per-queue percentage; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for how it works, the over- and under-delivery defaults, and per-message TTL.
 
 ---
 
-### Migration for Specific Virtual Host
+## Checking Status
+
+List all migrations, or get per-queue detail for one. For the full response bodies, field definitions, and status values, see [Get Migration Status](HTTP_API.md#get-migration-status) and [Get Detailed Migration Status](HTTP_API.md#get-detailed-migration-status).
 
 ```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/start/%2Fproduction
-```
+# All migrations, most recent first
+curl -u guest:guest http://localhost:15672/api/queue-migration/status
 
-**Note:** Virtual host must be in URL path, not request body.
-
----
-
-### Migration with Specific Queues
-
-Migrate only specific queues by name:
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"queue_names": ["queue1", "queue2", "queue3"]}' \
-  http://localhost:15672/api/queue-migration/start
-```
-
-**Note:** `queue_names` takes precedence over `batch_size` and `batch_order`.
-
----
-
-## Migration Status Examples
-
-### Get All Migrations
-
-List all migrations across all vhosts:
-
-```bash
+# One migration, with per-queue detail
 curl -u guest:guest \
-  http://localhost:15672/api/queue-migration/status
+  http://localhost:15672/api/queue-migration/status/<migration_id>
 ```
-
-**Response:**
-```json
-{
-  "status": "not_running",
-  "migrations": [
-    {
-      "id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=",
-      "display_id": "/ (2026-01-21 00:15:30) on rabbit-1@hostname",
-      "vhost": "/",
-      "status": "completed",
-      "started_at": "2026-01-21 00:15:30",
-      "completed_at": "2026-01-21 00:18:45",
-      "total_queues": 50,
-      "completed_queues": 45,
-      "skipped_queues": 5,
-      "progress_percentage": 90,
-      "skip_unsuitable_queues": true,
-      "tolerance": 10.0,
-      "error": null
-    }
-  ]
-}
-```
-
-**Response Fields:**
-- `status` - Overall migration system status: `not_running` or `in_progress`
-- `migrations` - Array of migration records (most recent first)
-
-**Migration Record Fields:**
-- `id` - Unique migration identifier (base64url-encoded Erlang term)
-- `display_id` - Human-readable identifier with vhost, timestamp, and node
-- `vhost` - Virtual host
-- `status` - Migration status (see status values below)
-- `started_at` - Start timestamp (YYYY-MM-DD HH:MM:SS format, UTC)
-- `completed_at` - Completion timestamp (null if in progress)
-- `total_queues` - Total queues in migration
-- `completed_queues` - Queues completed
-- `skipped_queues` - Queues skipped
-- `progress_percentage` - Progress (0-100)
-- `skip_unsuitable_queues` - Whether skip mode was enabled
-- `tolerance` - Message count tolerance percentage (null if not set)
-- `error` - Error details (null if no error)
-
-**Migration Status Values:**
-- `pending` - Not started yet
-- `in_progress` - Currently migrating
-- `completed` - Successfully completed
-- `failed` - Migration failed
-- `interrupted` - Migration was interrupted
-- `rollback_pending` - Requires rollback
-- `rollback_completed` - Rollback completed
 
 ---
 
-### Get Specific Migration Details
+## Interrupting a Migration
 
-Get detailed status including per-queue information:
-
-```bash
-curl -u guest:guest \
-  http://localhost:15672/api/queue-migration/status/g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=
-```
-
-**Response:**
-```json
-{
-  "migration": {
-    "id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=",
-    "display_id": "/ (2026-01-21 00:15:30) on rabbit-1@hostname",
-    "vhost": "/",
-    "status": "completed",
-    "started_at": "2026-01-21 00:15:30",
-    "completed_at": "2026-01-21 00:18:45",
-    "total_queues": 50,
-    "completed_queues": 45,
-    "skipped_queues": 5,
-    "progress_percentage": 90,
-    "skip_unsuitable_queues": true,
-    "error": null,
-    "snapshots": [
-      {
-        "node": "rabbit-1@hostname",
-        "instance_id": "i-0abc1234567890001",
-        "volume_id": "vol-abc123",
-        "snapshot_id": "snap-xyz789"
-      }
-    ]
-  },
-  "queues": [
-    {
-      "resource": {
-        "name": "test.queue.0",
-        "vhost": "/"
-      },
-      "status": "completed",
-      "started_at": "2026-01-21 00:15:31",
-      "completed_at": "2026-01-21 00:15:45",
-      "total_messages": 1000,
-      "migrated_messages": 1000,
-      "progress_percentage": 100,
-      "error": null
-    },
-    {
-      "resource": {
-        "name": "problem.queue.1",
-        "vhost": "/"
-      },
-      "status": "skipped",
-      "started_at": null,
-      "completed_at": null,
-      "total_messages": 0,
-      "migrated_messages": 0,
-      "progress_percentage": 0,
-      "error": "too_many_queues"
-    }
-  ]
-}
-```
-
-**Response Fields:**
-- `migration` - Migration record (same fields as status list)
-- `queues` - Array of per-queue status records
-
-**Queue Status Fields:**
-- `resource` - Queue resource object:
-  - `name` - Queue name
-  - `vhost` - Virtual host
-- `status` - Queue migration status:
-  - `pending` - Not started yet
-  - `in_progress` - Currently migrating
-  - `completed` - Successfully migrated
-  - `failed` - Migration failed
-  - `skipped` - Skipped (unsuitable or interrupted)
-- `started_at` - Queue migration start timestamp (null if not started)
-- `completed_at` - Queue migration completion timestamp (null if in progress)
-- `total_messages` - Total messages in queue at start
-- `migrated_messages` - Messages migrated so far
-- `progress_percentage` - Queue progress (0-100)
-- `error` - Error details (if failed) or skip reason (if skipped)
-
-**Skip Reasons:**
-- `unsynchronized` - Mirrored queue not synchronized
-- `too_many_queues` - Too many queues to migrate safely
-- `unsuitable_overflow` - Queue has reject-publish-dlx overflow policy
-- `queue_expires` - Queue has x-expires argument or expires policy
-- `message_ttl` - Queue has x-message-ttl argument or message-ttl policy
-- `interrupted` - Migration was manually interrupted
-
----
-
-## Migration Control Examples
-
-### Interrupt Running Migration
-
-Stop migration gracefully:
+Stop a running migration gracefully. In-flight queues finish; queues not yet started are marked `skipped` with reason `interrupted`, and the migration ends with status `interrupted`. See [Interrupt Migration](HTTP_API.md#interrupt-migration).
 
 ```bash
 curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/interrupt/g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=
+  http://localhost:15672/api/queue-migration/interrupt/<migration_id>
 ```
-
-**Response:**
-```json
-{
-  "interrupted": true,
-  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA="
-}
-```
-
-**Effect:**
-- Currently processing queues complete
-- Remaining queues marked as skipped with reason "interrupted"
-- Migration status changes to "interrupted"
 
 ---
 
@@ -485,7 +108,7 @@ curl -u guest:guest -X POST \
 
 ### Workflow 1: Cautious Migration
 
-**Goal:** Test with small batch, then migrate rest
+Test with a small batch, then migrate the rest:
 
 ```bash
 # Step 1: Check compatibility
@@ -494,7 +117,7 @@ curl -u guest:guest -X POST \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/check/%2F
 
-# Step 2: Migrate 10 smallest queues as test
+# Step 2: Migrate 10 smallest queues as a test
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true, "batch_size": 10, "batch_order": "smallest_first"}' \
@@ -504,57 +127,43 @@ curl -u guest:guest -X POST \
 curl -u guest:guest \
   http://localhost:15672/api/queue-migration/status/<migration_id>
 
-# Step 4: If successful, migrate rest
+# Step 4: If successful, migrate the rest
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start
 ```
 
----
-
 ### Workflow 2: Incremental Migration
 
-**Goal:** Migrate 100 queues per day over a week
+Migrate a fixed number of queues per maintenance window. Migration is idempotent, so already-migrated queues are skipped automatically:
 
 ```bash
-# Day 1: First 100
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"batch_size": 100, "batch_order": "smallest_first"}' \
   http://localhost:15672/api/queue-migration/start
-
-# Day 2: Next 100
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"batch_size": 100, "batch_order": "smallest_first"}' \
-  http://localhost:15672/api/queue-migration/start
-
-# Continue until all queues migrated
 ```
 
----
+Repeat until all queues are migrated.
 
-### Workflow 3: Handle Interruption
+### Workflow 3: Resume After Interruption
 
-**Goal:** Resume after interrupted migration
+Check what completed, then start a new migration; idempotency ensures completed queues are skipped:
 
 ```bash
 # Step 1: Check what was completed
 curl -u guest:guest \
   http://localhost:15672/api/queue-migration/status/<migration_id>
 
-# Step 2: Start new migration
-# Idempotency ensures completed queues are skipped
+# Step 2: Start a new migration to pick up the rest
 curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
----
-
 ### Workflow 4: Skip and Fix
 
-**Goal:** Migrate suitable queues, then fix and migrate unsuitable ones
+Migrate the suitable queues now, then fix and migrate the rest. See [Skip Unsuitable Queues](SKIP_UNSUITABLE_QUEUES.md) for the full walkthrough.
 
 ```bash
 # Step 1: Migrate with skip mode
@@ -563,127 +172,29 @@ curl -u guest:guest -X POST \
   -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start
 
-# Step 2: Check which queues were skipped
+# Step 2: Check which queues were skipped, and why
 curl -u guest:guest \
   http://localhost:15672/api/queue-migration/status/<migration_id>
 
-# Step 3: Fix issues with skipped queues
-# (sync queues, reduce queue count, change policies, etc.)
+# Step 3: Fix the skipped queues (sync, change policies, reduce count, etc.)
 
-# Step 4: Migrate remaining queues
+# Step 4: Migrate the remaining queues
 curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
 ---
 
-## Error Response Examples
+## Error Responses
 
-### Plugin Not Ready
-
-The plugin's HTTP API returns `503 Service Unavailable` until its Mnesia tables are initialised. See [HTTP API: Plugin Initialization States](HTTP_API.md#plugin-initialization-states) for the contract.
-
-#### While initialising
-
-```bash
-curl -u guest:guest -i \
-  http://localhost:15672/api/queue-migration/status
-```
-
-**Response (503):**
-```
-HTTP/1.1 503 Service Unavailable
-content-type: application/json
-
-{
-  "status": "initializing",
-  "attempts": 3,
-  "max_attempts": 10,
-  "started_at": "2026-06-05T17:55:00Z"
-}
-```
-
-Retry the request after a short delay; the plugin will eventually transition to `ready`.
-
-#### After initialisation failed
-
-```bash
-curl -u guest:guest -i \
-  http://localhost:15672/api/queue-migration/status
-```
-
-**Response (503):**
-```
-HTTP/1.1 503 Service Unavailable
-content-type: application/json
-
-{
-  "status": "failed",
-  "attempts": 10,
-  "max_attempts": 10,
-  "started_at": "2026-06-05T17:55:00Z",
-  "failed_at": "2026-06-05T18:00:00Z",
-  "error": "{timeout_waiting_for_tables, [...], [queue_migration, queue_migration_status]}"
-}
-```
-
-Run `rabbitmq-plugins disable rabbitmq_queue_migration` followed by `rabbitmq-plugins enable rabbitmq_queue_migration` on each broker node to retry initialisation.
-
----
-
-### Migration Already Running
-
-```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/start
-```
-
-**Response (400):**
-```json
-{
-  "error": "bad_request",
-  "reason": "Migration validation failed: in_progress"
-}
-```
-
----
-
-### Compatibility Check Failed
-
-```bash
-curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/start
-```
-
-**Response (400):**
-```json
-{
-  "error": "bad_request",
-  "reason": "rabbitmq_shovel plugin must be enabled for migration. Enable the plugin with: rabbitmq-plugins enable rabbitmq_shovel"
-}
-```
-
----
-
-### Migration Not Found
-
-```bash
-curl -u guest:guest \
-  http://localhost:15672/api/queue-migration/status/invalid-id
-```
-
-**Response (404):**
-```json
-{
-  "error": "Migration not found"
-}
-```
+Error bodies (400 validation failures, 404 not found, and the 503 plugin-initialization states) are documented in [Error Handling](HTTP_API.md#error-handling) and [Plugin Initialization States](HTTP_API.md#plugin-initialization-states).
 
 ---
 
 ## Related Documentation
 
-- **HTTP API Reference:** HTTP_API.md
-- **Skip Unsuitable Queues Guide:** SKIP_UNSUITABLE_QUEUES.md
-- **Troubleshooting Guide:** TROUBLESHOOTING.md
-- **Configuration Reference:** CONFIGURATION.md
+- [HTTP API Reference](HTTP_API.md) - full request/response schemas and field definitions
+- [Running a Migration](RUNNING_A_MIGRATION.md) - the end-to-end operator path
+- [Skip Unsuitable Queues](SKIP_UNSUITABLE_QUEUES.md) - the skip feature and every skip reason
+- [Troubleshooting](TROUBLESHOOTING.md) - errors, diagnostics, recovery
+- [Configuration](CONFIGURATION.md) - configuration parameters and defaults

@@ -821,49 +821,7 @@ A `503 Service Unavailable` response from any endpoint carries a JSON body whose
 
 ## Examples
 
-### Complete Migration Workflow
-
-```bash
-#!/bin/bash
-
-# 1. Check compatibility
-echo "Checking compatibility..."
-curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F | jq
-
-# 2. Start migration
-echo "Starting migration..."
-RESPONSE=$(curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/start)
-MIGRATION_ID=$(echo "$RESPONSE" | jq -r '.migration_id')
-echo "Migration started: $MIGRATION_ID"
-
-# 3. Monitor progress
-echo "Monitoring progress..."
-while true; do
-  STATUS=$(curl -s -u guest:guest \
-    "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
-    | jq -r '.migration.status')
-
-  if [ "$STATUS" = "completed" ]; then
-    echo "Migration completed successfully"
-    break
-  elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "rollback_pending" ]; then
-    echo "Migration failed: $STATUS"
-    exit 1
-  fi
-
-  PROGRESS=$(curl -s -u guest:guest \
-    "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
-    | jq -r '.migration.progress_percentage')
-
-  echo "Progress: $PROGRESS%"
-  sleep 5
-done
-
-# 4. Get detailed results
-echo "Getting detailed results..."
-curl -s -u guest:guest \
-  "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" | jq
-```
+For end-to-end request sequences (cautious, incremental, resume-after-interruption, and skip-and-fix), see [API Examples](API_EXAMPLES.md#common-workflows).
 
 ## See Also
 
