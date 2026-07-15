@@ -13,6 +13,7 @@ All examples use `guest:guest` and the default vhost (`/`, URL-encoded `%2F`). T
 3. [Checking Status](#checking-status)
 4. [Interrupting a Migration](#interrupting-a-migration)
 5. [Common Workflows](#common-workflows)
+6. [Error Responses](#error-responses)
 
 ---
 

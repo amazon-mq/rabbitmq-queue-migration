@@ -444,14 +444,14 @@ POST /api/queue-migration/interrupt/:migration_id
 **Request:**
 ```bash
 curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/interrupt/g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=
+  http://localhost:15672/api/queue-migration/interrupt/ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz
 ```
 
 **Success Response (200 OK):**
 ```json
 {
   "interrupted": true,
-  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA="
+  "migration_id": "ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz"
 }
 ```
 

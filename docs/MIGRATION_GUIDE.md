@@ -255,6 +255,8 @@ To keep attributes such as `dead-letter-exchange` and `max-length` in effect on 
 
 Manage these policies in the same place they are defined today (for example application code or infrastructure as code), so they remain the source of truth and do not drift. The plugin deliberately does not generate a companion policy at migration time, because a generated policy cannot stay in sync with externally managed ones.
 
+---
+
 ## Client Redeclaration After Migration
 
 After a classic queue is migrated, it keeps its name but its type is now `quorum`, and it carries `x-queue-type: quorum` in its arguments. When a client redeclares that queue, RabbitMQ applies its queue equivalence checks, comparing the arguments the client sends against the arguments of the existing queue. The outcome depends on what the client sends for `x-queue-type`.

@@ -273,12 +273,13 @@ curl -u guest:guest -X POST \
 
 ### Step 3: Start New Migration
 
+Already-migrated queues are skipped automatically. Add `skip_unsuitable_queues` again if some issues remain unresolved:
+
 ```bash
 curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start
-{
-  "skip_unsuitable_queues": true  # Optional, if some issues remain
-}
 ```
 
 **Idempotency:** Already-migrated queues are automatically skipped, so you can safely run migration again.

@@ -187,7 +187,7 @@ make --file integration-test.mk --directory test/integration stop-cluster
 
 ## Test Configuration Options
 
-The integration test supports various configurations. See [test/integration/README](test/integration/README.md) for complete options including:
+The integration test supports various configurations. See [test/integration/README](../test/integration/README.md) for complete options including:
 
 - Queue count (10-65,536)
 - Message volume and sizes
@@ -276,6 +276,6 @@ Modify `test/integration/Makefile` or run the JAR directly with custom parameter
 
 ## See Also
 
-- [README](../../README.md) - Plugin overview and quick start
-- [test/integration/README](test/integration/README.md) - Detailed test suite documentation
+- [README](../README.md) - Plugin overview and documentation map
+- [test/integration/README](../test/integration/README.md) - Detailed test suite documentation
 - [HTTP_API](HTTP_API.md) - Complete API reference
