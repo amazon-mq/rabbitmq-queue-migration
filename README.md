@@ -18,7 +18,7 @@ A RabbitMQ plugin for migrating mirrored classic queues to quorum queues in Rabb
 - `rabbitmq_shovel` plugin enabled
 - **Mnesia metadata store** (Khepri must NOT be enabled)
 
-**Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration. This is validated during pre-migration checks. This setting allows applications to redeclare queues with classic arguments after migration without errors.
+**Note:** The setting `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true` must be enabled in `rabbitmq.conf` **before** starting migration; this is validated during pre-migration checks. See [Client Redeclaration](docs/MIGRATION_GUIDE.md#client-redeclaration-after-migration) for why.
 
 ## Installation
 

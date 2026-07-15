@@ -341,7 +341,7 @@ curl -u guest:guest \
 
 **Status text:** `message count mismatch (expected: 9118, actual: 2137, diff: 6981)`
 
-**Cause:** Fewer (or more) messages ended up in the destination queue than the source held before transfer, and the difference exceeded the configured tolerance. By default under-delivery tolerance is 0.0%, so any missing message fails the migration. The most common cause of a large under-delivery is per-message TTL expiry on a dead-letter or `_error` queue: expired messages are counted in the source total but dropped as the shovel drains the queue.
+**Cause:** The destination queue ended up with fewer (or more) messages than the source, by more than the configured tolerance. On a large under-delivery the usual culprit is per-message TTL expiry, most often on a dead-letter or `_error` queue.
 
 **Solution:** See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-message_count_mismatch-error) for how to read the numbers, confirm the cause, and re-run with an appropriate `tolerance` (or drain the queue first). Do not raise the tolerance to force a migration through when you cannot explain the missing messages.
 
@@ -516,7 +516,8 @@ Restore from snapshots (only reliable method):
 2. Restore from snapshots (EBS or tar)
 3. Restart RabbitMQ cluster
 
-**Warning:** Manual cleanup of failed queues is not recommended due to complex migration state.
+> [!CAUTION]
+> Manual cleanup of failed queues is not recommended due to complex migration state.
 
 ---
 

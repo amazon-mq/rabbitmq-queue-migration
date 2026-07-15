@@ -136,7 +136,8 @@ queue_migration.snapshot_mode = none
 ]}
 ```
 
-**Warning:** Without snapshots, rollback after migration failure requires manual intervention and may result in data loss.
+> [!WARNING]
+> Without snapshots, rollback after migration failure requires manual intervention and may result in data loss.
 
 ---
 

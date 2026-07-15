@@ -47,7 +47,8 @@ curl -u guest:guest -X POST \
 
 With `tolerance: 10.0`, a queue whose source held 1000 messages passes as long as the destination has at least 900. Use this when you expect some messages to disappear during migration for a legitimate reason, the most common being per-message TTL expiry (below).
 
-**Warning:** a non-zero under-tolerance can mask real message loss. It cannot distinguish a message that expired from one dropped by a bug. Set it only when you understand why messages are expected to be missing, and size it to that expectation.
+> [!WARNING]
+> A non-zero under-tolerance can mask real message loss. It cannot distinguish a message that expired from one dropped by a bug. Set it only when you understand why messages are expected to be missing, and size it to that expectation.
 
 ---
 
