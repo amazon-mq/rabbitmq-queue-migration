@@ -29,7 +29,8 @@ public class TestConfiguration {
   private Integer batchSize = null; // null means "all"
   private String batchOrder = "smallest_first";
   private boolean allowMessageTtl = false; // Allow migrating queues with a queue-level message TTL
-  // Set the vhost default queue type after a successful migration ("quorum" or "classic"); null = unchanged
+  // Set the vhost default queue type after a successful migration ("quorum" or "classic"); null =
+  // unchanged
   private String setDefaultQueueType = null;
 
   // Per-message TTL configuration

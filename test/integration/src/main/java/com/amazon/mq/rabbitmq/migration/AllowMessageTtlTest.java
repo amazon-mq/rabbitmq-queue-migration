@@ -44,17 +44,9 @@ public class AllowMessageTtlTest {
     try {
       logger.info("Starting allow_message_ttl test");
 
-      String hostname = "localhost";
-      int port = 15672;
-      for (String arg : args) {
-        if (arg.startsWith("--hostname=")) {
-          hostname = arg.substring(11);
-        } else if (arg.startsWith("--port=")) {
-          port = Integer.parseInt(arg.substring(7));
-        }
-      }
-
-      ClusterTopology topology = new ClusterTopology(hostname, port);
+      // Build the cluster topology from shared connection args (supports
+      // --load-balancer, --username, --password, --vhost).
+      ClusterTopology topology = MigrationTestSetup.topologyFromArgs(args);
       TestConfiguration config = new TestConfiguration(topology);
       config.setQueueCount(QUEUE_COUNT);
       config.setTotalMessages(TOTAL_MESSAGES);
@@ -66,8 +58,10 @@ public class AllowMessageTtlTest {
       CleanupEnvironment.performCleanup(config);
 
       // Phase 1: Setup (a subset of queues will carry x-message-ttl)
-      logger.info("=== Phase 1: Setup ({} queues, ~{} with message TTL) ===",
-          QUEUE_COUNT, EXPECTED_TTL_QUEUE_COUNT);
+      logger.info(
+          "=== Phase 1: Setup ({} queues, ~{} with message TTL) ===",
+          QUEUE_COUNT,
+          EXPECTED_TTL_QUEUE_COUNT);
       MigrationTestSetup.execute(config);
 
       QueueMigrationClient client = config.createMigrationClient();
@@ -201,7 +195,9 @@ public class AllowMessageTtlTest {
 
     logger.info(
         "Queue types: {} quorum, {} classic; {} retain x-message-ttl",
-        quorumCount, classicCount, ttlRetainedCount);
+        quorumCount,
+        classicCount,
+        ttlRetainedCount);
 
     // All test queues should now be quorum (none blocked, none left classic).
     if (quorumCount != QUEUE_COUNT) {
