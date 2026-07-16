@@ -172,7 +172,7 @@ rabbitmqctl clear_policy <policy_name>
 
 **Option C:** Accept that queue cannot be migrated and handle separately
 
-**Option D:** Migrate anyway with `allow_message_ttl`. Pass `{"allow_message_ttl": true}` in the start (or check) request body to treat `message_ttl` queues as suitable instead of blocking them. This is for callers who accept that any or all messages in these queues may expire during migration. It forces the message-count `tolerance` to 100% for the whole migration (see the warning under the `allow_message_ttl` option in HTTP_API.md), and the migrated quorum queue keeps its `x-message-ttl`.
+**Option D:** Migrate anyway with `allow_message_ttl`. Pass `{"allow_message_ttl": true}` in the start (or check) request body to treat `message_ttl` queues as suitable instead of blocking them. This is for callers who accept that any or all messages in these queues may expire during migration. It forces the message-count `tolerance` to 100% for the whole migration, disabling message-count verification for every queue in the run (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md)), and the migrated quorum queue keeps its `x-message-ttl`.
 
 ```bash
 curl -u guest:guest -X POST \
@@ -181,69 +181,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
----
-
-## Reproducing message expiry during migration (manual)
-
-The `allow_message_ttl` automated tests deliberately cover only the deterministic behaviors (a `message_ttl` queue is blocked without the flag and migrates with it, the migrated queue retains `x-message-ttl`, the option forces `tolerance` to 100%, and invalid option values are rejected). They do **not** assert the case where messages actually expire mid-migration and the forced tolerance forgives the resulting count difference, because making messages expire inside the short migration window is timing-dependent and would produce a flaky test.
-
-That lossy path has been verified manually using the integration harness. To reproduce it, publish many messages with a per-message TTL short enough that a portion expires during the publish-plus-migration window:
-
-```bash
-java -jar target/migration-test-setup-1.0.0.jar end-to-end \
-  --total-messages=15000 \
-  --enable-ttl --ttl-hours=1 \
-  --per-message-ttl-percent=50 --per-message-ttl=8 \
-  --allow-message-ttl \
-  --migration-timeout=300
-```
-
-With a per-message TTL of ~8 seconds against a publish window of ~15-20 seconds, roughly half the messages expire before verification. The migration still completes, and the broker logs show the forced tolerance accepting the difference:
-
-```
-[warning] rqm: message count under-delivery within tolerance (100.0%) - Expected: 1500, Actual: 772, Diff: 728
-```
-
-Note: the integration harness's own end-to-end validation currently asserts exact message preservation and so reports a failure for this intentionally lossy run even though the plugin behaved correctly. Making that validation tolerance-aware and `allow_message_ttl`-aware is tracked separately.
-
----
-
-## ⚠️ Important: Per-Message TTL Limitation
-
-**This plugin can only detect queue-level TTL settings (`x-message-ttl` argument or `message-ttl` policy). It CANNOT detect per-message TTL.**
-
-Publishers can set TTL on individual messages using the `expiration` message property. See [Per-Message TTL in Publishers](https://www.rabbitmq.com/docs/3.13/ttl#per-message-ttl-in-publishers) in the RabbitMQ documentation.
-
-**Why this matters:**
-
-If your publishers set per-message TTL and messages expire during migration, the message count verification will detect a difference between source and destination queues.
-
-### Solution: Message Count Tolerance
-
-Use the `tolerance` parameter to allow migrations to succeed despite message count differences:
-
-```bash
-curl -u guest:guest -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"tolerance": 10.0}' \
-  http://localhost:15672/api/queue-migration/start/%2F
-```
-
-The tolerance is a **per-queue percentage** (0.0-100.0). A queue passes verification if the message count difference is within the tolerance. For example, with `tolerance: 10.0`, a queue with 100 source messages passes if the destination has 90-100 messages.
-
-**How to determine the right tolerance:**
-
-1. Estimate what percentage of messages have per-message TTL
-2. Add a safety margin (e.g., if 5% have TTL, use 10% tolerance)
-3. Monitor migration logs for "within tolerance" warnings
-
-**Alternative approaches:**
-
-1. Drain queues before migration (let consumers process all messages)
-2. Ensure per-message TTL values are long enough that messages won't expire during migration
-3. Temporarily disable publishers that set per-message TTL
-
-**Note:** There is no way for this plugin to detect per-message TTL - it is set by publishers on each message and is not visible at the queue level.
+> [!WARNING]
+> **Per-message TTL is different and invisible to the plugin.** The `message_ttl` reason above is for a *queue-level* TTL, which the plugin can see. TTL set by publishers on individual messages (the `expiration` property) cannot be detected, and is the most common cause of a failed migration. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for details and how to handle it.
 
 ---
 
@@ -334,12 +273,13 @@ curl -u guest:guest -X POST \
 
 ### Step 3: Start New Migration
 
+Already-migrated queues are skipped automatically. Add `skip_unsuitable_queues` again if some issues remain unresolved:
+
 ```bash
 curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"skip_unsuitable_queues": true}' \
   http://localhost:15672/api/queue-migration/start
-{
-  "skip_unsuitable_queues": true  # Optional, if some issues remain
-}
 ```
 
 **Idempotency:** Already-migrated queues are automatically skipped, so you can safely run migration again.
@@ -348,9 +288,8 @@ curl -u guest:guest -X POST \
 
 ## Best Practices
 
-### 1. Run Compatibility Check First
+Always run the compatibility check in skip mode first. It reports which queues would be skipped, why, and how many would migrate successfully, without changing anything:
 
-Always check compatibility before migration:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -358,21 +297,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/check/%2F
 ```
 
-This shows:
-- Which queues would be unsuitable
-- Why they would be unsuitable
-- How many queues would migrate successfully
+If any business-critical queues would be skipped, fix those first and migrate them without skip mode so a silent skip cannot leave them behind. For large deployments, combine skip mode with batching to make incremental progress, reduce resource pressure, and give yourself room to fix issues between batches:
 
-### 2. Address Critical Queues First
-
-If business-critical queues would be skipped:
-1. Fix those queues first
-2. Run migration without skip mode
-3. Ensures critical queues migrate successfully
-
-### 3. Use Batch Migration with Skip Mode
-
-For large deployments:
 ```bash
 curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
@@ -384,26 +310,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-This provides:
-- Incremental progress
-- Reduced resource pressure
-- Ability to fix issues between batches
-
-### 4. Monitor Skipped Queue Count
-
-After migration:
-1. Check how many queues were skipped
-2. Review skip reasons
-3. Plan remediation for skipped queues
-4. Schedule follow-up migration
-
-### 5. Document Skipped Queues
-
-Keep track of:
-- Which queues were skipped
-- Why they were skipped
-- When issues will be addressed
-- Who is responsible for fixes
+After each run, review how many queues were skipped and why, and record which queues still need attention so a follow-up migration can pick them up once the underlying issues are addressed.
 
 ---
 
@@ -516,6 +423,7 @@ A: Yes - use the compatibility check with `skip_unsuitable_queues=true`.
 
 ## Related Documentation
 
+- **Message Loss and Verification:** MESSAGE_LOSS_AND_VERIFICATION.md (per-message TTL and tolerance)
 - **HTTP API Reference:** HTTP_API.md
 - **Troubleshooting Guide:** TROUBLESHOOTING.md
 - **Integration Tests:** INTEGRATION_TESTING.md (see SkipUnsuitableTest)

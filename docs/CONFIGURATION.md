@@ -31,22 +31,18 @@ queue_migration.shovel_prefetch_count = 256
 
 ## Message Count Verification
 
+These set the default verification tolerances. A single `tolerance` value on the migration request overrides both. For how tolerance works and how to choose a value, see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-tolerance-migration-option).
+
 ### `message_count_over_tolerance_percent`
 
 **Type:** Float\
 **Default:** 5.0\
 **Range:** 0.0-100.0\
-**Description:** Percentage tolerance for extra messages in destination queue
+**Description:** Default tolerance for extra messages in the destination queue (over-delivery).
 
-**Usage:**
 ```erlang
 queue_migration.message_count_over_tolerance_percent = 10.0
 ```
-
-**Example:**
-- Source: 1000 messages
-- Tolerance: 5.0%
-- Acceptable range: 1000-1050 messages
 
 ---
 
@@ -55,19 +51,14 @@ queue_migration.message_count_over_tolerance_percent = 10.0
 **Type:** Float\
 **Default:** 0.0\
 **Range:** 0.0-100.0\
-**Description:** Percentage tolerance for missing messages in destination queue
+**Description:** Default tolerance for missing messages in the destination queue (under-delivery). The default of 0.0 requires an exact match.
 
-**Usage:**
 ```erlang
 queue_migration.message_count_under_tolerance_percent = 2.0
 ```
 
-**Example:**
-- Source: 1000 messages
-- Tolerance: 2.0%
-- Acceptable range: 980-1000 messages
-
-**Warning:** Non-zero under-tolerance may mask message loss. Use with caution.
+> [!WARNING]
+> A non-zero under-tolerance can mask real message loss. Set it only when you understand why messages are expected to be missing. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
 
 ---
 

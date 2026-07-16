@@ -15,9 +15,8 @@ This guide covers potential issues, error messages, and solutions when using the
 
 ---
 
-> **Note:** Users running open-source RabbitMQ 3.13.7 should also review
-> [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that
-> affect migration but cannot be worked around in this plugin.
+> [!NOTE]
+> Users running open-source RabbitMQ 3.13.7 should also review [OSS 3.13.7 Known Issues](OSS_313_KNOWN_ISSUES.md) for upstream issues that affect migration but cannot be worked around in this plugin.
 
 ---
 
@@ -54,38 +53,15 @@ rabbitmq-plugins list | grep shovel
 
 **Understanding Disk Space Requirements:**
 
-During migration, disk usage increases because:
-1. **Snapshots** - Khepri snapshots created before migration
-2. **Destination queues** - New quorum queues created alongside classic queues
-3. **Message transfer** - Messages exist in both source and destination during transfer
-4. **Concurrent migrations** - Multiple queues migrating simultaneously
+Disk usage rises during migration because pre-migration snapshots, the new quorum queues created alongside the classic ones, and messages living in both source and destination during transfer all coexist until garbage collection reclaims the classic segments. The plugin calculates the space it requires as:
 
-**Calculation:**
-
-The plugin calculates required space based on:
 ```
 Required = (total_queue_data × multiplier) + buffer
 ```
 
-Where:
-- `total_queue_data` = sum of message_bytes for all migratable queues
-- `multiplier` = disk_usage_peak_multiplier (default: 2.0, configurable)
-- `buffer` = min_disk_space_buffer (default: 500MB, configurable)
+`total_queue_data` is the sum of `message_bytes` for all migratable queues; `multiplier` is `disk_usage_peak_multiplier` (default 2.0, configurable); and `buffer` is `min_disk_space_buffer` (default 500MB, configurable). For example, 5GB of queue data needs `(5GB × 2.0) + 500MB = 10.5GB`. The 2x multiplier covers holding classic and quorum data at once, with margin from empirical testing.
 
-**Example:**
-- Total queue data: 5GB
-- Multiplier: 2.0
-- Buffer: 500MB
-- Required: (5GB × 2.0) + 500MB = **10.5GB**
-
-**Why 2x multiplier:**
-During migration, disk temporarily holds both classic queue data AND quorum queue data before garbage collection reclaims the classic segments. The 2x multiplier provides adequate safety margin based on empirical testing.
-
-**Note:** Actual peak usage may be higher (~3-4x) due to:
-- Quorum queue write amplification (Raft log overhead)
-- Delayed cleanup of source queues
-- Filesystem fragmentation
-- Multiple concurrent migrations
+Actual peak usage can reach roughly 3-4x when quorum-queue write amplification (Raft log overhead), delayed source cleanup, filesystem fragmentation, and concurrent migrations compound.
 
 **Solution:**
 
@@ -97,15 +73,6 @@ df -h /var/lib/rabbitmq
 # Check queue data size
 du -sh /var/lib/rabbitmq/mnesia/rabbit@*/queues
 ```
-
-**Calculate safe minimum:**
-```
-Minimum free space = (total queue data × 3) + 2GB buffer
-```
-
-**Example:**
-- Total queue data: 10GB
-- Minimum free: (10GB × 3) + 2GB = **32GB**
 
 **Free up space:**
 ```bash
@@ -186,7 +153,9 @@ Unsynchronized queues will be skipped and can be migrated later after synchroniz
 
 - `too_many_queues` - The vhost has more classic queues than the plugin will migrate in a single run (limit configured by `queue_migration.max_queues_for_migration`).
 - `unsuitable_overflow` - A queue uses `x-overflow=reject-publish-dlx`, which is not supported in quorum queues. Quorum queues support `drop-head` and `reject-publish` only.
-- `too_many_messages` / `too_many_bytes` - A queue exceeds the per-queue message-count or byte-size thresholds for safe migration.
+- `queue_expires` - A queue has an `x-expires` argument or `expires` policy, so the queue itself could expire during migration.
+- `message_ttl` - A queue has a queue-level `x-message-ttl` argument or `message-ttl` policy.
+- `unsynchronized` - A mirrored classic queue is not fully synchronized across its replicas.
 
 **Solutions:**
 
@@ -292,7 +261,7 @@ rabbitmq-plugins disable rabbitmq_queue_migration
 rabbitmq-plugins enable rabbitmq_queue_migration
 ```
 
-on each broker node. The plugin restarts its state machine from `initializing` and runs the same retry loop. See the [README's Mnesia-Only Compatibility section](../README.md#%EF%B8%8F-mnesia-only-compatibility) for the full lifecycle.
+on each broker node. The plugin restarts its state machine from `initializing` and runs the same retry loop.
 
 ---
 
@@ -336,19 +305,13 @@ rabbitmq-plugins enable rabbitmq_shovel
 
 **Log Message:** `Worker process terminated`
 
-**Solution:**
-- Check logs for crash reason
-- May need to interrupt and restart migration
-- Report issue if reproducible
+**Solution:** Check the logs for the crash reason, then interrupt and restart the migration if needed. Report the issue if it reproduces.
 
 #### 3. Network Issues
 
 **Symptom:** Shovels created but no message transfer
 
-**Solution:**
-- Check network connectivity between nodes
-- Verify AMQP ports (5672) are accessible
-- Check firewall rules
+**Solution:** Check network connectivity between nodes, confirm the AMQP port (5672) is reachable, and review firewall rules.
 
 ---
 
@@ -369,14 +332,26 @@ curl -u guest:guest \
 
 **Possible Failure Reasons:**
 
-#### 1. Shovel Transfer Failed
+#### 1. Message Count Mismatch
+
+**Error term:** `{message_count_mismatch, Expected, Actual, Diff}`
+
+**Log line:**
+```
+[error] rqm: message count under-delivery exceeds tolerance (0.0%) - Expected: 9118, Actual: 2137, Diff: 6981
+```
+
+**Status text:** `message count mismatch (expected: 9118, actual: 2137, diff: 6981)`
+
+**Cause:** The destination queue ended up with fewer (or more) messages than the source, by more than the configured tolerance. On a large under-delivery the usual culprit is per-message TTL expiry, most often on a dead-letter or `_error` queue.
+
+**Solution:** See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-message_count_mismatch-error) for how to read the numbers, confirm the cause, and re-run with an appropriate `tolerance` (or drain the queue first). Do not raise the tolerance to force a migration through when you cannot explain the missing messages.
+
+#### 2. Shovel Transfer Failed
 
 **Cause:** Shovel encountered error during message transfer
 
-**Solution:**
-- Check shovel logs for specific error
-- Verify destination queue is healthy
-- May need to interrupt and retry migration
+**Solution:** A shovel failure sets the migration to `rollback_pending`. The plugin does not roll back automatically, so recovery follows the manual path below. Check the shovel logs for the specific error, then see [Rollback and Recovery](#rollback-and-recovery).
 
 ---
 
@@ -444,10 +419,7 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start
 ```
 
-This allows you to:
-- Migrate in smaller increments
-- Spread migration across multiple maintenance windows
-- Reduce resource pressure on the cluster
+Batching lets you migrate in smaller increments, spread the work across multiple maintenance windows, and reduce resource pressure on the cluster.
 
 ---
 
@@ -479,11 +451,7 @@ vm_memory_high_watermark.relative = 0.6
 
 **Cause:** Quorum queues writing to disk, snapshots being created
 
-**Recommendations:**
-- Use SSD storage for RabbitMQ data
-- Ensure sufficient disk I/O capacity
-- Migrate during low-traffic periods
-- Use batch migration to reduce concurrent disk operations
+**Recommendations:** Use SSD storage with sufficient I/O capacity, migrate during low-traffic periods, and use batch migration to reduce concurrent disk operations.
 
 ---
 
@@ -550,7 +518,8 @@ Restore from snapshots (only reliable method):
 2. Restore from snapshots (EBS or tar)
 3. Restart RabbitMQ cluster
 
-**Warning:** Manual cleanup of failed queues is not recommended due to complex migration state.
+> [!CAUTION]
+> Manual cleanup of failed queues is not recommended due to complex migration state.
 
 ---
 

@@ -95,7 +95,8 @@ POST /api/queue-migration/start/:vhost
 **Parameters:**
 - `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.**
 
-> **Important:** The vhost must be specified in the URL, not in the request body. The `/api/queue-migration/start` endpoint (without a vhost path parameter) defaults to the `/` vhost. To migrate a different vhost, you must use `/api/queue-migration/start/:vhost` with the vhost name URL-encoded in the path.
+> [!IMPORTANT]
+> The vhost must be specified in the URL, not in the request body. The `/api/queue-migration/start` endpoint (without a vhost path parameter) defaults to the `/` vhost. To migrate a different vhost, you must use `/api/queue-migration/start/:vhost` with the vhost name URL-encoded in the path.
 
 **Request Body (optional):**
 ```json
@@ -111,11 +112,11 @@ POST /api/queue-migration/start/:vhost
 
 **Request Body Fields:**
 - `skip_unsuitable_queues` (optional, boolean) - When `true`, skip queues that fail validation checks instead of blocking the entire migration. Defaults to `false`.
-- `tolerance` (optional, number) - Message count tolerance percentage (0.0-100.0) for per-queue verification. A queue passes verification if the destination message count is within this percentage of the source count. Use this when publishers set per-message TTL that may cause messages to expire during migration. When unset, the configured defaults apply: 5.0% over-delivery and 0.0% under-delivery (exact match for lost messages).
+- `tolerance` (optional, number) - Per-queue message count tolerance percentage (0.0-100.0), applied to both under- and over-delivery. When unset, the configured defaults apply. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-tolerance-migration-option) for how tolerance works, the defaults, and when to set it.
 - `batch_size` (optional, integer or `"all"`) - Number of queues to migrate in this batch. Use `0` or `"all"` to migrate all eligible queues. Defaults to `all`. Ignored if `queue_names` is specified.
 - `batch_order` (optional, string) - Order to select queues for batching: `"smallest_first"` or `"largest_first"`. Defaults to `"smallest_first"`. Ignored if `queue_names` is specified.
-- `queue_names` (optional, array of strings) - Specific queue names to migrate. When provided, only these queues are migrated. Takes precedence over `batch_size` and `batch_order`. Non-existent or ineligible queues are logged and skipped.
-- `allow_message_ttl` (optional, boolean) - When `true`, queues that have a queue-level message TTL (the `x-message-ttl` queue argument or the `message-ttl` policy key) are allowed to migrate instead of being treated as unsuitable. Defaults to `false`. **This forces the message count `tolerance` to 100% in both directions (overriding any `tolerance` value supplied), because opting in means accepting that any or all messages in these queues may expire during migration.** Note that `tolerance` is migration-wide, so enabling this disables message-count verification for **every** queue in the run, not only the queues with a message TTL. The migrated quorum queue retains its `x-message-ttl` argument.
+- `queue_names` (optional, array of strings) - Specific queue names to migrate. When provided, only these queues are migrated. Takes precedence over `batch_size` and `batch_order`. Non-existent or ineligible queues are logged and skipped; if none of the specified queues are eligible, the request fails with `400`.
+- `allow_message_ttl` (optional, boolean) - When `true`, queues that have a queue-level message TTL (the `x-message-ttl` queue argument or the `message-ttl` policy key) are allowed to migrate instead of being treated as unsuitable. Defaults to `false`. This forces `tolerance` to 100% for the entire run, disabling message-count verification for every queue; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md). The migrated quorum queue retains its `x-message-ttl` argument.
 - `set_default_queue_type` (optional, string) - When set to `"quorum"` or `"classic"`, the virtual host's default queue type is set to that value after the migration completes successfully. Any other value is rejected. When unset, the vhost default queue type is left unchanged. This is useful after migrating to quorum so that clients which declare queues without an explicit `x-queue-type` (relying on the vhost default) resolve to the migrated queue type instead of failing redeclaration. It overwrites any existing default queue type, and only affects newly declared or redeclared queues, not existing ones. Setting the default is best-effort: if it fails, the failure is logged but the migration is still reported as successful.
 
 **Request:**
@@ -178,7 +179,8 @@ curl -u guest:guest -X POST \
   http://localhost:15672/api/queue-migration/start/%2F
 ```
 
-> **Common Mistake:** Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
+> [!CAUTION]
+> Do not pass `"vhost"` in the JSON body - it will be ignored. The vhost is always read from the URL path.
 
 **Response (200 OK):**
 ```json
@@ -192,7 +194,8 @@ curl -u guest:guest -X POST \
 - `migration_id` - Base64url-encoded unique migration identifier. Use this ID to track the migration via the status endpoint.
 - `status` - Request status (`started`)
 
-> **Note:** The migration runs asynchronously. Use the returned `migration_id` with the `/api/queue-migration/status/:migration_id` endpoint to monitor progress.
+> [!NOTE]
+> The migration runs asynchronously. Use the returned `migration_id` with the `/api/queue-migration/status/:migration_id` endpoint to monitor progress.
 
 **Error Responses:**
 
@@ -441,14 +444,14 @@ POST /api/queue-migration/interrupt/:migration_id
 **Request:**
 ```bash
 curl -u guest:guest -X POST \
-  http://localhost:15672/api/queue-migration/interrupt/g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA=
+  http://localhost:15672/api/queue-migration/interrupt/ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz
 ```
 
 **Success Response (200 OK):**
 ```json
 {
   "interrupted": true,
-  "migration_id": "g2gCbQAAAA5yYWJiaXRAcm1xMGIAAAPoAAAAAAA="
+  "migration_id": "ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz"
 }
 ```
 
@@ -484,7 +487,8 @@ POST /api/queue-migration/check/:vhost
 **Parameters:**
 - `:vhost` - Virtual host name (URL-encoded). **Must be specified in the URL path.** Use `all` to check all vhosts.
 
-> **Important:** Unlike the start endpoint, there is no default vhost for the check endpoint. You must always specify the vhost in the URL path.
+> [!IMPORTANT]
+> Unlike the start endpoint, there is no default vhost for the check endpoint. You must always specify the vhost in the URL path.
 
 **Request Body (optional):**
 ```json
@@ -736,10 +740,7 @@ ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz
 
 ## Polling Recommendations
 
-When monitoring migration progress:
-- **Poll interval**: 5-10 seconds recommended
-- **Timeout**: Set based on queue count and message volume
-- **Exponential backoff**: Consider for long-running migrations
+Poll the status endpoint every 5-10 seconds. Set your overall timeout from the queue count and message volume, and consider exponential backoff for long-running migrations.
 
 **Example monitoring script:**
 ```bash
@@ -820,51 +821,9 @@ A `503 Service Unavailable` response from any endpoint carries a JSON body whose
 
 ## Examples
 
-### Complete Migration Workflow
-
-```bash
-#!/bin/bash
-
-# 1. Check compatibility
-echo "Checking compatibility..."
-curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F | jq
-
-# 2. Start migration
-echo "Starting migration..."
-RESPONSE=$(curl -s -u guest:guest -X POST http://localhost:15672/api/queue-migration/start)
-MIGRATION_ID=$(echo "$RESPONSE" | jq -r '.migration_id')
-echo "Migration started: $MIGRATION_ID"
-
-# 3. Monitor progress
-echo "Monitoring progress..."
-while true; do
-  STATUS=$(curl -s -u guest:guest \
-    "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
-    | jq -r '.migration.status')
-
-  if [ "$STATUS" = "completed" ]; then
-    echo "✅ Migration completed successfully"
-    break
-  elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "rollback_pending" ]; then
-    echo "❌ Migration failed: $STATUS"
-    exit 1
-  fi
-
-  PROGRESS=$(curl -s -u guest:guest \
-    "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" \
-    | jq -r '.migration.progress_percentage')
-
-  echo "Progress: $PROGRESS%"
-  sleep 5
-done
-
-# 4. Get detailed results
-echo "Getting detailed results..."
-curl -s -u guest:guest \
-  "http://localhost:15672/api/queue-migration/status/$MIGRATION_ID" | jq
-```
+For end-to-end request sequences (cautious, incremental, resume-after-interruption, and skip-and-fix), see [API Examples](API_EXAMPLES.md#common-workflows).
 
 ## See Also
 
-- [README](README.md) - Plugin overview and quick start
-- [test/integration/README](test/integration/README.md) - Integration testing guide
+- [README](../README.md) - Plugin overview and documentation map
+- [test/integration/README](../test/integration/README.md) - Integration testing guide
