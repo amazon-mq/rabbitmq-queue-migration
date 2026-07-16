@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/HEAD)
+
+**Merged pull requests:**
+
+- Show the deployed plugin version as a link in the management UI, and expose it in the `version` field of the status and `503` init-state HTTP responses
+
 ## [1.2.1](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.1) (2026-07-13)
 
 [Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.2.0...1.2.1)

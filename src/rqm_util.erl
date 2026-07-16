@@ -26,7 +26,8 @@
     resume_non_http_listeners/1,
     resume_all_non_http_listeners/0,
     format_iso8601_utc/0,
-    is_valid_utf8/1
+    is_valid_utf8/1,
+    plugin_version/0
 ]).
 
 has_ha_policy(Q) ->
@@ -291,6 +292,18 @@ format_iso8601_utc() ->
         "~.4.0w-~.2.0w-~.2.0wT~.2.0w-~.2.0w-~.2.0wZ",
         [Year, Month, Day, Hour, Min, Sec]
     ).
+
+%% @doc Return the plugin's application version, i.e. the value baked in
+%% from `PROJECT_VERSION' in the Makefile at build time. For a tagged
+%% release this is exactly the tag (e.g. <<"1.2.1">>); untagged/dirty
+%% builds carry a commit/`+dirty' suffix. Falls back to <<"unknown">> if
+%% the application has not been loaded (should not happen at runtime).
+-spec plugin_version() -> binary().
+plugin_version() ->
+    case application:get_key(rabbitmq_queue_migration, vsn) of
+        {ok, Vsn} -> to_unicode(Vsn);
+        undefined -> <<"unknown">>
+    end.
 
 -spec is_valid_utf8(binary()) -> boolean().
 is_valid_utf8(<<_C/utf8, Rest/binary>>) ->
