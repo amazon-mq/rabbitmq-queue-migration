@@ -9,9 +9,9 @@ SPDX-License-Identifier: Apache-2.0
   <% if (typeof version !== 'undefined' && version) { %>
     &nbsp;|&nbsp;
     <% if (/^\d+\.\d+\.\d+$/.test(version)) { %>
-      <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration/releases/tag/<%= version %>" target="_blank">Version <%= version %> ↗</a>
+      <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration/releases/tag/<%= fmt_string(version) %>" target="_blank">Version <%= fmt_string(version) %> ↗</a>
     <% } else { %>
-      <span title="This build was not produced from a release tag">Version <%= version %> (dev build)</span>
+      <span title="This build was not produced from a release tag">Version <%= fmt_string(version) %> (dev build)</span>
     <% } %>
   <% } %>
 </p>
