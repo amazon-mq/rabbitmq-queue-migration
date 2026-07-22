@@ -124,6 +124,7 @@ to_json(ReqData, {status_list, Context}) ->
     MigrationData = [migration_to_json(M) || M <- Migrations],
     Json = rabbit_json:encode(#{
         status => Status,
+        version => rqm_util:plugin_version(),
         migrations => MigrationData
     }),
     {Json, ReqData, {status_list, Context}};

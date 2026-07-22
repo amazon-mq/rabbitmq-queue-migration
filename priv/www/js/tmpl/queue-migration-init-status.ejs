@@ -6,6 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 <h1>Queue Migration</h1>
 <p class="description">
   <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration?tab=readme-ov-file#rabbitmq-queue-migration-plugin" target="_blank">Documentation ↗</a>
+  <% if (typeof version !== 'undefined' && version) { %>
+    &nbsp;|&nbsp;
+    <% if (/^\d+\.\d+\.\d+$/.test(version)) { %>
+      <a rel="noopener noreferrer" href="https://github.com/amazon-mq/rabbitmq-queue-migration/releases/tag/<%= fmt_string(version) %>" target="_blank">Version <%= fmt_string(version) %> ↗</a>
+    <% } else { %>
+      <span title="This build was not produced from a release tag">Version <%= fmt_string(version) %> (dev build)</span>
+    <% } %>
+  <% } %>
 </p>
 
 <% if (status === 'initializing') { %>

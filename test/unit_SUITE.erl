@@ -78,7 +78,10 @@
     parse_options_invalid_values_rejected_test/1,
     parse_options_set_default_queue_type_test/1,
     message_ttl_opts_forces_tolerance_test/1,
-    message_ttl_opts_without_flag_test/1
+    message_ttl_opts_without_flag_test/1,
+
+    % Plugin version tests
+    plugin_version_test/1
 ]).
 
 %% Test groups
@@ -92,7 +95,8 @@ all() ->
         {group, compatibility_tests},
         {group, migration_checks},
         {group, queue_naming},
-        {group, allow_message_ttl_options}
+        {group, allow_message_ttl_options},
+        {group, plugin_version}
     ].
 
 groups() ->
@@ -154,6 +158,9 @@ groups() ->
             parse_options_set_default_queue_type_test,
             message_ttl_opts_forces_tolerance_test,
             message_ttl_opts_without_flag_test
+        ]},
+        {plugin_version, [], [
+            plugin_version_test
         ]}
     ].
 
@@ -835,3 +842,22 @@ message_ttl_opts_without_flag_test(_Config) ->
         {false, 10.0},
         rqm:message_ttl_opts(#{allow_message_ttl => false, tolerance => 10.0})
     ).
+
+%% plugin_version/0 surfaces the application's `vsn' (baked in from
+%% PROJECT_VERSION at build time) as a binary. Once the app is loaded it
+%% must match the `vsn' key verbatim and never be the `unknown' fallback.
+%% This is the value the management UI renders as the "Version" link and
+%% the HTTP API returns in its `version' field.
+plugin_version_test(_Config) ->
+    %% Ensure the application is loaded so its `vsn' key is available;
+    %% loading is idempotent and independent of the app being started.
+    case application:load(rabbitmq_queue_migration) of
+        ok -> ok;
+        {error, {already_loaded, rabbitmq_queue_migration}} -> ok
+    end,
+    Version = rqm_util:plugin_version(),
+    ?assert(is_binary(Version)),
+    ?assertNotEqual(<<>>, Version),
+    ?assertNotEqual(<<"unknown">>, Version),
+    {ok, Vsn} = application:get_key(rabbitmq_queue_migration, vsn),
+    ?assertEqual(unicode:characters_to_binary(Vsn), Version).

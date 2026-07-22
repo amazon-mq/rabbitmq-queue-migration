@@ -55,6 +55,7 @@ The plugin sets up its Mnesia tables asynchronously when the broker starts. Unti
 ```json
 {
   "status": "initializing",
+  "version": "1.2.1",
   "attempts": 3,
   "max_attempts": 10,
   "started_at": "2026-06-05T17:55:00Z"
@@ -68,6 +69,7 @@ The plugin is still attempting to set up its tables. The retry budget is 10 atte
 ```json
 {
   "status": "failed",
+  "version": "1.2.1",
   "attempts": 10,
   "max_attempts": 10,
   "started_at": "2026-06-05T17:55:00Z",
@@ -262,6 +264,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 ```json
 {
   "status": "in_progress",
+  "version": "1.2.1",
   "migrations": [
     {
       "id": "ZzJnQ2JnWUE4VTJOS0pzQmR4aHlZV0pwYVhRdE1VQlRSVUV0TTB4SE5VaFdTbFZYU2tz",
@@ -301,6 +304,7 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/status
 - `status` - Overall system status:
   - `not_running` - No active migration
   - `in_progress` - Migration currently running
+- `version` - The plugin's deployed version. For a tagged release this matches the release tag (e.g. `1.2.1`); untagged/dirty builds carry a commit/`+dirty` suffix.
 - `migrations` - Array of migration records (most recent first)
 
 **Migration Record Fields:**

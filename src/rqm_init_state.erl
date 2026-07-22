@@ -213,6 +213,7 @@ build_status_detail(#state{
 }) ->
     Base = #{
         status => atom_to_binary(S),
+        version => rqm_util:plugin_version(),
         attempts => A,
         max_attempts => ?INIT_RETRY_ATTEMPTS,
         started_at => format_ts(Started)
