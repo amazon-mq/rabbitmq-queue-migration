@@ -36,12 +36,17 @@ Three upstream RabbitMQ issues are known to affect migrations performed by this 
 
 See [OSS 3.13.7 Known Issues](docs/OSS_313_KNOWN_ISSUES.md) for details.
 
-### Per-Message TTL
+### Message TTL
+
+Message TTL is the most common cause of a failed, rolled-back migration, and it takes two forms.
 
 > [!WARNING]
-> **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is the most common cause of a failed migration, especially on dead-letter and `_error` queues.
+> **This plugin cannot detect per-message TTL set by publishers.** Messages with the `expiration` property may expire during migration, causing a `message_count_mismatch` failure. This is especially common on dead-letter and `_error` queues.
 
-See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (set a `tolerance` or drain first).
+> [!WARNING]
+> **A queue-level TTL is caught by the readiness check, but deleting the policy does not make the queue safe to migrate.** A queue-level TTL (`x-message-ttl` argument or `message-ttl` policy) stamps an absolute expiry onto each message when it is enqueued, and that stamp survives removal of the policy. If you delete the policy to clear the check and migrate immediately, the already-stamped messages still expire mid-migration and the queue fails with `message_count_mismatch`.
+
+See [Message Loss and Verification](docs/MESSAGE_LOSS_AND_VERIFICATION.md) for why it happens and how to handle it (migrate with `allow_message_ttl`, set a `tolerance`, or drain first).
 
 ## Documentation
 

@@ -73,9 +73,15 @@ curl -u guest:guest -X POST \
   -H "Content-Type: application/json" \
   -d '{"tolerance": 10.0}' \
   http://localhost:15672/api/queue-migration/start
+
+# Allow queues with a queue-level TTL to migrate (forces tolerance to 100%)
+curl -u guest:guest -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"allow_message_ttl": true}' \
+  http://localhost:15672/api/queue-migration/start
 ```
 
-Tolerance is a per-queue percentage; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for how it works, the over- and under-delivery defaults, and per-message TTL.
+Tolerance is a per-queue percentage; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) for how it works, the over- and under-delivery defaults, and per-message TTL. Use `allow_message_ttl` for queues with a queue-level TTL; deleting the TTL policy to pass the compatibility check instead does **not** work, because the stamped expiry survives removal (see [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind)).
 
 ---
 

@@ -58,7 +58,7 @@ queue_migration.message_count_under_tolerance_percent = 2.0
 ```
 
 > [!WARNING]
-> A non-zero under-tolerance can mask real message loss. Set it only when you understand why messages are expected to be missing. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
+> A non-zero under-tolerance can mask real message loss. Set it only when you understand why messages are expected to be missing. The usual legitimate reason is message expiry from a TTL: publisher-set per-message TTL, or a queue-level TTL whose stamped expiry survives even after the policy is removed. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md) and, for the removed-policy case, [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
 
 ---
 

@@ -154,7 +154,7 @@ Unsynchronized queues will be skipped and can be migrated later after synchroniz
 - `too_many_queues` - The vhost has more classic queues than the plugin will migrate in a single run (limit configured by `queue_migration.max_queues_for_migration`).
 - `unsuitable_overflow` - A queue uses `x-overflow=reject-publish-dlx`, which is not supported in quorum queues. Quorum queues support `drop-head` and `reject-publish` only.
 - `queue_expires` - A queue has an `x-expires` argument or `expires` policy, so the queue itself could expire during migration.
-- `message_ttl` - A queue has a queue-level `x-message-ttl` argument or `message-ttl` policy.
+- `message_ttl` - A queue has a queue-level `x-message-ttl` argument or `message-ttl` policy. **Deleting the policy to clear this reason does not make the queue safe to migrate:** the expiry it already stamped onto buffered messages survives removal and still causes `message_count_mismatch`. Migrate with `allow_message_ttl`, set a `tolerance`, or drain first. See [`message_ttl`](SKIP_UNSUITABLE_QUEUES.md#5-message_ttl) and [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
 - `unsynchronized` - A mirrored classic queue is not fully synchronized across its replicas.
 
 **Solutions:**
@@ -343,7 +343,7 @@ curl -u guest:guest \
 
 **Status text:** `message count mismatch (expected: 9118, actual: 2137, diff: 6981)`
 
-**Cause:** The destination queue ended up with fewer (or more) messages than the source, by more than the configured tolerance. On a large under-delivery the usual culprit is per-message TTL expiry, most often on a dead-letter or `_error` queue.
+**Cause:** The destination queue ended up with fewer (or more) messages than the source, by more than the configured tolerance. On a large under-delivery the usual culprit is message expiry from a TTL, most often on a dead-letter or `_error` queue. This has two forms: publisher-set per-message TTL (the `expiration` property), and a queue-level TTL whose stamped expiry survives even after you delete the `message-ttl` policy or `x-message-ttl` argument. If you cleared a TTL policy before migrating and the check then passed, this is very likely your cause: see [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
 
 **Solution:** See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#the-message_count_mismatch-error) for how to read the numbers, confirm the cause, and re-run with an appropriate `tolerance` (or drain the queue first). Do not raise the tolerance to force a migration through when you cannot explain the missing messages.
 
