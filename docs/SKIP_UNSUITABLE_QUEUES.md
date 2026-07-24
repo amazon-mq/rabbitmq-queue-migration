@@ -168,6 +168,9 @@ rabbitmqctl clear_policy <policy_name>
 # Then migrate, then reapply TTL to the quorum queue
 ```
 
+> [!WARNING]
+> Removing the queue-level TTL clears the pre-check reason but does **not** un-expire messages already in the queue. A queue-level TTL stamps an absolute expiry onto each message when it is enqueued, and that stamp remains after the policy is cleared. If you clear the policy, re-run the pre-check (which now passes), and migrate immediately, the previously stamped messages still expire mid-migration and the queue fails with `message_count_mismatch`. After removing the TTL you must still drain or let the existing backlog expire before migrating (Option B), or use a `tolerance`. See [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
+
 **Option B:** Drain the queue before migration (let consumers process all messages)
 
 **Option C:** Accept that queue cannot be migrated and handle separately

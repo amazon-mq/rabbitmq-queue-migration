@@ -66,6 +66,25 @@ When the migration shovel starts consuming, it drains the queue from the head. A
 
 This is especially pronounced on dead-letter or `_error` queues, which accumulate messages that are rarely consumed. Such a queue can hold a large backlog of already-expired messages that all drop the moment migration begins.
 
+### A removed queue-level TTL policy can leave expiring messages behind
+
+There is a subtle variant of this that looks like a clean queue to the pre-check but still fails during migration. It happens when a queue-level TTL was applied, messages were enqueued under it, and the TTL is then removed before migrating.
+
+A queue-level TTL (an `x-message-ttl` argument or a `message-ttl` policy) does not stay abstract at the queue level. Each time a message is enqueued, the queue resolves the effective TTL and **stamps an absolute expiry timestamp onto that individual message** (`calculate_msg_expiry/2` in the broker's `rabbit_amqqueue_process`, which stores `now + ttl` in the message's properties). Once written, that per-message expiry travels with the message and is independent of the queue's current TTL setting.
+
+Removing the policy or argument only clears the queue-level TTL going forward (`init_ttl(undefined, ...)`); it stops applying a TTL to *newly* enqueued messages and cancels the queue's expiry timer, but it does **not** revisit or strip the expiry already stamped onto messages sitting in the queue. Expiry is evaluated per message against its own stored timestamp (`drop_expired_msgs/2` drops any message where `now >= expiry`), regardless of whether the queue still has a TTL.
+
+This produces the following sequence, which is easy to mistake for a fixed queue:
+
+1. A `message-ttl` policy (or `x-message-ttl` argument) applies to the queue, and messages are enqueued while it is in effect. Each of those messages is stamped with an absolute expiry.
+2. You run the pre-check. It reports the queue as unsuitable with the `message_ttl` reason, because the queue-level TTL is visible.
+3. You delete the policy (or the argument) to clear that reason, and re-run the pre-check. It now reports the queue as suitable: the queue-level TTL is gone, and the pre-check has no way to see the expiry already baked into the buffered messages.
+4. You start the migration. As the shovel drains the queue, the previously stamped messages reach their expiry and are dropped, exactly as with publisher-set per-message TTL. Verification records them as under-delivery, and the migration fails with `message_count_mismatch` and rolls back.
+
+The trap is that step 3 makes the queue *look* clean while the backlog is still carrying expiry stamps from step 1. Deleting the policy does not un-stamp existing messages.
+
+To avoid it, treat a queue that ever had a TTL the same as one with publisher-set per-message TTL: after removing the policy, **drain or let the existing backlog expire before migrating** (an empty queue takes the fast path and cannot hit this check), or migrate with a `tolerance` sized to the expected loss. Simply removing the policy immediately before migrating is not sufficient.
+
 ### What to do about it
 
 Pick the approach that fits your risk tolerance:
@@ -77,7 +96,7 @@ Pick the approach that fits your risk tolerance:
 There is no way for the plugin to detect or pre-count per-message TTL, so it cannot warn you before you start. Decide up front whether your publishers set `expiration` and plan accordingly.
 
 > [!NOTE]
-> **Queue-level TTL is different.** A queue-level `x-message-ttl` or `message-ttl` policy **is** visible, and the plugin blocks such queues as unsuitable unless you pass `allow_message_ttl` (which forces `tolerance` to 100% for the whole migration). See the `message_ttl` skip reason in [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md).
+> **Queue-level TTL is different, while it is still applied.** A queue-level `x-message-ttl` or `message-ttl` policy **is** visible, and the plugin blocks such queues as unsuitable unless you pass `allow_message_ttl` (which forces `tolerance` to 100% for the whole migration). See the `message_ttl` skip reason in [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md). But note that this visibility disappears the moment you remove the policy: the expiry it already stamped onto buffered messages remains and is invisible to the pre-check, exactly like publisher-set per-message TTL. See [A removed queue-level TTL policy can leave expiring messages behind](#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
 
 ---
 
