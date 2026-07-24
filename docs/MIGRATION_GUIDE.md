@@ -23,63 +23,32 @@ This guide explains how the RabbitMQ Queue Migration Plugin works, including the
 
 ## Pre-Migration Validation
 
-The plugin performs comprehensive checks before starting migration to ensure safety and success.
+The plugin performs comprehensive checks before starting migration to ensure safety and success. System-level checks always block migration if they fail. Queue-level checks apply per queue and can be skipped with the `skip_unsuitable_queues` option.
 
 ### System-Level Checks
 
-These checks always block migration if they fail:
+These checks apply to the cluster as a whole and always block migration if they fail:
 
-1. **Plugin Requirements**
-   - Validates `rabbitmq_shovel` plugin is enabled
-   - Validates Khepri is disabled (not compatible with classic queue migration)
-   - Validates `rabbitmq_queue_migration` plugin reports `ready` on every running cluster node (the plugin's async init must have finished on each node before migration can proceed)
-
-2. **Configuration**
-   - Checks `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled
-   - Required for queue redeclaration during migration
-
-3. **Queue Leader Balance**
-   - Ensures queue leaders are balanced across cluster nodes
-   - Prevents overloading specific nodes during migration
-
-4. **Disk Space**
-   - Estimates required disk space based on queue data size
-   - Verifies sufficient free space available on all nodes
-   - See [TROUBLESHOOTING](TROUBLESHOOTING.md) for disk space calculation details
-
-5. **System Health**
-   - Checks for active memory or disk alarms
-   - Validates memory usage is below threshold
-
-6. **Snapshot Availability**
-   - Verifies no concurrent EBS snapshots in progress
-   - Prevents snapshot conflicts
-
-7. **Cluster Health**
-   - Validates no network partitions exist
-   - Confirms all cluster nodes are running
+| Check | What it verifies |
+|-------|------------------|
+| Plugin Requirements | `rabbitmq_shovel` is enabled, Khepri is disabled (not compatible with classic queue migration), and `rabbitmq_queue_migration` reports `ready` on every running cluster node (its async init must have finished on each node before migration can proceed). |
+| Configuration | `quorum_queue.property_equivalence.relaxed_checks_on_redeclaration` is enabled, which is required for queue redeclaration during migration. |
+| Queue Leader Balance | Queue leaders are balanced across cluster nodes, so no single node is overloaded during migration. |
+| Disk Space | Enough free space exists on all nodes for the estimated migration footprint; see [TROUBLESHOOTING](TROUBLESHOOTING.md) for the calculation. |
+| System Health | No active memory or disk alarms, and memory usage is below threshold. |
+| Snapshot Availability | No concurrent EBS snapshots are in progress, avoiding snapshot conflicts. |
+| Cluster Health | No network partitions exist and all cluster nodes are running. |
 
 ### Queue-Level Checks
 
-These checks can be skipped with the `skip_unsuitable_queues` option:
+These checks apply per queue and can be skipped with the `skip_unsuitable_queues` option:
 
-1. **Queue Synchronization**
-   - Verifies all mirrored classic queues are fully synchronized
-   - Unsynchronized queues can be skipped and migrated later
+| Check | What it verifies |
+|-------|------------------|
+| Queue Synchronization | All mirrors of the classic queue are fully synchronized. Unsynchronized queues can be skipped and migrated later. |
+| Queue Suitability | The queue has no unsuitable arguments (see [Automatic Argument Conversion](#automatic-argument-conversion)). Unsuitable queues can be skipped and fixed later. |
 
-2. **Queue Suitability**
-   - Confirms queues don't have unsuitable arguments
-   - Unsuitable queues can be skipped and fixed later
-
-**Skip Mode:**
-
-When `skip_unsuitable_queues` is enabled:
-- Queues failing queue-level checks are marked as "skipped"
-- Migration proceeds with suitable queues
-- Skipped queues remain as classic queues
-- Can be migrated in subsequent runs after fixing issues
-
-See [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md) for complete guide on using skip mode.
+When `skip_unsuitable_queues` is enabled, queues that fail a queue-level check are marked "skipped" and remain classic queues while migration proceeds with the suitable ones. Skipped queues can be migrated in a later run once their issues are fixed. See [SKIP_UNSUITABLE_QUEUES](SKIP_UNSUITABLE_QUEUES.md) for the complete guide to skip mode.
 
 ---
 
@@ -89,49 +58,15 @@ The plugin uses a two-phase approach to safely migrate queues while preserving m
 
 ### Phase 1: Classic → Temporary Quorum
 
-1. **Create temporary quorum queue**
-   - Name format: `tmp_<timestamp>_<original_name>`
-   - Timestamp from migration ID ensures uniqueness
-   - Prevents collision with user queues
-
-2. **Copy bindings**
-   - All bindings from classic queue copied to temporary queue
-   - Preserves routing configuration
-
-3. **Migrate messages**
-   - Shovel transfers messages from classic to temporary queue
-   - Messages transferred one-by-one with confirmations
-   - Progress tracked and reported
-
-4. **Delete classic queue**
-   - Original classic queue deleted after successful transfer
-   - Frees up disk space
+The plugin creates a temporary quorum queue named `tmp_<timestamp>_<original_name>`, where the timestamp comes from the migration ID and guarantees the name cannot collide with a user queue. It copies all of the classic queue's bindings to the temporary queue to preserve routing, then uses a shovel to transfer messages one by one with confirmations, tracking and reporting progress. Once the transfer succeeds, the original classic queue is deleted, freeing its disk space and its name.
 
 ### Phase 2: Temporary → Final Quorum
 
-1. **Create final quorum queue**
-   - Uses original queue name
-   - No name conflict since classic queue was deleted
-
-2. **Copy bindings**
-   - All bindings from temporary queue copied to final queue
-   - Ensures routing remains intact
-
-3. **Migrate messages**
-   - Shovel transfers messages from temporary to final queue
-   - Verifies message counts match expectations
-
-4. **Delete temporary queue**
-   - Temporary queue deleted after successful transfer
-   - Migration complete
+The plugin creates the final quorum queue under the original queue name, which is now free because the classic queue was deleted in phase 1. It copies the bindings from the temporary queue so routing remains intact, shovels the messages across while verifying the counts match expectations, and deletes the temporary queue once the transfer succeeds. The migration is then complete.
 
 ### Fast Path for Empty Queues
 
-Queues with zero messages skip the two-phase process:
-- Create final quorum queue directly
-- Copy bindings
-- Delete classic queue
-- Significantly faster (no message transfer needed)
+A queue with zero messages skips the two-phase process entirely: the plugin creates the final quorum queue directly, copies its bindings, and deletes the classic queue. With no messages to transfer, this is significantly faster.
 
 ---
 
@@ -147,22 +82,13 @@ Because the entire broker goes offline to non-HTTP clients, plan a maintenance w
 
 ## Queue Eligibility
 
-A queue is eligible for migration if it meets all these criteria:
+A queue is eligible for migration only if it meets all of these criteria:
 
-### Required Characteristics
-
-1. **Queue Type**
-   - Must be `rabbit_classic_queue`
-   - Quorum queues are automatically filtered out (idempotency)
-
-2. **HA Policy**
-   - Must have HA (High Availability) policy applied
-   - Queue must be mirrored across cluster nodes
-   - Non-mirrored classic queues are not eligible
-
-3. **Not Exclusive**
-   - Queue must not be exclusive
-   - Exclusive queues are tied to specific connections
+| Criterion | Requirement |
+|-----------|-------------|
+| Queue type | Must be a classic queue (`rabbit_classic_queue`). Existing quorum queues are filtered out automatically, which keeps migration idempotent. |
+| HA policy | Must have a high-availability policy applied so the queue is mirrored across cluster nodes. Non-mirrored classic queues are not eligible. |
+| Not exclusive | Must not be exclusive, because exclusive queues are tied to the lifetime of a specific connection. |
 
 ### Checking Eligibility
 
@@ -198,11 +124,11 @@ Three queue arguments have no safe quorum-queue equivalent, so a queue that uses
 | Argument | Why it is unsuitable | What to do |
 |----------|----------------------|------------|
 | `x-overflow: reject-publish-dlx` | Quorum queues support only `drop-head` and `reject-publish` overflow, and `reject-publish` provides no dead lettering, so this policy cannot be replicated. | Change the overflow policy (and rethink dead lettering) before migration, or skip the queue. |
-| `x-message-ttl` (queue-level TTL) | Messages can expire during the migration window, and expired messages fail the source-vs-destination count check. | Remove the `x-message-ttl` argument or `message-ttl` policy, set a `tolerance` (see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md)), or skip the queue. |
+| `x-message-ttl` (queue-level TTL) | Messages can expire during the migration window, and expired messages fail the source-vs-destination count check. | Migrate with `allow_message_ttl`, which forces `tolerance` to 100% migration-wide and keeps `x-message-ttl` on the quorum queue (see [HTTP_API](HTTP_API.md)); set a `tolerance` sized to the expected loss; or skip the queue. Removing the policy alone is **not** sufficient: the expiry it already stamped onto buffered messages survives removal and still expires mid-migration, so drain or let the backlog expire first. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind). |
 | `x-expires` (queue expiry) | The queue itself can expire and be deleted mid-migration, failing the migration for that queue. | Remove the `x-expires` argument or `expires` policy, or skip the queue. |
 
 > [!NOTE]
-> A *queue-level* TTL (the `x-message-ttl` row above) is detected and blocked. TTL set by publishers on individual messages (the `expiration` property) is invisible to the plugin and is the most common cause of a failed migration; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
+> A *queue-level* TTL (the `x-message-ttl` row above) is detected and blocked only while the policy or argument is still applied. Two related cases stay invisible to the plugin: TTL set by publishers on individual messages (the `expiration` property), and the absolute expiry a queue-level TTL already stamped onto buffered messages, which survives removal of the policy. Both are common causes of a failed migration; see [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
 
 ### Preserved Arguments
 
