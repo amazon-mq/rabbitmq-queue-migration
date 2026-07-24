@@ -120,7 +120,7 @@ When this is the first failure in a run, the migration transitions to `rollback_
 
 **Recovery:**
 
-1. Confirm the cause. If the failing queue is a dead-letter/`_error` queue or its publishers set the `expiration` property, per-message TTL expiry is the likely explanation.
+1. Confirm the cause. If the failing queue is a dead-letter/`_error` queue or its publishers set the `expiration` property, per-message TTL expiry is the likely explanation. It is equally likely if the queue recently had a queue-level TTL (`x-message-ttl` argument or `message-ttl` policy) removed before migrating: the expiry stamped onto its buffered messages outlives the policy (see [A removed queue-level TTL policy can leave expiring messages behind](#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind)).
 2. Re-run the migration with a `tolerance` high enough to cover the loss, or drain the queue first (see [What to do about it](#what-to-do-about-it)). Idempotency means already-migrated queues are skipped on the re-run.
 3. If you cannot explain the missing messages, do **not** raise the tolerance to force it through. Investigate first: an unexplained mismatch is exactly what the 0.0% default is meant to catch.
 
