@@ -11,7 +11,7 @@ All examples use the default vhost (`/`, URL-encoded `%2F`) and `guest:guest`. T
 Two things bite operators most often. Read these before your first run:
 
 - **Migration closes all client connections broker-wide.** Non-HTTP listeners (AMQP, MQTT, STOMP) are suspended for the whole broker, not just the vhost being migrated, and are restored when the migration ends. Plan a maintenance window. See [Connection Handling](MIGRATION_GUIDE.md#connection-handling-during-migration).
-- **Per-message TTL can cause a `message_count_mismatch` failure.** If your publishers set the `expiration` property (common on dead-letter and `_error` queues), messages can expire mid-migration and fail the count check. Decide up front whether to set a `tolerance` or drain first. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
+- **Message TTL can cause a `message_count_mismatch` failure, and it is the most common cause of a rolled-back migration.** Two forms bite operators. Publisher-set per-message TTL (the `expiration` property, common on dead-letter and `_error` queues) is invisible to the plugin. A queue-level TTL (`x-message-ttl` argument or `message-ttl` policy) is caught by the readiness check, but **deleting the policy to clear that check does not fix it**: the expiry was already stamped onto every buffered message at enqueue time and survives removal, so the backlog keeps expiring mid-migration. In both cases, decide up front whether to migrate with `allow_message_ttl`, set a `tolerance`, or drain the queue first. See [Message Loss and Verification](MESSAGE_LOSS_AND_VERIFICATION.md).
 - **Do not restart broker nodes while a migration is in progress.** Restarting a node, a full cluster reboot, or a maintenance-window restart mid-migration is not supported; recovery from the resulting partial state generally requires a snapshot restore. Only restart when no migration is in flight.
 
 ---
@@ -34,6 +34,9 @@ curl -u guest:guest -X POST \
 ```
 
 Resolve any system-level blockers (disk space, alarms, partitions, unbalanced leaders, plugin not `ready` on all nodes) before starting; these always block and cannot be skipped. See [TROUBLESHOOTING](TROUBLESHOOTING.md#pre-migration-issues).
+
+> [!WARNING]
+> If the check reports a queue as unsuitable with the `message_ttl` reason, **do not simply delete the TTL policy and re-run the check.** A queue-level TTL stamps an absolute expiry onto each message when it is enqueued, and that stamp survives removal of the policy. The re-run check will pass because the queue-level TTL is gone, but the already-stamped messages still expire mid-migration and the queue fails with `message_count_mismatch` and rolls back. Instead, migrate with `allow_message_ttl` (see the option in [Step 2](#step-2-start-the-migration)), set a `tolerance` sized to the expected loss, or drain the queue (or let its backlog expire) before migrating. See [A removed queue-level TTL policy can leave expiring messages behind](MESSAGE_LOSS_AND_VERIFICATION.md#a-removed-queue-level-ttl-policy-can-leave-expiring-messages-behind).
 
 ---
 
