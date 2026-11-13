@@ -12,6 +12,15 @@
 
 -export([create_snapshot/1, cleanup_snapshot/1, check_no_snapshots_in_progress/0]).
 
+-ifdef(TEST).
+-export([snapshot_tags/1]).
+-endif.
+
+-define(PURPOSE_TAG_KEY, "rabbitmq-queue-migration:purpose").
+-define(PURPOSE_TAG_VALUE, "pre-migration").
+%% EC2 rejects a request that would give a resource more than 50 tags.
+-define(MAX_SNAPSHOT_TAGS, 50).
+
 %% @doc Create a snapshot using the configured snapshot mode
 -spec create_snapshot(rabbit_types:vhost()) -> {ok, snapshot_state()} | {error, term()}.
 create_snapshot(VHost) ->
@@ -73,7 +82,7 @@ create_snapshot(ebs, VHost) ->
         {ok, {InstanceId, Volumes}} ->
             case find_rabbitmq_volume(Volumes) of
                 {ok, VolumeId} ->
-                    create_ebs_snapshot(InstanceId, VolumeId);
+                    create_ebs_snapshot(InstanceId, VolumeId, volume_tags(VolumeId, Volumes));
                 {error, Reason} ->
                     ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
                     {error, {volume_discovery_failed, Reason}}
@@ -228,15 +237,18 @@ extract_volume_id(_, Acc) ->
     Acc.
 
 %% @doc Create EBS snapshot for single volume ID
--spec create_ebs_snapshot(InstanceId :: string(), VolumeId :: string()) ->
+-spec create_ebs_snapshot(
+    InstanceId :: string(), VolumeId :: string(), VolumeTags :: [{string(), string()}]
+) ->
     {ok, snapshot_state()} | {error, term()}.
-create_ebs_snapshot(InstanceId, VolumeId) ->
+create_ebs_snapshot(InstanceId, VolumeId, VolumeTags) ->
     Timestamp = rqm_util:format_iso8601_utc(),
     Description = rqm_util:unicode_format("RabbitMQ migration snapshot ~s on ~s", [
         Timestamp, node()
     ]),
 
-    case rqm_ebs:create_volume_snapshot(VolumeId, #{description => Description}) of
+    Options = #{description => Description, tags => snapshot_tags(VolumeTags)},
+    case rqm_ebs:create_volume_snapshot(VolumeId, Options) of
         {ok, SnapshotId, _Metadata} ->
             {ok, {
                 rqm_util:to_unicode(SnapshotId),
@@ -247,6 +259,35 @@ create_ebs_snapshot(InstanceId, VolumeId) ->
             ?LOG_ERROR("rqm: failed to create snapshot for volume ~s: ~p", [VolumeId, Reason]),
             {error, {snapshot_failed, VolumeId, Reason}}
     end.
+
+%% @doc Get the tags of the attached volume with the given ID
+-spec volume_tags(string(), list()) -> [{string(), string()}].
+volume_tags(VolumeId, Volumes) ->
+    case [V || V <- Volumes, is_list(V), proplists:get_value(volume_id, V) =:= VolumeId] of
+        [Volume | _] -> proplists:get_value(tags, Volume, []);
+        [] -> []
+    end.
+
+%% @doc Build the snapshot tags: the data volume's own tags plus the purpose marker
+-spec snapshot_tags([{string(), string()}]) -> [{string(), string()}].
+snapshot_tags(VolumeTags) ->
+    % Keys starting with "aws:" are reserved for AWS and cannot be set by a request.
+    Copied = [
+        Tag
+     || {Key, _} = Tag <- VolumeTags,
+        not lists:prefix("aws:", Key),
+        Key =/= ?PURPOSE_TAG_KEY
+    ],
+    Kept = lists:sublist(Copied, ?MAX_SNAPSHOT_TAGS - 1),
+    case length(Copied) - length(Kept) of
+        0 ->
+            ok;
+        Dropped ->
+            ?LOG_WARNING("rqm: not copying ~b volume tag(s) to the snapshot: EC2 allows ~b tags", [
+                Dropped, ?MAX_SNAPSHOT_TAGS
+            ])
+    end,
+    Kept ++ [{?PURPOSE_TAG_KEY, ?PURPOSE_TAG_VALUE}].
 
 %% @doc Clean up a snapshot based on the configured snapshot mode
 -spec cleanup_snapshot(snapshot_id()) -> ok | {error, term()}.

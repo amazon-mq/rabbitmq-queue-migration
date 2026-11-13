@@ -84,6 +84,7 @@ queue_migration.ebs_volume_device = /dev/sdh
    - `ec2:DescribeVolumes` - Query attached volumes
    - `ec2:DescribeSnapshots` - Check snapshot status
    - `ec2:DeleteSnapshot` - Delete snapshots after successful migration
+   - `ec2:CreateTags` - Tag snapshots on creation
 
 3. **AWS Credentials**
    - EC2 instance role (recommended)

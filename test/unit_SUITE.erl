@@ -81,7 +81,16 @@
     message_ttl_opts_without_flag_test/1,
 
     % Plugin version tests
-    plugin_version_test/1
+    plugin_version_test/1,
+
+    % EBS snapshot tagging tests
+    build_snapshot_body_without_tags_test/1,
+    build_snapshot_body_with_tags_test/1,
+    parse_volume_keeps_tags_test/1,
+    parse_volume_without_tag_set_test/1,
+    snapshot_tags_copies_volume_tags_test/1,
+    snapshot_tags_skips_reserved_and_purpose_keys_test/1,
+    snapshot_tags_respects_ec2_tag_limit_test/1
 ]).
 
 %% Test groups
@@ -96,7 +105,8 @@ all() ->
         {group, migration_checks},
         {group, queue_naming},
         {group, allow_message_ttl_options},
-        {group, plugin_version}
+        {group, plugin_version},
+        {group, ebs_snapshot_tags}
     ].
 
 groups() ->
@@ -161,6 +171,15 @@ groups() ->
         ]},
         {plugin_version, [], [
             plugin_version_test
+        ]},
+        {ebs_snapshot_tags, [parallel], [
+            build_snapshot_body_without_tags_test,
+            build_snapshot_body_with_tags_test,
+            parse_volume_keeps_tags_test,
+            parse_volume_without_tag_set_test,
+            snapshot_tags_copies_volume_tags_test,
+            snapshot_tags_skips_reserved_and_purpose_keys_test,
+            snapshot_tags_respects_ec2_tag_limit_test
         ]}
     ].
 
@@ -861,3 +880,91 @@ plugin_version_test(_Config) ->
     ?assertNotEqual(<<"unknown">>, Version),
     {ok, Vsn} = application:get_key(rabbitmq_queue_migration, vsn),
     ?assertEqual(unicode:characters_to_binary(Vsn), Version).
+
+%% =============================================================================
+%% EBS Snapshot Tagging Tests
+%% =============================================================================
+
+build_snapshot_body_without_tags_test(_Config) ->
+    ?assertEqual(
+        "Action=CreateSnapshot&VolumeId=vol-1&Description=RabbitMQ%20snapshot"
+        "&Version=2016-11-15",
+        rqm_ebs:build_snapshot_body("vol-1", <<"RabbitMQ snapshot">>, [], false)
+    ).
+
+%% Keys and values are URI-encoded, and tags are numbered from 1 in order.
+build_snapshot_body_with_tags_test(_Config) ->
+    Tags = [
+        {"Name", "my-cluster"},
+        {"team:owner", "ops@example.com"}
+    ],
+    ?assertEqual(
+        "Action=CreateSnapshot&VolumeId=vol-1&Description=desc"
+        "&TagSpecification.1.ResourceType=snapshot"
+        "&TagSpecification.1.Tag.1.Key=Name"
+        "&TagSpecification.1.Tag.1.Value=my-cluster"
+        "&TagSpecification.1.Tag.2.Key=team%3Aowner"
+        "&TagSpecification.1.Tag.2.Value=ops%40example.com"
+        "&Version=2016-11-15",
+        rqm_ebs:build_snapshot_body("vol-1", "desc", Tags, false)
+    ).
+
+parse_volume_keeps_tags_test(_Config) ->
+    VolumeXml = volume_xml(
+        "<tagSet>"
+        "<item><key>Name</key><value>my-cluster</value></item>"
+        "<item><key>Initialized</key><value>true</value></item>"
+        "</tagSet>"
+    ),
+    Volume = rqm_ebs:parse_volume(VolumeXml),
+    ?assertEqual("vol-1", proplists:get_value(volume_id, Volume)),
+    ?assertEqual(
+        [{device, "/dev/sdh"}, {state, "attached"}],
+        proplists:get_value(attachment, Volume)
+    ),
+    ?assertEqual(
+        lists:sort([{"Name", "my-cluster"}, {"Initialized", "true"}]),
+        lists:sort(proplists:get_value(tags, Volume))
+    ).
+
+parse_volume_without_tag_set_test(_Config) ->
+    Volume = rqm_ebs:parse_volume(volume_xml("")),
+    ?assertEqual([], proplists:get_value(tags, Volume)).
+
+snapshot_tags_copies_volume_tags_test(_Config) ->
+    VolumeTags = [{"Name", "my-cluster"}, {"Team", "my-team"}],
+    ?assertEqual(
+        [
+            {"Name", "my-cluster"},
+            {"Team", "my-team"},
+            {"rabbitmq-queue-migration:purpose", "pre-migration"}
+        ],
+        rqm_snapshot:snapshot_tags(VolumeTags)
+    ).
+
+snapshot_tags_skips_reserved_and_purpose_keys_test(_Config) ->
+    VolumeTags = [
+        {"aws:cloudformation:stack-name", "my-stack"},
+        {"rabbitmq-queue-migration:purpose", "something-else"},
+        {"Name", "my-cluster"}
+    ],
+    ?assertEqual(
+        [{"Name", "my-cluster"}, {"rabbitmq-queue-migration:purpose", "pre-migration"}],
+        rqm_snapshot:snapshot_tags(VolumeTags)
+    ).
+
+snapshot_tags_respects_ec2_tag_limit_test(_Config) ->
+    VolumeTags = [{"key" ++ integer_to_list(N), "v"} || N <- lists:seq(1, 50)],
+    Tags = rqm_snapshot:snapshot_tags(VolumeTags),
+    ?assertEqual(50, length(Tags)),
+    ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
+
+%% Parse a DescribeVolumes item the same way rabbitmq_aws parses the response.
+volume_xml(TagSetXml) ->
+    Xml =
+        "<item><volumeId>vol-1</volumeId><size>200</size><volumeType>gp3</volumeType>"
+        "<status>in-use</status>"
+        "<attachmentSet><item><device>/dev/sdh</device><status>attached</status></item>"
+        "</attachmentSet>" ++ TagSetXml ++ "</item>",
+    [{"item", Props}] = rabbitmq_aws_xml:parse(Xml),
+    {"item", Props}.

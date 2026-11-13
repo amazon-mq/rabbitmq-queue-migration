@@ -79,6 +79,11 @@ aws iam put-role-policy \
         "ec2:DeleteSnapshot"
       ],
       "Resource": "*"
+    }, {
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"ec2:CreateAction": "CreateSnapshot"}}
     }]
   }'
 ```
@@ -306,7 +311,7 @@ The `rabbitmq_queue_migration` plugin performs the following operations during m
 3. **Monitor Progress**: Calls `ec2:DescribeSnapshots` to check snapshot completion status
 4. **Cleanup Snapshots**: Calls `ec2:DeleteSnapshot` to remove snapshots after successful migration (when `cleanup_snapshots_on_success` is enabled)
 
-Snapshots are created with a `Description` of the form `RabbitMQ migration snapshot <timestamp> on <node>`, but the plugin does not attach EC2 tags to them (`ec2:CreateTags` is not required).
+Snapshots are created with a `Description` of the form `RabbitMQ migration snapshot <timestamp> on <node>`.
 
 The plugin uses the AWS SDK's default credential provider chain, which automatically:
 - Queries the EC2 instance metadata service at `http://169.254.169.254/latest/meta-data/iam/security-credentials/`
