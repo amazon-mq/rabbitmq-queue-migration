@@ -92,29 +92,43 @@ aws iam put-role-policy \
   }'
 ```
 
-**Security Note:** This policy grants permissions to all resources (`"Resource": "*"`). For production environments, consider
-restricting permissions to specific volumes or using condition keys to limit scope:
+**Security Note:** This policy grants permissions to all resources (`"Resource": "*"`). In production, scope it to one cluster using the tags the plugin puts on its snapshots. Each snapshot carries the data volume's tags plus `rabbitmq-queue-migration:purpose=pre-migration`, so a tag that identifies the cluster on its data volumes, `Name=my-cluster` in this example, identifies its snapshots too:
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
-    "Action": [
-      "ec2:DescribeVolumes",
-      "ec2:CreateSnapshot",
-      "ec2:DescribeSnapshots",
-      "ec2:DeleteSnapshot"
-    ],
-    "Resource": "*",
-    "Condition": {
-      "StringEquals": {
-        "ec2:ResourceTag/Purpose": "RabbitMQ-Migration-Testing"
-      }
-    }
+    "Action": ["ec2:DescribeVolumes", "ec2:DescribeSnapshots"],
+    "Resource": "*"
+  }, {
+    "Effect": "Allow",
+    "Action": "ec2:CreateSnapshot",
+    "Resource": "arn:aws:ec2:*:*:volume/*",
+    "Condition": {"StringEquals": {"aws:ResourceTag/Name": "my-cluster"}}
+  }, {
+    "Effect": "Allow",
+    "Action": "ec2:CreateSnapshot",
+    "Resource": "arn:aws:ec2:*::snapshot/*",
+    "Condition": {"StringEquals": {"aws:RequestTag/Name": "my-cluster"}}
+  }, {
+    "Effect": "Allow",
+    "Action": "ec2:CreateTags",
+    "Resource": "arn:aws:ec2:*::snapshot/*",
+    "Condition": {"StringEquals": {"ec2:CreateAction": "CreateSnapshot"}}
+  }, {
+    "Effect": "Allow",
+    "Action": "ec2:DeleteSnapshot",
+    "Resource": "arn:aws:ec2:*::snapshot/*",
+    "Condition": {"StringEquals": {
+      "aws:ResourceTag/Name": "my-cluster",
+      "aws:ResourceTag/rabbitmq-queue-migration:purpose": "pre-migration"
+    }}
   }]
 }
 ```
+
+`CreateSnapshot` is authorized against both the source volume and the new snapshot, hence the two statements: the first allows snapshotting only this cluster's volumes, the second requires the new snapshot to carry the cluster's tag. The `DeleteSnapshot` statement lets the plugin delete only this cluster's migration snapshots. `DescribeVolumes` and `DescribeSnapshots` do not support resource-level permissions, so they stay on `"Resource": "*"`.
 
 ### Step 4: Create Instance Profile
 
