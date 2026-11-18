@@ -27,7 +27,8 @@
 %% Exported for testing
 -ifdef(TEST).
 -export([
-    message_ttl_opts/1
+    message_ttl_opts/1,
+    format_migration_error/2
 ]).
 -endif.
 
@@ -1917,27 +1918,25 @@ format_migration_error(
     {error,
         {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}
 ) ->
-    case extract_aws_error_message(Details) of
+    case rqm_ebs:error_code_and_message(Details) of
         {ok, Code, Message} ->
-            iolist_to_binary(io_lib:format("Snapshot creation failed: ~s - ~s", [Code, Message]));
+            iolist_to_binary(
+                io_lib:format("Snapshot creation failed: ~ts - ~ts~ts", [
+                    Code, Message, snapshot_error_hint(Code)
+                ])
+            );
         error ->
             <<"Snapshot creation failed">>
     end;
 format_migration_error(Class, Ex) ->
     iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
 
-extract_aws_error_message(Details) when is_list(Details) ->
-    try
-        Errors = proplists:get_value("Errors", Details),
-        [ErrorMap] = proplists:get_value("Error", Errors),
-        Code = proplists:get_value("Code", ErrorMap),
-        Message = proplists:get_value("Message", ErrorMap),
-        {ok, Code, Message}
-    catch
-        _:_ -> error
-    end;
-extract_aws_error_message(_) ->
-    error.
+%% EC2 returns UnauthorizedOperation whether CreateSnapshot or the CreateTags
+%% check for its tags was refused, and 1.x roles lack CreateTags.
+snapshot_error_hint("UnauthorizedOperation") ->
+    " (check that the instance role allows ec2:CreateTags, required since 2.0.0; see docs/EC2_SETUP.md)";
+snapshot_error_hint(_) ->
+    "".
 
 %% Helper function to compute per-node batch allocations
 %% Returns list of {Node, AllocationCount} tuples

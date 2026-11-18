@@ -90,7 +90,11 @@
     parse_volume_without_tag_set_test/1,
     snapshot_tags_copies_volume_tags_test/1,
     snapshot_tags_skips_reserved_and_purpose_keys_test/1,
-    snapshot_tags_respects_ec2_tag_limit_test/1
+    snapshot_tags_respects_ec2_tag_limit_test/1,
+
+    % EBS snapshot error reporting tests
+    snapshot_unauthorized_error_names_create_tags_test/1,
+    snapshot_other_error_reports_code_without_hint_test/1
 ]).
 
 %% Test groups
@@ -106,7 +110,8 @@ all() ->
         {group, queue_naming},
         {group, allow_message_ttl_options},
         {group, plugin_version},
-        {group, ebs_snapshot_tags}
+        {group, ebs_snapshot_tags},
+        {group, ebs_snapshot_errors}
     ].
 
 groups() ->
@@ -180,6 +185,11 @@ groups() ->
             snapshot_tags_copies_volume_tags_test,
             snapshot_tags_skips_reserved_and_purpose_keys_test,
             snapshot_tags_respects_ec2_tag_limit_test
+        ]},
+        %% Not parallel: meck replaces modules node-wide.
+        {ebs_snapshot_errors, [], [
+            snapshot_unauthorized_error_names_create_tags_test,
+            snapshot_other_error_reports_code_without_hint_test
         ]}
     ].
 
@@ -200,6 +210,7 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    _ = meck:unload(),
     ok.
 
 %% =============================================================================
@@ -968,3 +979,44 @@ volume_xml(TagSetXml) ->
         "</attachmentSet>" ++ TagSetXml ++ "</item>",
     [{"item", Props}] = rabbitmq_aws_xml:parse(Xml),
     {"item", Props}.
+
+%% =============================================================================
+%% EBS Snapshot Error Reporting Tests
+%% =============================================================================
+
+snapshot_unauthorized_error_names_create_tags_test(_Config) ->
+    ?assertEqual(
+        <<
+            "Snapshot creation failed: UnauthorizedOperation - "
+            "You are not authorized to perform this operation. "
+            "(check that the instance role allows ec2:CreateTags, required since 2.0.0; "
+            "see docs/EC2_SETUP.md)"
+        >>,
+        snapshot_failure_message(
+            "UnauthorizedOperation", "You are not authorized to perform this operation."
+        )
+    ).
+
+snapshot_other_error_reports_code_without_hint_test(_Config) ->
+    ?assertEqual(
+        <<"Snapshot creation failed: SnapshotCreationPerVolumeRateExceeded - Slow down">>,
+        snapshot_failure_message("SnapshotCreationPerVolumeRateExceeded", "Slow down")
+    ).
+
+%% Run a CreateSnapshot that EC2 rejects with Code and Message, and return the
+%% migration error that a failed preparation records. The error document is
+%% parsed by rabbitmq_aws_xml, as rabbitmq_aws does for a 4xx response.
+snapshot_failure_message(Code, Message) ->
+    Body = rabbitmq_aws_xml:parse(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<Response><Errors><Error><Code>" ++ Code ++ "</Code><Message>" ++ Message ++
+            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>"
+    ),
+    ok = meck:new(rabbitmq_aws, [no_link]),
+    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) ->
+        {error, "Forbidden", {[], Body}}
+    end),
+    {error, Reason} = rqm_ebs:create_volume_snapshot("vol-1", #{}),
+    rqm:format_migration_error(
+        throw, {error, {migration_preparation, {snapshot_failed, "vol-1", Reason}}}
+    ).
