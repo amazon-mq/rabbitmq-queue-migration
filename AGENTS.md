@@ -361,7 +361,8 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 ### `rqm_ebs.erl`
 - `instance_volumes/0` - List all EBS volumes attached to current instance
 - `create_volume_snapshot/1` - Create snapshot for volume with default description
-- `create_volume_snapshot/2` - Create snapshot with custom description
+- `create_volume_snapshot/2` - Create snapshot with custom description and tags
+- `error_code_and_message/1` - Extract the code and message from a parsed EC2 error response
 - `delete_volume_snapshot/1` - Delete snapshot with default region
 - `delete_volume_snapshot/2` - Delete snapshot with specific region
 
@@ -688,7 +689,7 @@ Performance varies significantly based on:
 ### AWS Configuration Requirements
 - **Credentials**: AWS credentials via environment variables, config files, or EC2 instance roles
 - **Region**: AWS region configuration (defaults to us-east-1, should match peer discovery)
-- **Permissions**: EC2 permissions for `ec2:DescribeVolumes`, `ec2:CreateSnapshot`, `ec2:DescribeSnapshots`, and `ec2:DeleteSnapshot`. The plugin does not call `ec2:CreateTags` or `ec2:DescribeInstances`.
+- **Permissions**: EC2 permissions for `ec2:DescribeVolumes`, `ec2:CreateSnapshot`, `ec2:DescribeSnapshots`, `ec2:DeleteSnapshot`, and `ec2:CreateTags` (required since 2.0.0, because `CreateSnapshot` tags the snapshot it creates). The plugin does not call `ec2:DescribeInstances`.
 - **Volume Setup**: RabbitMQ data directory must be on EBS volume at configured device path
 
 ### Snapshot Timing
