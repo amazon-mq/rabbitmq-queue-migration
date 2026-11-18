@@ -12,6 +12,10 @@ The RabbitMQ queue migration plugin requires EC2 API access to:
 - Create snapshots of those volumes (`ec2:CreateSnapshot`)
 - Check snapshot status (`ec2:DescribeSnapshots`)
 - Delete snapshots after successful migration (`ec2:DeleteSnapshot`)
+- Tag snapshots as they are created (`ec2:CreateTags`)
+
+> [!IMPORTANT]
+> **Upgrading from 1.x:** starting with 2.0.0, the plugin tags every snapshot it creates, and EC2 refuses a tagged `CreateSnapshot` request from a role without `ec2:CreateTags`. A role set up for 1.x, which did not need that permission, fails every migration at the snapshot step until you add the `ec2:CreateTags` statement shown in [Step 3](#step-3-attach-permissions-policy). Add it before upgrading.
 
 When running on EC2 instances, the `rabbitmq_aws` SDK automatically retrieves temporary credentials (including session tokens) from the
 EC2 instance metadata service. This requires an IAM instance profile to be attached to each RabbitMQ node.
@@ -268,7 +272,7 @@ aws ec2 delete-snapshot --region us-east-1 --snapshot-id snap-xxxxxxxxxxxxx
      --role-name RabbitMQ-EC2-Snapshot-Role \
      --policy-name EC2-Snapshot-Policy
    ```
-2. Check the policy document includes all required actions
+2. Check the policy document includes all required actions. If the error comes from snapshot creation, check for `ec2:CreateTags` in particular: EC2 returns the same error whether `ec2:CreateSnapshot` or `ec2:CreateTags` was refused.
 3. Ensure no deny policies are overriding the permissions
 
 ### Error: "An error occurred (IncorrectState) when calling the AssociateIamInstanceProfile operation"
@@ -311,7 +315,7 @@ The `rabbitmq_queue_migration` plugin performs the following operations during m
 3. **Monitor Progress**: Calls `ec2:DescribeSnapshots` to check snapshot completion status
 4. **Cleanup Snapshots**: Calls `ec2:DeleteSnapshot` to remove snapshots after successful migration (when `cleanup_snapshots_on_success` is enabled)
 
-Snapshots are created with a `Description` of the form `RabbitMQ migration snapshot <timestamp> on <node>`.
+Snapshots are created with a `Description` of the form `RabbitMQ migration snapshot <timestamp> on <node>`. Each snapshot is tagged in the same `CreateSnapshot` request, which is why `ec2:CreateTags` is required: it gets a copy of the data volume's tags (except reserved `aws:` keys), plus `rabbitmq-queue-migration:purpose=pre-migration`.
 
 The plugin uses the AWS SDK's default credential provider chain, which automatically:
 - Queries the EC2 instance metadata service at `http://169.254.169.254/latest/meta-data/iam/security-credentials/`
@@ -350,7 +354,7 @@ aws ec2 describe-snapshots \
 
 After completing these steps, your RabbitMQ EC2 instances will have the necessary IAM permissions to:
 - Query attached EBS volumes
-- Create snapshots during queue migration
+- Create and tag snapshots during queue migration
 - Monitor snapshot status and delete snapshots after migration completes
 
 The `rabbitmq_aws` library used by this plugin will automatically retrieve temporary credentials from the instance metadata
