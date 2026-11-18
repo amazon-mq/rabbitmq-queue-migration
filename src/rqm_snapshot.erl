@@ -278,7 +278,7 @@ snapshot_tags(VolumeTags) ->
         not lists:prefix("aws:", Key),
         Key =/= ?PURPOSE_TAG_KEY
     ],
-    Kept = lists:sublist(Copied, ?MAX_SNAPSHOT_TAGS - 1),
+    Kept = keep_within_limit(Copied, ?MAX_SNAPSHOT_TAGS - 1),
     case length(Copied) - length(Kept) of
         0 ->
             ok;
@@ -288,6 +288,14 @@ snapshot_tags(VolumeTags) ->
             ])
     end,
     Kept ++ [{?PURPOSE_TAG_KEY, ?PURPOSE_TAG_VALUE}].
+
+%% Keep `Name' when tags must be dropped: it is the tag an IAM policy is most
+%% likely to scope a cluster's snapshots by.
+keep_within_limit(Tags, Limit) when length(Tags) =< Limit ->
+    Tags;
+keep_within_limit(Tags, Limit) ->
+    {Name, Others} = lists:partition(fun({Key, _}) -> Key =:= "Name" end, Tags),
+    Name ++ lists:sublist(Others, Limit - length(Name)).
 
 %% @doc Clean up a snapshot based on the configured snapshot mode
 -spec cleanup_snapshot(snapshot_id()) -> ok | {error, term()}.

@@ -91,6 +91,7 @@
     snapshot_tags_copies_volume_tags_test/1,
     snapshot_tags_skips_reserved_and_purpose_keys_test/1,
     snapshot_tags_respects_ec2_tag_limit_test/1,
+    snapshot_tags_keeps_name_at_ec2_tag_limit_test/1,
 
     % EBS snapshot error reporting tests
     snapshot_unauthorized_error_names_create_tags_test/1,
@@ -185,7 +186,8 @@ groups() ->
             parse_volume_without_tag_set_test,
             snapshot_tags_copies_volume_tags_test,
             snapshot_tags_skips_reserved_and_purpose_keys_test,
-            snapshot_tags_respects_ec2_tag_limit_test
+            snapshot_tags_respects_ec2_tag_limit_test,
+            snapshot_tags_keeps_name_at_ec2_tag_limit_test
         ]},
         %% Not parallel: meck replaces modules node-wide.
         {ebs_snapshot_errors, [], [
@@ -970,6 +972,18 @@ snapshot_tags_respects_ec2_tag_limit_test(_Config) ->
     VolumeTags = [{"key" ++ integer_to_list(N), "v"} || N <- lists:seq(1, 50)],
     Tags = rqm_snapshot:snapshot_tags(VolumeTags),
     ?assertEqual(50, length(Tags)),
+    ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
+
+%% With 50 copyable volume tags one must go to make room for the purpose tag,
+%% and it must not be Name, even when Name comes last.
+snapshot_tags_keeps_name_at_ec2_tag_limit_test(_Config) ->
+    VolumeTags =
+        [{"key" ++ integer_to_list(N), "v"} || N <- lists:seq(1, 49)] ++
+            [{"Name", "my-cluster"}],
+    Tags = rqm_snapshot:snapshot_tags(VolumeTags),
+    ?assertEqual(50, length(Tags)),
+    ?assert(lists:member({"Name", "my-cluster"}, Tags)),
+    ?assertNot(lists:member({"key49", "v"}, Tags)),
     ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
 
 %% Parse a DescribeVolumes item the same way rabbitmq_aws parses the response.
