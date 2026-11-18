@@ -94,7 +94,8 @@
 
     % EBS snapshot error reporting tests
     snapshot_unauthorized_error_names_create_tags_test/1,
-    snapshot_other_error_reports_code_without_hint_test/1
+    snapshot_other_error_reports_code_without_hint_test/1,
+    ebs_snapshot_copies_data_volume_tags_test/1
 ]).
 
 %% Test groups
@@ -189,7 +190,8 @@ groups() ->
         %% Not parallel: meck replaces modules node-wide.
         {ebs_snapshot_errors, [], [
             snapshot_unauthorized_error_names_create_tags_test,
-            snapshot_other_error_reports_code_without_hint_test
+            snapshot_other_error_reports_code_without_hint_test,
+            ebs_snapshot_copies_data_volume_tags_test
         ]}
     ].
 
@@ -1020,3 +1022,64 @@ snapshot_failure_message(Code, Message) ->
     rqm:format_migration_error(
         throw, {error, {migration_preparation, {snapshot_failed, "vol-1", Reason}}}
     ).
+
+%% The instance has a root volume and the RabbitMQ data volume, listed root
+%% first. The CreateSnapshot request must target the data volume and carry the
+%% data volume's tags, not the root volume's.
+ebs_snapshot_copies_data_volume_tags_test(_Config) ->
+    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, ebs),
+    ok = application:set_env(rabbitmq_queue_migration, ebs_volume_device, "/dev/sdh"),
+    DescribeVolumes = rabbitmq_aws_xml:parse(
+        "<DescribeVolumesResponse><volumeSet>" ++
+            describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}]) ++
+            describe_volumes_item("vol-data", "/dev/sdh", [{"Name", "my-cluster"}, {"Team", "t"}]) ++
+            "</volumeSet></DescribeVolumesResponse>"
+    ),
+    CreateSnapshot = rabbitmq_aws_xml:parse(
+        "<CreateSnapshotResponse><snapshotId>snap-1</snapshotId>"
+        "<volumeId>vol-data</volumeId><status>pending</status></CreateSnapshotResponse>"
+    ),
+    ok = meck:new(rabbitmq_aws_config, [no_link]),
+    ok = meck:expect(rabbitmq_aws_config, region, fun() -> {ok, "us-east-1"} end),
+    ok = meck:expect(rabbitmq_aws_config, instance_id, fun() -> {ok, "i-1"} end),
+    ok = meck:new(rabbitmq_aws, [no_link]),
+    ok = meck:expect(rabbitmq_aws, set_region, fun("us-east-1") -> ok end),
+    ok = meck:expect(rabbitmq_aws, api_get_request, fun("ec2", _Path) -> {ok, DescribeVolumes} end),
+    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) ->
+        {ok, {[], CreateSnapshot}}
+    end),
+    try
+        ?assertEqual(
+            {ok, {<<"snap-1">>, <<"vol-data">>, <<"i-1">>}},
+            rqm_snapshot:create_snapshot(<<"/">>)
+        ),
+        Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
+        ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
+        ?assertNotEqual(
+            nomatch,
+            string:find(
+                Body,
+                "&TagSpecification.1.ResourceType=snapshot"
+                "&TagSpecification.1.Tag.1.Key=Name"
+                "&TagSpecification.1.Tag.1.Value=my-cluster"
+                "&TagSpecification.1.Tag.2.Key=Team"
+                "&TagSpecification.1.Tag.2.Value=t"
+                "&TagSpecification.1.Tag.3.Key=rabbitmq-queue-migration%3Apurpose"
+                "&TagSpecification.1.Tag.3.Value=pre-migration"
+                "&Version=2016-11-15"
+            )
+        )
+    after
+        application:unset_env(rabbitmq_queue_migration, snapshot_mode),
+        application:unset_env(rabbitmq_queue_migration, ebs_volume_device)
+    end.
+
+describe_volumes_item(VolumeId, Device, Tags) ->
+    "<item><volumeId>" ++ VolumeId ++
+        "</volumeId><size>8</size><volumeType>gp3</volumeType><status>in-use</status>"
+        "<attachmentSet><item><device>" ++ Device ++
+        "</device><status>attached</status></item></attachmentSet><tagSet>" ++
+        lists:append([
+            "<item><key>" ++ K ++ "</key><value>" ++ V ++ "</value></item>"
+         || {K, V} <- Tags
+        ]) ++ "</tagSet></item>".
