@@ -1918,23 +1918,26 @@ format_migration_error(
     {error,
         {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}
 ) ->
-    case rqm_ebs:error_code_and_message(Details) of
-        {ok, Code, Message} ->
-            iolist_to_binary(
-                io_lib:format("Snapshot creation failed: ~ts - ~ts~ts", [
-                    Code, Message, snapshot_error_hint(Code)
-                ])
-            );
+    %% The AWS message is logged when the snapshot fails but not stored here:
+    %% for UnauthorizedOperation it can name the instance role, and this text
+    %% is shown to every management user who can see migration status.
+    case rqm_ebs:error_code(Details) of
+        {ok, Code} ->
+            rqm_util:unicode_format("Snapshot creation failed: ~ts~ts", [
+                Code, snapshot_error_hint(Code)
+            ]);
         error ->
             <<"Snapshot creation failed">>
     end;
 format_migration_error(Class, Ex) ->
     iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
 
-%% EC2 returns UnauthorizedOperation whether CreateSnapshot or the CreateTags
-%% check for its tags was refused, and 1.x roles lack CreateTags.
+%% EC2 returns UnauthorizedOperation for any refused permission, including the
+%% CreateTags check on a tagged CreateSnapshot, which 1.x roles do not allow.
 snapshot_error_hint("UnauthorizedOperation") ->
-    " (check that the instance role allows ec2:CreateTags, required since 2.0.0; see docs/EC2_SETUP.md)";
+    " (the instance role lacks a required permission; a role set up for 1.x lacks "
+    "ec2:CreateTags, see "
+    "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)";
 snapshot_error_hint(_) ->
     "".
 

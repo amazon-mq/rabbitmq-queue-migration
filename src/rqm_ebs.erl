@@ -15,7 +15,7 @@
     create_volume_snapshot/2,
     delete_volume_snapshot/1,
     delete_volume_snapshot/2,
-    error_code_and_message/1
+    error_code/1
 ]).
 
 -ifdef(TEST).
@@ -121,18 +121,17 @@ delete_volume_snapshot(SnapshotId, Options) ->
         {error, Reason} -> categorize_delete_error(SnapshotId, Reason)
     end.
 
--spec error_code_and_message(term()) -> {ok, string(), string()} | error.
-%% @doc Extract the first error's code and message from a parsed EC2 error `Response'.
+-spec error_code(term()) -> {ok, string()} | error.
+%% @doc Extract the first error's code from a parsed EC2 error `Response'.
 %% @end
-error_code_and_message(ErrorData) when is_list(ErrorData) ->
+error_code(ErrorData) when is_list(ErrorData) ->
     case proplists:get_value("Errors", ErrorData) of
         [{"Error", ErrorProps} | _] when is_list(ErrorProps) ->
-            {ok, proplists:get_value("Code", ErrorProps, ""),
-                proplists:get_value("Message", ErrorProps, "")};
+            {ok, proplists:get_value("Code", ErrorProps, "")};
         _ ->
             error
     end;
-error_code_and_message(_) ->
+error_code(_) ->
     error.
 
 %%----------------------------------------------------------------------------------------------------

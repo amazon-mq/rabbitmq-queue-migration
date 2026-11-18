@@ -1000,34 +1000,41 @@ volume_xml(TagSetXml) ->
 %% EBS Snapshot Error Reporting Tests
 %% =============================================================================
 
+%% The AWS message names the instance role, so it must not reach the stored
+%% migration error.
 snapshot_unauthorized_error_names_create_tags_test(_Config) ->
     ?assertEqual(
         <<
-            "Snapshot creation failed: UnauthorizedOperation - "
-            "You are not authorized to perform this operation. "
-            "(check that the instance role allows ec2:CreateTags, required since 2.0.0; "
-            "see docs/EC2_SETUP.md)"
+            "Snapshot creation failed: UnauthorizedOperation (the instance role lacks a "
+            "required permission; a role set up for 1.x lacks ec2:CreateTags, see "
+            "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)"
         >>,
         snapshot_failure_message(
-            "UnauthorizedOperation", "You are not authorized to perform this operation."
+            "UnauthorizedOperation",
+            "You are not authorized to perform this operation. User: "
+            "arn:aws:sts::111122223333:assumed-role/broker-role/i-1 is not authorized"
         )
     ).
 
+%% A message outside Latin-1 must not crash formatting.
 snapshot_other_error_reports_code_without_hint_test(_Config) ->
     ?assertEqual(
-        <<"Snapshot creation failed: SnapshotCreationPerVolumeRateExceeded - Slow down">>,
-        snapshot_failure_message("SnapshotCreationPerVolumeRateExceeded", "Slow down")
+        <<"Snapshot creation failed: SnapshotCreationPerVolumeRateExceeded">>,
+        snapshot_failure_message(
+            "SnapshotCreationPerVolumeRateExceeded", "Ralentissez, \x{90E8}\x{7F72}"
+        )
     ).
 
 %% Run a CreateSnapshot that EC2 rejects with Code and Message, and return the
 %% migration error that a failed preparation records. The error document is
 %% parsed by rabbitmq_aws_xml, as rabbitmq_aws does for a 4xx response.
 snapshot_failure_message(Code, Message) ->
-    Body = rabbitmq_aws_xml:parse(
+    Xml =
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<Response><Errors><Error><Code>" ++ Code ++ "</Code><Message>" ++ Message ++
-            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>"
-    ),
+            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>",
+    %% httpc hands rabbitmq_aws the body as a list of UTF-8 bytes.
+    Body = rabbitmq_aws_xml:parse(binary_to_list(unicode:characters_to_binary(Xml))),
     ok = meck:new(rabbitmq_aws, [no_link]),
     ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) ->
         {error, "Forbidden", {[], Body}}

@@ -362,7 +362,7 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `instance_volumes/0` - List all EBS volumes attached to current instance
 - `create_volume_snapshot/1` - Create snapshot for volume with default description
 - `create_volume_snapshot/2` - Create snapshot with custom description and tags
-- `error_code_and_message/1` - Extract the code and message from a parsed EC2 error response
+- `error_code/1` - Extract the error code from a parsed EC2 error response
 - `delete_volume_snapshot/1` - Delete snapshot with default region
 - `delete_volume_snapshot/2` - Delete snapshot with specific region
 
