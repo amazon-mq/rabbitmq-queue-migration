@@ -10,7 +10,7 @@
 #     ... a human merges the PR once CI is green ...
 #   ./release.sh tag <version>       # tag the merged commit and push the tag
 #   ./release.sh build <version>     # build the .ez plugin archive
-#   ./release.sh publish <version>   # create the GitHub release
+#   ./release.sh publish <version>   # create or publish the GitHub release
 #
 # This script assumes it is run from within a rabbitmq-server 3.13.x clone,
 # checked out as deps/rabbitmq_queue_migration. That layout is what lets
@@ -299,7 +299,7 @@ cmd_publish() {
     local -r version="$1"
 
     validate_version "$version"
-    require_tools gh
+    require_tools gh jq
     require_env GITHUB_API_TOKEN
 
     local -r ez="$(ez_path "$version")"
@@ -309,6 +309,47 @@ cmd_publish() {
         log_error "archive not found: $ez; run '$0 build $version' first"
         exit 1
     fi
+
+    local release
+    release="$(find_release "$version")"
+    local -r release
+
+    if [[ -z "$release" ]]
+    then
+        create_release "$version" "$ez"
+    elif [[ "$(jq -r .draft <<< "$release")" == true ]]
+    then
+        publish_draft_release "$version" "$ez" "$(jq -r .body <<< "$release")"
+    else
+        log_error "GitHub release $version is already published"
+        exit 1
+    fi
+}
+
+# Print the draft flag and notes of the GitHub release for tag $1 as JSON, or
+# nothing if there is none. The releases API lists drafts to users who can
+# push to the repository.
+find_release() {
+    local -r version="$1"
+
+    gh api --paginate 'repos/{owner}/{repo}/releases' \
+        --jq ".[] | select(.tag_name == \"$version\") | {draft, body}"
+}
+
+require_remote_tag() {
+    local -r version="$1"
+    local output
+
+    if ! output="$(gh api "repos/{owner}/{repo}/git/ref/tags/$version" 2>&1)"
+    then
+        log_error "tag $version is not on GitHub ($output); run '$0 tag $version' first"
+        exit 1
+    fi
+}
+
+create_release() {
+    local -r version="$1"
+    local -r ez="$2"
 
     log_info "Publishing GitHub release $version with $ez"
 
@@ -328,6 +369,50 @@ cmd_publish() {
     log_success "publish complete. Optionally attach the GitHub milestone to the release."
 }
 
+# Publish a draft release prepared ahead of time, keeping its title and
+# hand-written notes and appending the notes GitHub generates, which
+# `gh release create --generate-notes` would otherwise have produced.
+publish_draft_release() {
+    local -r version="$1"
+    local -r ez="$2"
+    local -r draft_notes="$3"
+
+    # Publishing a draft whose tag is missing makes GitHub create the tag at
+    # the draft's target commit, unsigned, so check before changing anything.
+    # `gh release edit --verify-tag` does not check unless --tag is also given.
+    require_remote_tag "$version"
+
+    log_info "Publishing the draft GitHub release $version with $ez"
+
+    if ! confirm "Publish the draft GitHub release $version (marks it --latest)?"
+    then
+        log_warning "Skipped release publication"
+        return 0
+    fi
+
+    local notes="$draft_notes"
+    if [[ "$draft_notes" == *'**Full Changelog**'* ]]
+    then
+        log_warning "the draft already contains generated notes; not adding them again"
+    else
+        local generated_notes
+        generated_notes="$(gh api --method POST 'repos/{owner}/{repo}/releases/generate-notes' \
+            -f tag_name="$version" --jq .body)"
+        notes="$draft_notes"$'\n\n'"$generated_notes"
+    fi
+    local -r notes
+
+    run gh release upload "$version" "$ez" --clobber
+    run gh release edit "$version" \
+        --tag "$version" \
+        --verify-tag \
+        --draft=false \
+        --latest \
+        --notes "$notes"
+
+    log_success "publish complete. Optionally attach the GitHub milestone to the release."
+}
+
 show_usage() {
     cat << EOF
 Usage: $0 [--dry-run] [--yes] <command> <version>
@@ -338,7 +423,8 @@ Commands:
   tag <version>       After the PR merges, update main and create/push the
                       signed release tag.
   build <version>     Build the .ez plugin archive (must be run at the tag).
-  publish <version>   Create the GitHub release with the built .ez.
+  publish <version>   Create the GitHub release with the built .ez, or publish
+                      an existing draft release, appending generated notes.
 
 Options:
   --dry-run   Print state-changing commands without executing them.
