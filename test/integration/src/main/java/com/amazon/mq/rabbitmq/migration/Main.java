@@ -30,6 +30,9 @@ public class Main {
     } else if (args.length > 0 && args[0].equals("allow-message-ttl-test")) {
       String[] testArgs = Arrays.copyOfRange(args, 1, args.length);
       AllowMessageTtlTest.main(testArgs);
+    } else if (args.length > 0 && args[0].equals("authorization-test")) {
+      String[] testArgs = Arrays.copyOfRange(args, 1, args.length);
+      AuthorizationTest.main(testArgs);
     } else if (args.length > 0 && args[0].equals("setup-env")) {
       String[] setupArgs = Arrays.copyOfRange(args, 1, args.length);
       MigrationTestSetup.main(setupArgs);

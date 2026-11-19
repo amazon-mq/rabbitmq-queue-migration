@@ -4,6 +4,8 @@ This is the end-to-end operator path for running a migration: check readiness, s
 
 All examples use the default vhost (`/`, URL-encoded `%2F`) and `guest:guest`. The vhost is always taken from the URL path, never the request body.
 
+Checking readiness and monitoring need a user with the `monitoring` tag; starting and interrupting a migration need the `administrator` tag (`guest` has it). In the management UI, users without the `administrator` tag can watch migrations but do not see the Start and Interrupt controls. See [Authentication](HTTP_API.md#authentication).
+
 ---
 
 ## Before you start

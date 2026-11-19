@@ -35,25 +35,27 @@ This will:
 1. Build the plugin as an ez file
 2. Create custom Docker images with the plugin
 3. Start a 3-node RabbitMQ cluster
-4. Run six end-to-end test scenarios against that cluster:
+4. Run eight end-to-end test scenarios against that cluster:
    - `end-to-end` - default migration (10 queues, 1000 messages)
    - `interrupt-test` - interrupting a migration mid-flight and resuming
    - `skip-unsuitable-test` - migration with `skip_unsuitable_queues=true`
    - `batch-test` - batch migration
    - `empty-queue-test` - migration of zero-message queues (fast path)
    - `already-quorum-test` - migration when destination type is already quorum
+   - `allow-message-ttl-test` - migration of queues with a queue-level message TTL, using `allow_message_ttl`
+   - `authorization-test` - which user tags can call each HTTP API endpoint
 5. Validate each scenario's success
 6. Stop the cluster
 
-**Duration:** ~10-15 minutes for the full six-scenario run; the
+**Duration:** ~10-15 minutes for the full eight-scenario run; the
 `end-to-end` scenario alone is ~2-3 minutes.
 
 ## What Gets Tested
 
-The `integration-test` target runs six scenarios against the same
+The `integration-test` target runs eight scenarios against the same
 3-node Docker cluster: `end-to-end`, `interrupt-test`,
-`skip-unsuitable-test`, `batch-test`, `empty-queue-test`, and
-`already-quorum-test`. The phase breakdown below describes the
+`skip-unsuitable-test`, `batch-test`, `empty-queue-test`,
+`already-quorum-test`, `allow-message-ttl-test` and `authorization-test`. The phase breakdown below describes the
 `end-to-end` scenario, which is the most thorough; the other
 scenarios reuse most of the same setup and validation but with
 narrower payloads or specific options.

@@ -86,11 +86,13 @@ SPDX-License-Identifier: Apache-2.0
     <div id="compatibility-results"></div>
   </div>
 
+  <% if (user_administrator) { %>
   <div class="section">
     <h2>Start Migration</h2>
     <p>Start migration for the selected virtual host.</p>
     <button id="start-migration-btn" type="button">Start Migration</button>
   </div>
+  <% } %>
 </div>
 
 <div id="migration-in-progress" class="section" style="<%= migrationInProgress ? '' : 'display: none;' %>">
@@ -135,7 +137,7 @@ SPDX-License-Identifier: Apache-2.0
               </td>
               <td>
                 <button type="button" onclick="window.location.hash='#/queue-migration/status/<%= queue_migration_status.migrations[i].id %>'" style="display: inline-block; margin-right: 5px;">View Details</button>
-                <% if (queue_migration_status.migrations[i].status === 'in_progress') { %>
+                <% if (user_administrator && queue_migration_status.migrations[i].status === 'in_progress') { %>
                   <button type="button" class="interrupt-migration-btn" data-migration-id="<%= queue_migration_status.migrations[i].id %>" style="display: inline-block;">Interrupt</button>
                 <% } %>
               </td>
