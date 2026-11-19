@@ -925,25 +925,21 @@ build_snapshot_body_with_tags_test(_Config) ->
     ).
 
 parse_volume_keeps_tags_test(_Config) ->
-    VolumeXml = volume_xml(
-        "<tagSet>"
-        "<item><key>Name</key><value>my-cluster</value></item>"
-        "<item><key>Initialized</key><value>true</value></item>"
-        "</tagSet>"
+    Volume = rqm_ebs:parse_volume(
+        parsed_volume_item([{"Name", "my-cluster"}, {"Initialized", "true"}])
     ),
-    Volume = rqm_ebs:parse_volume(VolumeXml),
     ?assertEqual("vol-1", proplists:get_value(volume_id, Volume)),
     ?assertEqual(
         [{device, "/dev/sdh"}, {state, "attached"}],
         proplists:get_value(attachment, Volume)
     ),
     ?assertEqual(
-        lists:sort([{"Name", "my-cluster"}, {"Initialized", "true"}]),
-        lists:sort(proplists:get_value(tags, Volume))
+        [{"Name", "my-cluster"}, {"Initialized", "true"}],
+        proplists:get_value(tags, Volume)
     ).
 
 parse_volume_without_tag_set_test(_Config) ->
-    Volume = rqm_ebs:parse_volume(volume_xml("")),
+    Volume = rqm_ebs:parse_volume(parsed_volume_item(no_tag_set)),
     ?assertEqual([], proplists:get_value(tags, Volume)).
 
 snapshot_tags_copies_volume_tags_test(_Config) ->
@@ -987,13 +983,8 @@ snapshot_tags_keeps_name_at_ec2_tag_limit_test(_Config) ->
     ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
 
 %% Parse a DescribeVolumes item the same way rabbitmq_aws parses the response.
-volume_xml(TagSetXml) ->
-    Xml =
-        "<item><volumeId>vol-1</volumeId><size>200</size><volumeType>gp3</volumeType>"
-        "<status>in-use</status>"
-        "<attachmentSet><item><device>/dev/sdh</device><status>attached</status></item>"
-        "</attachmentSet>" ++ TagSetXml ++ "</item>",
-    [{"item", Props}] = rabbitmq_aws_xml:parse(Xml),
+parsed_volume_item(Tags) ->
+    [{"item", Props}] = rabbitmq_aws_xml:parse(describe_volumes_item("vol-1", "/dev/sdh", Tags)),
     {"item", Props}.
 
 %% =============================================================================
@@ -1095,12 +1086,20 @@ ebs_snapshot_copies_data_volume_tags_test(_Config) ->
         application:unset_env(rabbitmq_queue_migration, ebs_volume_device)
     end.
 
+%% A DescribeVolumes <item>; `no_tag_set' omits the <tagSet> element, as EC2
+%% does for a volume without tags.
 describe_volumes_item(VolumeId, Device, Tags) ->
     "<item><volumeId>" ++ VolumeId ++
         "</volumeId><size>8</size><volumeType>gp3</volumeType><status>in-use</status>"
         "<attachmentSet><item><device>" ++ Device ++
-        "</device><status>attached</status></item></attachmentSet><tagSet>" ++
+        "</device><status>attached</status></item></attachmentSet>" ++
+        tag_set_xml(Tags) ++ "</item>".
+
+tag_set_xml(no_tag_set) ->
+    "";
+tag_set_xml(Tags) ->
+    "<tagSet>" ++
         lists:append([
             "<item><key>" ++ K ++ "</key><value>" ++ V ++ "</value></item>"
          || {K, V} <- Tags
-        ]) ++ "</tagSet></item>".
+        ]) ++ "</tagSet>".

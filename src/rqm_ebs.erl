@@ -214,11 +214,10 @@ build_snapshot_body(VolumeId, Description, Tags, DryRun) ->
 build_tag_specification([]) ->
     "";
 build_tag_specification(Tags) ->
-    Indexed = lists:zip(lists:seq(1, length(Tags)), Tags),
     "&TagSpecification.1.ResourceType=snapshot" ++
-        lists:append([build_tag_param(N, Key, Value) || {N, {Key, Value}} <- Indexed]).
+        lists:append([build_tag_param(N, Key, Value) || {N, {Key, Value}} <- lists:enumerate(Tags)]).
 
--spec build_tag_param(pos_integer(), string() | binary(), string() | binary()) -> string().
+-spec build_tag_param(pos_integer(), string(), string()) -> string().
 build_tag_param(N, Key, Value) ->
     Prefix = "&TagSpecification.1.Tag." ++ integer_to_list(N),
     Prefix ++ ".Key=" ++ uri_string:quote(unicode:characters_to_list(Key)) ++
