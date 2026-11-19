@@ -186,6 +186,9 @@ accept_migration_start(VHost, ReqData, {EndpointType, Context} = ContextArg) ->
 
 start_validated_migration(Opts0, ReqData, {EndpointType, Context}) ->
     % First, run validation synchronously to catch errors before spawning
+    % rqm:start/1 runs the whole validation chain again before it creates the
+    % migration record, so every check runs twice per start, including the
+    % EC2 calls in snapshot_permitted (#123).
     case rqm:validate_migration(Opts0) of
         ok ->
             MigrationId = rqm_util:generate_migration_id(),
