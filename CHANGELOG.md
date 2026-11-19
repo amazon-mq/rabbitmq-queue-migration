@@ -5,7 +5,7 @@
 **Merged pull requests:**
 
 - Show the deployed plugin version as a link in the management UI, and expose it in the `version` field of the status and `503` init-state HTTP responses
-- Require the `administrator` tag for the HTTP API endpoints that start, interrupt or change a migration; reading status and the compatibility check still need `monitoring`. The status update endpoint now accepts only `rollback_completed`, and `GET` on the `start` and `interrupt` endpoints returns `405`
+- Require the `administrator` tag for the HTTP API endpoints that start, interrupt or change a migration; reading status and the compatibility check still need `monitoring`. The status update endpoint now accepts only `rollback_completed`, `GET` on the `start` and `interrupt` endpoints returns `405`, and `HEAD` on the `check` endpoint returns `405` instead of `500`
 
 ## [1.2.1](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.1) (2026-07-13)
 

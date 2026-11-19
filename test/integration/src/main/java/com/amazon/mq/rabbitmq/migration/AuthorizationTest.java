@@ -111,25 +111,30 @@ public class AuthorizationTest {
       String defaultStartPath = "/queue-migration/start";
       String interruptPath = "/queue-migration/interrupt/" + migrationId;
       String badStatus = "{\"status\":\"foo_bar\"}";
+      // A status update that got through authorization would be stored, so Phase 5 can see it.
+      String rollbackCompleted = "{\"status\":\"rollback_completed\"}";
 
       // A monitoring user is refused only on the admin routes, with the admin reason. A
-      // management user fails the monitoring check; a user with no tags is refused before it.
+      // management user fails whichever tag check the route needs; a user with no tags is
+      // refused before it.
       expectAllowed(MONITORING_USER, "GET", "/queue-migration/status", null, 200);
       expectAllowed(MONITORING_USER, "GET", statusPath, null, 200);
       expectAllowed(MONITORING_USER, "POST", checkPath, "{}", 200);
       expectRefused(MONITORING_USER, "POST", emptyStartPath, "{}", NOT_ADMIN);
       expectRefused(MONITORING_USER, "POST", defaultStartPath, "{}", NOT_ADMIN);
       expectRefused(MONITORING_USER, "POST", interruptPath, null, NOT_ADMIN);
-      expectRefused(MONITORING_USER, "POST", statusPath, badStatus, NOT_ADMIN);
+      expectRefused(MONITORING_USER, "POST", statusPath, rollbackCompleted, NOT_ADMIN);
       for (String user : List.of(MANAGEMENT_USER, NO_TAGS_USER)) {
-        String reason = MANAGEMENT_USER.equals(user) ? NOT_MONITOR : NOT_MANAGEMENT;
-        expectRefused(user, "GET", "/queue-migration/status", null, reason);
-        expectRefused(user, "GET", statusPath, null, reason);
-        expectRefused(user, "POST", checkPath, "{}", reason);
-        expectRefused(user, "POST", emptyStartPath, "{}", null);
-        expectRefused(user, "POST", defaultStartPath, "{}", null);
-        expectRefused(user, "POST", interruptPath, null, null);
-        expectRefused(user, "POST", statusPath, badStatus, null);
+        boolean management = MANAGEMENT_USER.equals(user);
+        String readReason = management ? NOT_MONITOR : NOT_MANAGEMENT;
+        String adminReason = management ? NOT_ADMIN : NOT_MANAGEMENT;
+        expectRefused(user, "GET", "/queue-migration/status", null, readReason);
+        expectRefused(user, "GET", statusPath, null, readReason);
+        expectRefused(user, "POST", checkPath, "{}", readReason);
+        expectRefused(user, "POST", emptyStartPath, "{}", adminReason);
+        expectRefused(user, "POST", defaultStartPath, "{}", adminReason);
+        expectRefused(user, "POST", interruptPath, null, adminReason);
+        expectRefused(user, "POST", statusPath, rollbackCompleted, adminReason);
       }
       // Reachability as administrator: each admin route answers with something other than 401.
       expectAllowed(adminUser, "GET", "/queue-migration/status", null, 200);
@@ -157,7 +162,7 @@ public class AuthorizationTest {
               + "\"}",
           400);
       check("completed".equals(storedStatus(migrationId)), "a refused status value was stored");
-      expectAllowed(adminUser, "POST", statusPath, "{\"status\":\"rollback_completed\"}", 200);
+      expectAllowed(adminUser, "POST", statusPath, rollbackCompleted, 200);
       check(
           "rollback_completed".equals(storedStatus(migrationId)),
           "rollback_completed was accepted but not stored");
@@ -206,17 +211,11 @@ public class AuthorizationTest {
         user + " " + method + " " + path + ": expected " + expectedStatus + ", got " + r);
   }
 
-  /**
-   * The request must be refused by authorization: a 401 whose reason, when given, is the expected
-   * one. A null reason accepts any 401 from the management plugin.
-   */
+  /** The request must be refused by authorization: a 401 with the expected reason. */
   private static void expectRefused(
       String user, String method, String path, String body, String reason) throws Exception {
     Response r = sendAs(user, method, path, body);
-    boolean ok = r.status == 401;
-    if (ok && reason != null) {
-      ok = reason.equals(mapper.readTree(r.body).path("reason").asText());
-    }
+    boolean ok = r.status == 401 && reason.equals(mapper.readTree(r.body).path("reason").asText());
     check(ok, user + " " + method + " " + path + ": expected 401 " + reason + ", got " + r);
   }
 

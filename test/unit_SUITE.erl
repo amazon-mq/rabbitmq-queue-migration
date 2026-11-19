@@ -81,7 +81,10 @@
     message_ttl_opts_without_flag_test/1,
 
     % Plugin version tests
-    plugin_version_test/1
+    plugin_version_test/1,
+
+    % HTTP API authorization tests
+    requires_admin_test/1
 ]).
 
 %% Test groups
@@ -96,7 +99,8 @@ all() ->
         {group, migration_checks},
         {group, queue_naming},
         {group, allow_message_ttl_options},
-        {group, plugin_version}
+        {group, plugin_version},
+        {group, http_authorization}
     ].
 
 groups() ->
@@ -161,6 +165,9 @@ groups() ->
         ]},
         {plugin_version, [], [
             plugin_version_test
+        ]},
+        {http_authorization, [parallel], [
+            requires_admin_test
         ]}
     ].
 
@@ -861,3 +868,38 @@ plugin_version_test(_Config) ->
     ?assertNotEqual(<<"unknown">>, Version),
     {ok, Vsn} = application:get_key(rabbitmq_queue_migration, vsn),
     ?assertEqual(unicode:characters_to_binary(Vsn), Version).
+
+%% Which endpoint and method combinations need the administrator tag rather
+%% than monitoring. An endpoint or method not listed here must need
+%% administrator.
+requires_admin_test(_Config) ->
+    Cases = [
+        {status_list, <<"GET">>, false},
+        {status_list, <<"HEAD">>, false},
+        {status_detail, <<"GET">>, false},
+        {status_detail, <<"HEAD">>, false},
+        {rollback_pending, <<"GET">>, false},
+        {rollback_pending, <<"HEAD">>, false},
+        {check, <<"POST">>, false},
+        {check, <<"OPTIONS">>, false},
+        {start, <<"OPTIONS">>, false},
+        {status_detail, <<"POST">>, true},
+        {start, <<"POST">>, true},
+        {start_vhost, <<"POST">>, true},
+        {interrupt, <<"POST">>, true},
+        {check, <<"GET">>, true},
+        {check, <<"HEAD">>, true},
+        {start, <<"GET">>, true},
+        {interrupt, <<"GET">>, true},
+        {status_list, <<"POST">>, true},
+        {status_list, <<"DELETE">>, true},
+        {rollback_pending, <<"PUT">>, true},
+        {some_future_endpoint, <<"GET">>, true}
+    ],
+    [
+        ?assertEqual({Endpoint, Method, Expected}, {
+            Endpoint, Method, rqm_mgmt:requires_admin(Endpoint, Method)
+        })
+     || {Endpoint, Method, Expected} <- Cases
+    ],
+    ok.

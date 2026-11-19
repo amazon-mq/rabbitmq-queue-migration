@@ -22,7 +22,8 @@
 %% Exported for testing
 -ifdef(TEST).
 -export([
-    parse_all_options/2
+    parse_all_options/2,
+    requires_admin/2
 ]).
 -endif.
 
