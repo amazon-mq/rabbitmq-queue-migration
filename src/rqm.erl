@@ -1941,7 +1941,10 @@ format_migration_error(Class, Ex) ->
 %% EC2 returns UnauthorizedOperation for any refused permission, including the
 %% CreateTags check on a tagged CreateSnapshot, which 1.x roles do not allow.
 snapshot_error_hint("UnauthorizedOperation") ->
-    " (the instance role lacks a required permission; " ?MISSING_CREATE_TAGS_HINT ")";
+    " (the plugin's AWS credentials, normally the EC2 instance role, lack a required "
+    "permission; "
+    ?MISSING_CREATE_TAGS_HINT
+    ")";
 snapshot_error_hint(_) ->
     "".
 

@@ -216,7 +216,7 @@ See [Plugin Initialization](#plugin-initialization) for the full lifecycle of `i
 
 **Error:** `EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on N node(s)`
 
-**Cause:** In `ebs` snapshot mode, the plugin sends each node's `CreateSnapshot` request, tags included, with `DryRun` set before it starts a migration, and EC2 refused it on the nodes listed. Since 2.0.0 the plugin tags its snapshots, so the instance role needs `ec2:CreateTags` as well as `ec2:CreateSnapshot`; a role set up for 1.x lacks `ec2:CreateTags`. A tag-scoped policy can also refuse a node whose data volume lacks the tag the policy requires.
+**Cause:** In `ebs` snapshot mode, the plugin sends each node's `CreateSnapshot` request, tags included, with `DryRun` set before it starts a migration, and EC2 refused it on the nodes listed. Since 2.0.0 the plugin tags its snapshots, so the AWS credentials the plugin uses, normally the EC2 instance role, need `ec2:CreateTags` as well as `ec2:CreateSnapshot`; a role set up for 1.x lacks `ec2:CreateTags`. A tag-scoped policy can also refuse a node whose data volume lacks the tag the policy requires.
 
 **Solution:** Add the permissions shown in [EC2 Setup](EC2_SETUP.md#step-3-attach-permissions-policy), or tag the listed nodes' data volumes as the policy requires, then start the migration again. The broker log on each listed node has EC2's full error. Nothing was disconnected: the check runs before migration preparation.
 

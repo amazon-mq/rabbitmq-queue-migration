@@ -1027,8 +1027,9 @@ parsed_volume_item(Tags) ->
 snapshot_unauthorized_error_names_create_tags_test(_Config) ->
     ?assertEqual(
         <<
-            "Snapshot creation failed: UnauthorizedOperation (the instance role lacks a "
-            "required permission; a role set up for 1.x lacks ec2:CreateTags, see "
+            "Snapshot creation failed: UnauthorizedOperation (the plugin's AWS credentials, "
+            "normally the EC2 instance role, lack a required permission; "
+            "a role set up for 1.x lacks ec2:CreateTags, see "
             "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)"
         >>,
         snapshot_failure_message(
@@ -1107,7 +1108,8 @@ snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
     ?assertEqual(
         rqm_util:unicode_format(
             "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on 1 node(s): ~ts. "
-            "The instance role must allow ec2:CreateSnapshot and ec2:CreateTags; "
+            "The AWS credentials the plugin uses (normally the EC2 instance role) must allow "
+            "ec2:CreateSnapshot and ec2:CreateTags; "
             "a role set up for 1.x lacks ec2:CreateTags, see "
             "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md",
             [node()]
@@ -1115,12 +1117,27 @@ snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
         rqm_checks:format_snapshot_not_permitted_error(BadNodes)
     ).
 
-%% No AWS module is mocked here, so any EC2 call would fail the test.
+%% Outside ebs mode the check must not touch EC2 at all. The check fails open,
+%% so a return of ok alone would not show that; count the calls instead.
 snapshot_permitted_outside_ebs_mode_test(_Config) ->
-    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, none),
-    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
-    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, tar),
-    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()).
+    %% Expectations make meck record any call; an unexpected function would
+    %% raise undef without being counted.
+    ok = meck:new(rabbitmq_aws_config, [no_link]),
+    ok = meck:expect(rabbitmq_aws_config, region, fun() -> {ok, "us-east-1"} end),
+    ok = meck:expect(rabbitmq_aws_config, instance_id, fun() -> {ok, "i-1"} end),
+    ok = meck:new(rabbitmq_aws, [no_link]),
+    ok = meck:expect(rabbitmq_aws, set_region, fun(_) -> ok end),
+    ok = meck:expect(rabbitmq_aws, api_get_request, fun(_, _) -> {error, unexpected} end),
+    ok = meck:expect(rabbitmq_aws, post, fun(_, _, _, _) -> {error, unexpected} end),
+    lists:foreach(
+        fun(Mode) ->
+            ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, Mode),
+            ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted())
+        end,
+        [none, tar]
+    ),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws_config, '_', '_')),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws, '_', '_')).
 
 %% Throttling says nothing about permissions, so it must not block migration.
 snapshot_dry_run_throttled_passes_test(_Config) ->
@@ -1150,13 +1167,22 @@ migration_error_with_non_latin1_queue_name_test(_Config) ->
     lists:foreach(
         fun(Name) ->
             Queue = #resource{virtual_host = <<"/">>, kind = queue, name = Name},
-            Message = rqm:format_migration_error(
-                throw, {migration_failed_no_rollback, {errors, [{error, Queue, timeout}]}}
-            ),
             ?assertEqual(
                 <<"Migration failed: 1 error(s), 0 aborted. No rollback needed. First error: ",
                     Name/binary, " - timeout">>,
-                Message
+                rqm:format_migration_error(
+                    throw, {migration_failed_no_rollback, {errors, [{error, Queue, timeout}]}}
+                )
+            ),
+            %% The shape a failed queue worker reports.
+            ?assertEqual(
+                <<"Migration failed: 1 error(s), 0 aborted. Rollback pending. First error: ",
+                    Name/binary, " - timeout">>,
+                rqm:format_migration_error(
+                    error,
+                    {migration_failed_rollback_pending,
+                        {errors, [{error, Queue, {exit, timeout, []}}]}}
+                )
             )
         end,
         [<<"\x{6CE8}\x{6587}"/utf8>>, <<"caf\x{E9}"/utf8>>]

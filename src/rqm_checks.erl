@@ -541,27 +541,25 @@ check_snapshot_permitted_on_all_nodes() ->
         Nodes,
         erpc:multicall(Nodes, rqm_snapshot, check_snapshot_permitted, [], ?THIRTY_SECONDS_MS)
     ),
-    lists:foreach(
-        fun({N, R}) -> log_unchecked_node(N, R) end,
-        [{N, R} || {N, R} <- Results, not is_snapshot_check_result(R)]
-    ),
-    case [N || {N, {ok, {error, {snapshot_not_permitted, _}}}} <- Results] of
+    case lists:filtermap(fun refused_node/1, Results) of
         [] -> ok;
         Refused -> {error, {snapshot_not_permitted_on_nodes, Refused}}
     end.
 
-is_snapshot_check_result({ok, ok}) -> true;
-is_snapshot_check_result({ok, {error, {snapshot_not_permitted, _}}}) -> true;
-is_snapshot_check_result(_) -> false.
-
-log_unchecked_node(Node, Result) ->
-    ?LOG_WARNING("rqm: snapshot permissions not checked on node ~tp: ~tp", [Node, Result]).
+refused_node({_Node, {ok, ok}}) ->
+    false;
+refused_node({Node, {ok, {error, {snapshot_not_permitted, _}}}}) ->
+    {true, Node};
+refused_node({Node, Result}) ->
+    ?LOG_WARNING("rqm: snapshot permissions not checked on node ~tp: ~tp", [Node, Result]),
+    false.
 
 -spec format_snapshot_not_permitted_error([node()]) -> binary().
 format_snapshot_not_permitted_error(RefusedNodes) ->
     rqm_util:unicode_format(
         "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on ~b node(s): ~ts. "
-        "The instance role must allow ec2:CreateSnapshot and ec2:CreateTags; "
+        "The AWS credentials the plugin uses (normally the EC2 instance role) must allow "
+        "ec2:CreateSnapshot and ec2:CreateTags; "
         ?MISSING_CREATE_TAGS_HINT,
         [length(RefusedNodes), lists:join(", ", [atom_to_list(N) || N <- RefusedNodes])]
     ).

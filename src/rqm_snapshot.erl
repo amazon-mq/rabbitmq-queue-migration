@@ -89,6 +89,7 @@ create_snapshot(ebs, VHost) ->
                 proplists:get_value(tags, Volume, [])
             );
         {error, _} = Error ->
+            ?LOG_ERROR("rqm: failed to find the EBS data volume: ~p", [Error]),
             Error
     end;
 %% @doc Skip snapshot creation when mode is none
@@ -256,11 +257,9 @@ discover_data_volume() ->
                 {ok, Volume} ->
                     {ok, InstanceId, Volume};
                 {error, Reason} ->
-                    ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
                     {error, {volume_discovery_failed, Reason}}
             end;
         {error, Reason} ->
-            ?LOG_ERROR("rqm: failed to discover EBS volumes: ~p", [Reason]),
             {error, {volume_discovery_failed, Reason}}
     end.
 
