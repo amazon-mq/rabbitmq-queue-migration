@@ -128,7 +128,7 @@ aws iam put-role-policy \
 }
 ```
 
-`CreateSnapshot` is authorized against both the source volume and the new snapshot, hence the two statements: the first allows snapshotting only this cluster's volumes, the second requires the new snapshot to carry the cluster's tag. The `DeleteSnapshot` statement lets the plugin delete only this cluster's migration snapshots. `DescribeVolumes` and `DescribeSnapshots` do not support resource-level permissions, so they stay on `"Resource": "*"`.
+`CreateSnapshot` is authorized against both the source volume and the new snapshot, hence the two statements: the first allows snapshotting only this cluster's volumes, the second requires the new snapshot to carry the cluster's tag. The `DeleteSnapshot` statement lets the plugin delete only this cluster's migration snapshots. `DescribeVolumes` and `DescribeSnapshots` do not support resource-level permissions, so they stay on `"Resource": "*"`. Scope by a tag you set yourself: the plugin does not copy `aws:` tags, such as `aws:cloudformation:stack-name`, because EC2 does not accept them in a request, so a policy that requires one on the new snapshot refuses every migration.
 
 ### Step 4: Create Instance Profile
 
@@ -237,7 +237,7 @@ instances are configured with `HttpTokens: required`, which enforces IMDSv2.
 
 ### Test Snapshot Creation
 
-Create a test snapshot to verify full permissions:
+Create a test snapshot to verify full permissions. The plugin always tags its snapshots, so tag the test snapshot the same way; an untagged request does not exercise `ec2:CreateTags`. Replace `my-cluster` with the value of the data volume's `Name` tag:
 
 ```bash
 # Get the volume ID of the RabbitMQ data volume
@@ -248,11 +248,12 @@ VOLUME_ID=$(aws ec2 describe-volumes \
   --query 'Volumes[0].VolumeId' \
   --output text)
 
-# Create a test snapshot
+# Create a test snapshot, tagged as the plugin tags its snapshots
 aws ec2 create-snapshot \
   --region us-east-1 \
   --volume-id "$VOLUME_ID" \
-  --description "Test snapshot for RabbitMQ queue migration"
+  --description "Test snapshot for RabbitMQ queue migration" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=my-cluster},{Key=rabbitmq-queue-migration:purpose,Value=pre-migration}]'
 ```
 
 If successful, you'll receive a snapshot ID. Clean up the test snapshot:
