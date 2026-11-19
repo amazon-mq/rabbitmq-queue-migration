@@ -22,7 +22,8 @@
 %% Exported for testing
 -ifdef(TEST).
 -export([
-    parse_all_options/2
+    parse_all_options/2,
+    requires_admin/2
 ]).
 -endif.
 
@@ -78,14 +79,20 @@ content_types_provided(ReqData, {EndpointType, Context}) ->
     {[{<<"application/json">>, to_json}], ReqData, {EndpointType, Context}}.
 
 allowed_methods(ReqData, {check, Context}) ->
-    {[<<"POST">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {check, Context}};
+    {[<<"POST">>, <<"OPTIONS">>], ReqData, {check, Context}};
 allowed_methods(ReqData, {EndpointType, Context}) when
     EndpointType =:= status_list;
     EndpointType =:= rollback_pending
 ->
     {[<<"GET">>, <<"HEAD">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}};
-allowed_methods(ReqData, {EndpointType, Context}) ->
-    {[<<"GET">>, <<"HEAD">>, <<"POST">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}}.
+allowed_methods(ReqData, {EndpointType, Context}) when
+    EndpointType =:= start;
+    EndpointType =:= start_vhost;
+    EndpointType =:= interrupt
+->
+    {[<<"POST">>, <<"OPTIONS">>], ReqData, {EndpointType, Context}};
+allowed_methods(ReqData, {status_detail, Context}) ->
+    {[<<"GET">>, <<"HEAD">>, <<"POST">>, <<"OPTIONS">>], ReqData, {status_detail, Context}}.
 
 resource_exists(ReqData, {status_detail, Context}) ->
     MigrationIdUrlEncoded = cowboy_req:binding(migration_id, ReqData),
@@ -134,13 +141,33 @@ to_json(ReqData, {status_detail, #context{impl = {migration_id, MigrationId}}} =
         migration => migration_to_json_detail(Migration),
         queues => [queue_status_to_json(Q) || Q <- QueueStatuses]
     }),
-    {Json, ReqData, {status_detail, Context}};
-to_json(ReqData, {interrupt, Context}) ->
-    {halt, ReqData, {interrupt, Context}}.
+    {Json, ReqData, {status_detail, Context}}.
 
 is_authorized(ReqData, {EndpointType, Context}) ->
-    {Res, RD, C} = rabbit_mgmt_util:is_authorized_monitor(ReqData, Context),
+    {Res, RD, C} =
+        case requires_admin(EndpointType, cowboy_req:method(ReqData)) of
+            true -> rabbit_mgmt_util:is_authorized_admin(ReqData, Context);
+            false -> rabbit_mgmt_util:is_authorized_monitor(ReqData, Context)
+        end,
     {Res, RD, {EndpointType, C}}.
+
+%% Reading status and running the compatibility check, which changes nothing,
+%% need the monitoring tag. Everything else, including any route or method
+%% added later and not listed here, needs administrator.
+%% The management plugin lets OPTIONS through without checking credentials;
+%% this clause only keeps the policy complete.
+requires_admin(_EndpointType, <<"OPTIONS">>) ->
+    false;
+requires_admin(check, <<"POST">>) ->
+    false;
+requires_admin(EndpointType, Method) when
+    (EndpointType =:= status_list orelse EndpointType =:= status_detail orelse
+        EndpointType =:= rollback_pending) andalso
+        (Method =:= <<"GET">> orelse Method =:= <<"HEAD">>)
+->
+    false;
+requires_admin(_EndpointType, _Method) ->
+    true.
 
 bad_request(ErrorJson, ReqData, {EndpointType, Context}) ->
     ReqData2 = cowboy_req:set_resp_body(ErrorJson, ReqData),
@@ -325,9 +352,8 @@ accept_status_update(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
         {ok, MigrationId} ->
             {ok, Body, ReqData2} = cowboy_req:read_body(ReqData),
             case rabbit_json:try_decode(Body) of
-                {ok, #{<<"status">> := StatusBin}} ->
-                    Status = binary_to_existing_atom(StatusBin, utf8),
-                    case rqm_db:update_migration_status(MigrationId, Status) of
+                {ok, #{<<"status">> := <<"rollback_completed">> = StatusBin}} ->
+                    case rqm_db:update_migration_status(MigrationId, rollback_completed) of
                         {ok, _Migration} ->
                             Json = rabbit_json:encode(#{
                                 updated => true,
@@ -341,6 +367,11 @@ accept_status_update(MigrationIdUrlEncoded, ReqData, {EndpointType, Context}) ->
                     end;
                 {error, _} ->
                     ErrorJson = rabbit_json:encode(#{error => <<"Invalid JSON">>}),
+                    bad_request(ErrorJson, ReqData2, {EndpointType, Context});
+                {ok, #{<<"status">> := _}} ->
+                    ErrorJson = rabbit_json:encode(#{
+                        error => <<"The only status that can be set is 'rollback_completed'">>
+                    }),
                     bad_request(ErrorJson, ReqData2, {EndpointType, Context});
                 {ok, _} ->
                     ErrorJson = rabbit_json:encode(#{error => <<"Missing 'status' field">>}),

@@ -4,7 +4,7 @@ Complete reference for the Queue Migration Plugin HTTP API endpoints.
 
 ## Base URL
 
-All endpoints are prefixed with `/api/queue-migration/` and require authentication.
+All endpoints are prefixed with `/api/queue-migration/` and require authentication; see [Authentication](#authentication) for the user tag each one needs.
 
 **Example:**
 ```
@@ -14,6 +14,21 @@ http://localhost:15672/api/queue-migration/status
 ## Authentication
 
 All endpoints require RabbitMQ user authentication. Use HTTP Basic Auth with management plugin credentials.
+
+Reading migration state and running the compatibility check need a user with the `monitoring` tag. Starting, interrupting or changing a migration needs the `administrator` tag. A user without the required tag gets `401` with reason `Not administrator user` or `Not monitor user`, or `Not management user` if it has no management tags at all.
+
+| Endpoint | Method | Required tag |
+|----------|--------|--------------|
+| `/api/queue-migration/status` | GET | `monitoring` |
+| `/api/queue-migration/status/:migration_id` | GET | `monitoring` |
+| `/api/queue-migration/rollback-pending` | GET | `monitoring` |
+| `/api/queue-migration/check/:vhost` | POST | `monitoring` |
+| `/api/queue-migration/start` | POST | `administrator` |
+| `/api/queue-migration/start/:vhost` | POST | `administrator` |
+| `/api/queue-migration/interrupt/:migration_id` | POST | `administrator` |
+| `/api/queue-migration/status/:migration_id` | POST | `administrator` |
+
+`POST /api/queue-migration/status/:migration_id` with the body `{"status": "rollback_completed"}` marks a migration as rolled back, for automation that restores a broker from its pre-migration snapshots. `rollback_completed` is the only status it accepts; any other value gets `400`.
 
 **Example:**
 ```bash
@@ -721,8 +736,9 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 |------|---------|-------------|
 | 200 | OK | Request successful |
 | 400 | Bad Request | Invalid parameters or validation failed |
-| 401 | Unauthorized | Authentication required |
+| 401 | Unauthorized | Authentication failed, or the user lacks the tag the endpoint needs (see [Authentication](#authentication)) |
 | 404 | Not Found | Resource not found (migration ID or vhost) |
+| 405 | Method Not Allowed | The endpoint does not accept that method, for example `GET` on a `start` endpoint |
 | 500 | Internal Server Error | Server error during processing |
 | 503 | Service Unavailable | Plugin is still initialising or in `failed` state. See [Plugin Initialization States](#plugin-initialization-states). |
 
