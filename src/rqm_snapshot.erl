@@ -81,8 +81,12 @@ create_snapshot(ebs, VHost) ->
     case rqm_ebs:instance_volumes() of
         {ok, {InstanceId, Volumes}} ->
             case find_rabbitmq_volume(Volumes) of
-                {ok, VolumeId} ->
-                    create_ebs_snapshot(InstanceId, VolumeId, volume_tags(VolumeId, Volumes));
+                {ok, Volume} ->
+                    create_ebs_snapshot(
+                        InstanceId,
+                        proplists:get_value(volume_id, Volume),
+                        proplists:get_value(tags, Volume, [])
+                    );
                 {error, Reason} ->
                     ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
                     {error, {volume_discovery_failed, Reason}}
@@ -120,8 +124,8 @@ check_ebs_snapshots_in_progress() ->
     case rqm_ebs:instance_volumes() of
         {ok, {_InstanceId, Volumes}} ->
             case find_rabbitmq_volume(Volumes) of
-                {ok, VolumeId} ->
-                    check_volume_snapshots_in_progress(VolumeId);
+                {ok, Volume} ->
+                    check_volume_snapshots_in_progress(proplists:get_value(volume_id, Volume));
                 {error, _} = Error ->
                     ?LOG_DEBUG("rqm: skipping snapshot check, volume not found: ~p", [Error]),
                     ok
@@ -194,47 +198,24 @@ is_snapshot_in_progress(Snapshot) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-%% @doc Extract volume ID from all attached EBS volumes (expect exactly one)
--spec find_rabbitmq_volume(list()) -> {ok, string()} | {error, term()}.
+%% @doc Find the RabbitMQ data volume among the attached EBS volumes (expect exactly one)
+-spec find_rabbitmq_volume(list()) -> {ok, proplists:proplist()} | {error, term()}.
 find_rabbitmq_volume([]) ->
     {error, no_volumes_found};
 find_rabbitmq_volume(Volumes) ->
-    VolumeIds = extract_volume_ids(Volumes),
-    case VolumeIds of
+    case [V || V <- Volumes, is_rmq_data_volume(V)] of
         [] ->
             {error, no_rabbitmq_volumes_found};
-        [VolumeId] ->
-            {ok, VolumeId};
-        MultipleIds ->
+        [Volume] ->
+            {ok, Volume};
+        Multiple ->
+            MultipleIds = [proplists:get_value(volume_id, V) || V <- Multiple],
             ?LOG_ERROR(
                 "rqm: found multiple RabbitMQ volumes: ~p. Expected exactly one volume on device ~s",
                 [MultipleIds, rqm_config:ebs_volume_device()]
             ),
             {error, {multiple_rabbitmq_volumes_found, MultipleIds}}
     end.
-
-%% @doc Extract volume IDs from volume list
--spec extract_volume_ids(list()) -> [string()].
-extract_volume_ids(Volumes) ->
-    lists:foldl(fun extract_volume_id/2, [], Volumes).
-
-%% rqm_snapshot:extract_volume_id([{volume_id,"vol-07746e989a46b742f"},
-%%  {size,"8"},
-%%  {volume_type,"gp3"},
-%%  {state,"in-use"},
-%%  {attachment,[{device,"/dev/xvda"},{state,"attached"}]}], [])
-%% @doc Extract volume ID from a single volume record
-extract_volume_id(VolumeInfo, Acc) when is_list(VolumeInfo) ->
-    case {proplists:get_value(volume_id, VolumeInfo), is_rmq_data_volume(VolumeInfo)} of
-        {undefined, _} ->
-            Acc;
-        {_, false} ->
-            Acc;
-        {VolumeId, true} ->
-            [VolumeId | Acc]
-    end;
-extract_volume_id(_, Acc) ->
-    Acc.
 
 %% @doc Create EBS snapshot for single volume ID
 -spec create_ebs_snapshot(
@@ -258,14 +239,6 @@ create_ebs_snapshot(InstanceId, VolumeId, VolumeTags) ->
         {error, Reason} ->
             ?LOG_ERROR("rqm: failed to create snapshot for volume ~s: ~p", [VolumeId, Reason]),
             {error, {snapshot_failed, VolumeId, Reason}}
-    end.
-
-%% @doc Get the tags of the attached volume with the given ID
--spec volume_tags(string(), list()) -> [{string(), string()}].
-volume_tags(VolumeId, Volumes) ->
-    case [V || V <- Volumes, is_list(V), proplists:get_value(volume_id, V) =:= VolumeId] of
-        [Volume | _] -> proplists:get_value(tags, Volume, []);
-        [] -> []
     end.
 
 %% @doc Build the snapshot tags: the data volume's own tags plus the purpose marker
