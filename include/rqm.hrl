@@ -54,7 +54,7 @@
 %% Operator guidance for a role refused CreateSnapshot, shown in API responses
 %% and stored migration errors. docs/ does not ship with the plugin.
 -define(MISSING_CREATE_TAGS_HINT,
-    "a role set up for 1.x lacks ec2:CreateTags, see "
+    "credentials set up for 1.x lack ec2:CreateTags; the required permissions are in "
     "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md"
 ).
 

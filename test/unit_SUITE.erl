@@ -119,6 +119,7 @@
     snapshot_dry_run_transport_error_passes_test/1,
     unchecked_node_passes_snapshot_check_test/1,
     migration_error_with_non_latin1_queue_name_test/1,
+    missing_data_volume_test/1,
     status_json_converts_latin1_error_test/1
 ]).
 
@@ -225,6 +226,7 @@ groups() ->
             snapshot_dry_run_transport_error_passes_test,
             unchecked_node_passes_snapshot_check_test,
             migration_error_with_non_latin1_queue_name_test,
+            missing_data_volume_test,
             status_json_converts_latin1_error_test
         ]}
     ].
@@ -1032,7 +1034,7 @@ snapshot_unauthorized_error_names_create_tags_test(_Config) ->
         <<
             "Snapshot creation failed: UnauthorizedOperation (the plugin's AWS credentials, "
             "normally the EC2 instance role, lack a required permission; "
-            "a role set up for 1.x lacks ec2:CreateTags, see "
+            "credentials set up for 1.x lack ec2:CreateTags; the required permissions are in "
             "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)"
         >>,
         snapshot_failure_message(
@@ -1113,7 +1115,7 @@ snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
             "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on 1 node(s): ~ts. "
             "The AWS credentials the plugin uses (normally the EC2 instance role) must allow "
             "ec2:CreateSnapshot and ec2:CreateTags; "
-            "a role set up for 1.x lacks ec2:CreateTags, see "
+            "credentials set up for 1.x lack ec2:CreateTags; the required permissions are in "
             "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md",
             [node()]
         ),
@@ -1122,16 +1124,9 @@ snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
 
 %% Outside ebs mode the check must not touch EC2 at all. The check fails open,
 %% so a return of ok alone would not show that; count the calls instead.
+%% stub_all makes meck record a call to any function of the two modules.
 snapshot_permitted_outside_ebs_mode_test(_Config) ->
-    %% Expectations make meck record any call; an unexpected function would
-    %% raise undef without being counted.
-    ok = meck:new(rabbitmq_aws_config, [no_link]),
-    ok = meck:expect(rabbitmq_aws_config, region, fun() -> {ok, "us-east-1"} end),
-    ok = meck:expect(rabbitmq_aws_config, instance_id, fun() -> {ok, "i-1"} end),
-    ok = meck:new(rabbitmq_aws, [no_link]),
-    ok = meck:expect(rabbitmq_aws, set_region, fun(_) -> ok end),
-    ok = meck:expect(rabbitmq_aws, api_get_request, fun(_, _) -> {error, unexpected} end),
-    ok = meck:expect(rabbitmq_aws, post, fun(_, _, _, _) -> {error, unexpected} end),
+    ok = meck:new([rabbitmq_aws_config, rabbitmq_aws], [no_link, stub_all]),
     lists:foreach(
         fun(Mode) ->
             ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, Mode),
@@ -1226,15 +1221,37 @@ status_json_converts_latin1_error_test(_Config) ->
         ]
     ).
 
+%% With no volume at the configured device, the dry run must pass (the
+%% failure is not about permissions) without sending a CreateSnapshot, and
+%% the real snapshot must fail with volume_discovery_failed.
+missing_data_volume_test(_Config) ->
+    mock_ebs_instance(
+        [describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}])],
+        {error, unexpected}
+    ),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(
+        {error, {volume_discovery_failed, no_rabbitmq_volumes_found}},
+        rqm_snapshot:create_snapshot(<<"/">>)
+    ),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws, post, '_')).
+
 %% Mock an EC2 instance with a root volume listed before the RabbitMQ data
 %% volume, and have CreateSnapshot return PostResult.
 mock_ebs_instance(PostResult) ->
+    mock_ebs_instance(
+        [
+            describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}]),
+            describe_volumes_item("vol-data", "/dev/sdh", [{"Name", "my-cluster"}, {"Team", "t"}])
+        ],
+        PostResult
+    ).
+
+mock_ebs_instance(VolumeItems, PostResult) ->
     ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, ebs),
     ok = application:set_env(rabbitmq_queue_migration, ebs_volume_device, "/dev/sdh"),
     DescribeVolumes = rabbitmq_aws_xml:parse(
-        "<DescribeVolumesResponse><volumeSet>" ++
-            describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}]) ++
-            describe_volumes_item("vol-data", "/dev/sdh", [{"Name", "my-cluster"}, {"Team", "t"}]) ++
+        "<DescribeVolumesResponse><volumeSet>" ++ lists:append(VolumeItems) ++
             "</volumeSet></DescribeVolumesResponse>"
     ),
     ok = meck:new(rabbitmq_aws_config, [no_link]),

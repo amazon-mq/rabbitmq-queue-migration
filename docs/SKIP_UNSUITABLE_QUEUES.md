@@ -383,6 +383,7 @@ Skip mode only applies to queue-level checks. These system-level checks still bl
 - Insufficient disk space
 - Cluster alarms active
 - Memory pressure
+- EC2 refusing the EBS snapshot dry run (`ebs` snapshot mode)
 - Network partitions
 - Unbalanced queue leaders
 - EBS snapshots in progress

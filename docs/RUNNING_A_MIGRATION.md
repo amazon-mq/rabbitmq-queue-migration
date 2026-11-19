@@ -18,7 +18,7 @@ Two things bite operators most often. Read these before your first run:
 
 ## Step 1: Check readiness
 
-The compatibility check runs the pre-migration validations without changing anything, and reports which queues are eligible and which are unsuitable:
+The compatibility check runs the pre-migration validations without changing anything, and reports which queues are eligible and which are unsuitable. The one exception is the EBS snapshot dry run, which runs only when the migration starts:
 
 ```bash
 curl -u guest:guest -X POST http://localhost:15672/api/queue-migration/check/%2F

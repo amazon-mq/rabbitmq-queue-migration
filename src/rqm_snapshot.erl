@@ -97,7 +97,7 @@ create_snapshot(none, _VHost) ->
     ?LOG_DEBUG("rqm: snapshot mode is none, skipping snapshot creation"),
     {ok, <<"none">>}.
 
-%% @doc Check that this node's instance role may create its migration snapshot,
+%% @doc Check that this node's AWS credentials may create its migration snapshot,
 %% by sending the same CreateSnapshot request, tags included, with DryRun set.
 %% Fails only when EC2 refuses the request with UnauthorizedOperation. Any other
 %% outcome (throttling, a transport error, volume discovery) is logged and
