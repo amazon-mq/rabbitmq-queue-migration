@@ -80,6 +80,12 @@
     message_ttl_opts_forces_tolerance_test/1,
     message_ttl_opts_without_flag_test/1,
 
+    % EBS snapshot credential refresh tests
+    delete_snapshot_uses_api_get_request_test/1,
+    delete_snapshot_dry_run_test/1,
+    delete_snapshot_credentials_error_test/1,
+    delete_snapshot_service_error_test/1,
+
     % Plugin version tests
     plugin_version_test/1,
 
@@ -99,6 +105,7 @@ all() ->
         {group, migration_checks},
         {group, queue_naming},
         {group, allow_message_ttl_options},
+        {group, ebs_snapshot_credentials},
         {group, plugin_version},
         {group, http_authorization}
     ].
@@ -162,6 +169,12 @@ groups() ->
             parse_options_set_default_queue_type_test,
             message_ttl_opts_forces_tolerance_test,
             message_ttl_opts_without_flag_test
+        ]},
+        {ebs_snapshot_credentials, [], [
+            delete_snapshot_uses_api_get_request_test,
+            delete_snapshot_dry_run_test,
+            delete_snapshot_credentials_error_test,
+            delete_snapshot_service_error_test
         ]},
         {plugin_version, [], [
             plugin_version_test
@@ -849,6 +862,71 @@ message_ttl_opts_without_flag_test(_Config) ->
         {false, 10.0},
         rqm:message_ttl_opts(#{allow_message_ttl => false, tolerance => 10.0})
     ).
+
+delete_snapshot_uses_api_get_request_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(
+            rabbitmq_aws,
+            api_get_request,
+            2,
+            {ok, [{"DeleteSnapshotResponse", []}]}
+        ),
+        ?assertEqual({ok, "snap-123"}, rqm_ebs:delete_volume_snapshot("snap-123")),
+        ?assert(
+            meck:called(
+                rabbitmq_aws,
+                api_get_request,
+                ["ec2", "/?Action=DeleteSnapshot&SnapshotId=snap-123&Version=2016-11-15"]
+            )
+        )
+    end).
+
+delete_snapshot_dry_run_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(
+            rabbitmq_aws,
+            api_get_request,
+            2,
+            {ok, [{"DeleteSnapshotResponse", []}]}
+        ),
+        ?assertEqual(
+            {ok, "snap-123"},
+            rqm_ebs:delete_volume_snapshot("snap-123", #{dry_run => true})
+        ),
+        ?assert(
+            meck:called(
+                rabbitmq_aws,
+                api_get_request,
+                [
+                    "ec2",
+                    "/?Action=DeleteSnapshot&SnapshotId=snap-123&Version=2016-11-15&DryRun=true"
+                ]
+            )
+        )
+    end).
+
+delete_snapshot_credentials_error_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(rabbitmq_aws, api_get_request, 2, {error, credentials}),
+        ?assertEqual({error, credentials}, rqm_ebs:delete_volume_snapshot("snap-123"))
+    end).
+
+delete_snapshot_service_error_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(rabbitmq_aws, api_get_request, 2, {error, "AWS service is unavailable"}),
+        ?assertEqual(
+            {error, "AWS service is unavailable"},
+            rqm_ebs:delete_volume_snapshot("snap-123")
+        )
+    end).
+
+with_rabbitmq_aws_mock(Test) ->
+    meck:new(rabbitmq_aws, [passthrough, no_link]),
+    try
+        Test()
+    after
+        meck:unload(rabbitmq_aws)
+    end.
 
 %% plugin_version/0 surfaces the application's `vsn' (baked in from
 %% PROJECT_VERSION at build time) as a binary. Once the app is loaded it
