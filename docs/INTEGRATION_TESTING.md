@@ -55,7 +55,8 @@ This will:
 The `integration-test` target runs eight scenarios against the same
 3-node Docker cluster: `end-to-end`, `interrupt-test`,
 `skip-unsuitable-test`, `batch-test`, `empty-queue-test`,
-`already-quorum-test`, `allow-message-ttl-test` and `authorization-test`. The phase breakdown below describes the
+`already-quorum-test`, `allow-message-ttl-test` and
+`authorization-test`. The phase breakdown below describes the
 `end-to-end` scenario, which is the most thorough; the other
 scenarios reuse most of the same setup and validation but with
 narrower payloads or specific options.

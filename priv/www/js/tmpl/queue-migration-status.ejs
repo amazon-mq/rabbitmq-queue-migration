@@ -45,6 +45,7 @@ SPDX-License-Identifier: Apache-2.0
                  title="Skip queues that fail validation checks instead of blocking migration" />
         </td>
       </tr>
+      <% if (user_administrator) { %>
       <tr>
         <th><label for="tolerance">Message Count Tolerance:</label></th>
         <td>
@@ -72,6 +73,7 @@ SPDX-License-Identifier: Apache-2.0
           </select>
         </td>
       </tr>
+      <% } %>
     </table>
   </div>
 

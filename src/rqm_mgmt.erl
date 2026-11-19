@@ -154,6 +154,8 @@ is_authorized(ReqData, {EndpointType, Context}) ->
 %% Reading status and running the compatibility check, which changes nothing,
 %% need the monitoring tag. Everything else, including any route or method
 %% added later and not listed here, needs administrator.
+%% The management plugin lets OPTIONS through without checking credentials;
+%% this clause only keeps the policy complete.
 requires_admin(_EndpointType, <<"OPTIONS">>) ->
     false;
 requires_admin(check, <<"POST">>) ->

@@ -38,6 +38,7 @@ public class AuthorizationTest {
   // A vhost with no queues: an administrator's start reaches validation and is refused with 400,
   // so the start route can be shown reachable without starting a migration.
   private static final String EMPTY_VHOST = "rqm-auth-empty";
+  private static final String ROLLBACK_PENDING = "/queue-migration/rollback-pending";
   private static final String NOT_ADMIN = "Not administrator user";
   private static final String NOT_MONITOR = "Not monitor user";
   // A user with no tags is refused before any route-specific check.
@@ -120,6 +121,15 @@ public class AuthorizationTest {
       expectAllowed(MONITORING_USER, "GET", "/queue-migration/status", null, 200);
       expectAllowed(MONITORING_USER, "GET", statusPath, null, 200);
       expectAllowed(MONITORING_USER, "POST", checkPath, "{}", 200);
+      expectAllowed(MONITORING_USER, "HEAD", "/queue-migration/status", null, 200);
+      expectAllowed(MONITORING_USER, "HEAD", statusPath, null, 200);
+      // 404 when no migration is pending rollback, which an earlier scenario may have left.
+      int rollbackPendingStatus =
+          send(adminUser, adminPassword, "GET", ROLLBACK_PENDING, null).status;
+      check(
+          rollbackPendingStatus == 200 || rollbackPendingStatus == 404,
+          "administrator GET " + ROLLBACK_PENDING + " returned " + rollbackPendingStatus);
+      expectAllowed(MONITORING_USER, "GET", ROLLBACK_PENDING, null, rollbackPendingStatus);
       expectRefused(MONITORING_USER, "POST", emptyStartPath, "{}", NOT_ADMIN);
       expectRefused(MONITORING_USER, "POST", defaultStartPath, "{}", NOT_ADMIN);
       expectRefused(MONITORING_USER, "POST", interruptPath, null, NOT_ADMIN);
@@ -131,6 +141,7 @@ public class AuthorizationTest {
         expectRefused(user, "GET", "/queue-migration/status", null, readReason);
         expectRefused(user, "GET", statusPath, null, readReason);
         expectRefused(user, "POST", checkPath, "{}", readReason);
+        expectRefused(user, "GET", ROLLBACK_PENDING, null, readReason);
         expectRefused(user, "POST", emptyStartPath, "{}", adminReason);
         expectRefused(user, "POST", defaultStartPath, "{}", adminReason);
         expectRefused(user, "POST", interruptPath, null, adminReason);

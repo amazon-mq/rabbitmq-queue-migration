@@ -737,8 +737,8 @@ curl -u guest:guest http://localhost:15672/api/queue-migration/rollback-pending
 | 200 | OK | Request successful |
 | 400 | Bad Request | Invalid parameters or validation failed |
 | 401 | Unauthorized | Authentication failed, or the user lacks the tag the endpoint needs (see [Authentication](#authentication)) |
-| 405 | Method Not Allowed | The endpoint does not accept that method, for example `GET` on a `start` endpoint |
 | 404 | Not Found | Resource not found (migration ID or vhost) |
+| 405 | Method Not Allowed | The endpoint does not accept that method, for example `GET` on a `start` endpoint |
 | 500 | Internal Server Error | Server error during processing |
 | 503 | Service Unavailable | Plugin is still initialising or in `failed` state. See [Plugin Initialization States](#plugin-initialization-states). |
 
