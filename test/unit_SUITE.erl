@@ -7,6 +7,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %% The TagSpecification the plugin sends for the mocked data volume, tagged
 %% Name=my-cluster and Team=t.
@@ -115,7 +116,8 @@
     snapshot_permitted_outside_ebs_mode_test/1,
     snapshot_dry_run_throttled_passes_test/1,
     snapshot_dry_run_transport_error_passes_test/1,
-    unchecked_node_passes_snapshot_check_test/1
+    unchecked_node_passes_snapshot_check_test/1,
+    migration_error_with_non_latin1_queue_name_test/1
 ]).
 
 %% Test groups
@@ -219,7 +221,8 @@ groups() ->
             snapshot_permitted_outside_ebs_mode_test,
             snapshot_dry_run_throttled_passes_test,
             snapshot_dry_run_transport_error_passes_test,
-            unchecked_node_passes_snapshot_check_test
+            unchecked_node_passes_snapshot_check_test,
+            migration_error_with_non_latin1_queue_name_test
         ]}
     ].
 
@@ -1140,6 +1143,24 @@ unchecked_node_passes_snapshot_check_test(_Config) ->
     ok = meck:expect(rqm_snapshot, check_snapshot_permitted, fun() -> error(boom) end),
     ?assertEqual(ok, rqm_checks:check_snapshot_permitted_on_all_nodes()),
     ?assertEqual(1, meck:num_calls(rqm_snapshot, check_snapshot_permitted, [])).
+
+%% A queue named outside Latin-1 must not stop the migration error from being
+%% stored, and must be stored as valid UTF-8.
+migration_error_with_non_latin1_queue_name_test(_Config) ->
+    lists:foreach(
+        fun(Name) ->
+            Queue = #resource{virtual_host = <<"/">>, kind = queue, name = Name},
+            Message = rqm:format_migration_error(
+                throw, {migration_failed_no_rollback, {errors, [{error, Queue, timeout}]}}
+            ),
+            ?assertEqual(
+                <<"Migration failed: 1 error(s), 0 aborted. No rollback needed. First error: ",
+                    Name/binary, " - timeout">>,
+                Message
+            )
+        end,
+        [<<"\x{6CE8}\x{6587}"/utf8>>, <<"caf\x{E9}"/utf8>>]
+    ).
 
 %% Mock an EC2 instance with a root volume listed before the RabbitMQ data
 %% volume, and have CreateSnapshot return PostResult.

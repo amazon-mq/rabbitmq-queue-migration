@@ -1906,23 +1906,19 @@ format_migration_id({Timestamp, _Node}) ->
 format_migration_error(_Class, {migration_failed_rollback_pending, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
     FirstError = format_first_error(Errors),
-    iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~s", [
-            ErrorCount, AbortedCount, FirstError
-        ])
-    );
+    rqm_util:unicode_format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~ts", [
+        ErrorCount, AbortedCount, FirstError
+    ]);
 format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
     FirstError = format_first_error(Errors),
-    iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~s", [
-            ErrorCount, AbortedCount, FirstError
-        ])
-    );
+    rqm_util:unicode_format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~ts", [
+        ErrorCount, AbortedCount, FirstError
+    ]);
 format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reason) ->
     <<"Preparation failed: ", Reason/binary>>;
 format_migration_error(_Class, {preparation_failed, Reason}) ->
-    iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
+    rqm_util:unicode_format("Preparation failed: ~tp", [Reason]);
 format_migration_error(
     _Class,
     {error,
@@ -1940,7 +1936,7 @@ format_migration_error(
             <<"Snapshot creation failed">>
     end;
 format_migration_error(Class, Ex) ->
-    iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
+    rqm_util:unicode_format("~tp: ~tp", [Class, Ex]).
 
 %% EC2 returns UnauthorizedOperation for any refused permission, including the
 %% CreateTags check on a tagged CreateSnapshot, which 1.x roles do not allow.
@@ -2014,7 +2010,7 @@ format_first_error(Errors) ->
                     _ -> <<"unknown">>
                 end,
             ReasonStr = format_error_reason(Reason),
-            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr]);
+            io_lib:format(" First error: ~ts - ~ts", [QueueName, ReasonStr]);
         [{error, Resource, Reason} | _] ->
             QueueName =
                 case Resource of
@@ -2022,7 +2018,7 @@ format_first_error(Errors) ->
                     _ -> <<"unknown">>
                 end,
             ReasonStr = format_error_reason(Reason),
-            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr])
+            io_lib:format(" First error: ~ts - ~ts", [QueueName, ReasonStr])
     end.
 
 format_error_reason({message_count_mismatch, Expected, Actual, Diff}) ->
