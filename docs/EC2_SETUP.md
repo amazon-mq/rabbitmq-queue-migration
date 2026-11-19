@@ -15,7 +15,7 @@ The RabbitMQ queue migration plugin requires EC2 API access to:
 - Tag snapshots as they are created (`ec2:CreateTags`)
 
 > [!IMPORTANT]
-> **Upgrading from 1.x:** starting with 2.0.0, the plugin tags every snapshot it creates, and EC2 refuses a tagged `CreateSnapshot` request from a role without `ec2:CreateTags`. A role set up for 1.x, which did not need that permission, fails every migration at the snapshot step until you add the `ec2:CreateTags` statement shown in [Step 3](#step-3-attach-permissions-policy). Add it before upgrading.
+> **Upgrading from 1.x:** starting with 2.0.0, the plugin tags every snapshot it creates, and EC2 refuses a tagged `CreateSnapshot` request from a role without `ec2:CreateTags`. A role set up for 1.x, which did not need that permission, cannot run a migration until you add the `ec2:CreateTags` statement shown in [Step 3](#step-3-attach-permissions-policy). Add it before upgrading. Before a migration starts, the plugin sends each node's `CreateSnapshot` request with `DryRun` set, and refuses to start, before any client is disconnected, if EC2 answers `UnauthorizedOperation` on any node.
 
 When running on EC2 instances, the `rabbitmq_aws` SDK automatically retrieves temporary credentials (including session tokens) from the
 EC2 instance metadata service. This requires an IAM instance profile to be attached to each RabbitMQ node.
@@ -128,7 +128,7 @@ aws iam put-role-policy \
 }
 ```
 
-`CreateSnapshot` is authorized against both the source volume and the new snapshot, hence the two statements: the first allows snapshotting only this cluster's volumes, the second requires the new snapshot to carry the cluster's tag. The `DeleteSnapshot` statement lets the plugin delete only this cluster's migration snapshots. `DescribeVolumes` and `DescribeSnapshots` do not support resource-level permissions, so they stay on `"Resource": "*"`. Scope by a tag you set yourself: the plugin does not copy `aws:` tags, such as `aws:cloudformation:stack-name`, because EC2 does not accept them in a request, so a policy that requires one on the new snapshot refuses every migration.
+The ARNs use the `aws` partition; in other partitions, such as `aws-cn` or `aws-us-gov`, replace `arn:aws:` accordingly. `CreateSnapshot` is authorized against both the source volume and the new snapshot, hence the two statements: the first allows snapshotting only this cluster's volumes, the second requires the new snapshot to carry the cluster's tag. The `DeleteSnapshot` statement lets the plugin delete only this cluster's migration snapshots. `DescribeVolumes` and `DescribeSnapshots` do not support resource-level permissions, so they stay on `"Resource": "*"`. Scope by a tag you set yourself: the plugin does not copy `aws:` tags, such as `aws:cloudformation:stack-name`, because EC2 does not accept them in a request, so a policy that requires one on the new snapshot refuses every migration.
 
 ### Step 4: Create Instance Profile
 
@@ -326,7 +326,7 @@ All three values are required. The AWS SDK handles this automatically, but if yo
 The `rabbitmq_queue_migration` plugin performs the following operations during migration:
 
 1. **Query Volumes**: Calls `ec2:DescribeVolumes` to find EBS volumes attached to the instance
-2. **Create Snapshots**: Calls `ec2:CreateSnapshot` to create crash-consistent snapshots before migration
+2. **Create Snapshots**: Calls `ec2:CreateSnapshot` to create crash-consistent snapshots before migration, after first sending the same request with `DryRun` during pre-migration validation
 3. **Monitor Progress**: Calls `ec2:DescribeSnapshots` to check snapshot completion status
 4. **Cleanup Snapshots**: Calls `ec2:DeleteSnapshot` to remove snapshots after successful migration (when `cleanup_snapshots_on_success` is enabled)
 

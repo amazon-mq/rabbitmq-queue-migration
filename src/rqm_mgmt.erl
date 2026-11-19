@@ -303,6 +303,13 @@ start_validated_migration(Opts0, ReqData, {EndpointType, Context}) ->
                 reason => Message
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, {snapshot_not_permitted_on_nodes, BadNodes}} ->
+            Message = rqm_checks:format_snapshot_not_permitted_error(BadNodes),
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, partitions_detected} ->
             Message =
                 <<"Cluster partitions detected. Resolve network partitions before migration.">>,

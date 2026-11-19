@@ -51,6 +51,13 @@
 
 -define(THIRTY_SECONDS_MS, 30000).
 
+%% Operator guidance for a role refused CreateSnapshot, shown in API responses
+%% and stored migration errors. docs/ does not ship with the plugin.
+-define(MISSING_CREATE_TAGS_HINT,
+    "a role set up for 1.x lacks ec2:CreateTags, see "
+    "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md"
+).
+
 %% Plugin init retry configuration (used by rqm_init_state)
 % 10 attempts of 30 seconds each, 5 minutes total to set up Mnesia tables
 -define(INIT_RETRY_ATTEMPTS, 10).

@@ -10,7 +10,12 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
--export([create_snapshot/1, cleanup_snapshot/1, check_no_snapshots_in_progress/0]).
+-export([
+    create_snapshot/1,
+    cleanup_snapshot/1,
+    check_no_snapshots_in_progress/0,
+    check_snapshot_permitted/0
+]).
 
 -ifdef(TEST).
 -export([snapshot_tags/1]).
@@ -76,29 +81,70 @@ create_snapshot(tar, VHost) ->
 %% @doc Create a real EBS snapshot
 create_snapshot(ebs, VHost) ->
     ?LOG_DEBUG("rqm: creating real EBS snapshot for vhost ~ts on node ~tp", [VHost, node()]),
-    {ok, Region} = rabbitmq_aws_config:region(),
-    ok = rabbitmq_aws:set_region(Region),
-    case rqm_ebs:instance_volumes() of
-        {ok, {InstanceId, Volumes}} ->
-            case find_rabbitmq_volume(Volumes) of
-                {ok, Volume} ->
-                    create_ebs_snapshot(
-                        InstanceId,
-                        proplists:get_value(volume_id, Volume),
-                        proplists:get_value(tags, Volume, [])
-                    );
-                {error, Reason} ->
-                    ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
-                    {error, {volume_discovery_failed, Reason}}
-            end;
-        {error, Reason} ->
-            ?LOG_ERROR("rqm: failed to discover EBS volumes: ~p", [Reason]),
-            {error, {volume_discovery_failed, Reason}}
+    case discover_data_volume() of
+        {ok, InstanceId, Volume} ->
+            create_ebs_snapshot(
+                InstanceId,
+                proplists:get_value(volume_id, Volume),
+                proplists:get_value(tags, Volume, [])
+            );
+        {error, _} = Error ->
+            Error
     end;
 %% @doc Skip snapshot creation when mode is none
 create_snapshot(none, _VHost) ->
     ?LOG_DEBUG("rqm: snapshot mode is none, skipping snapshot creation"),
     {ok, <<"none">>}.
+
+%% @doc Check that this node's instance role may create its migration snapshot,
+%% by sending the same CreateSnapshot request, tags included, with DryRun set.
+%% Fails only when EC2 refuses the request with UnauthorizedOperation. Any other
+%% outcome (throttling, a transport error, volume discovery) is logged and
+%% passes: it says nothing about permissions, and the real snapshot reports it.
+%% Always ok outside ebs mode.
+-spec check_snapshot_permitted() -> ok | {error, {snapshot_not_permitted, string()}}.
+check_snapshot_permitted() ->
+    check_snapshot_permitted(rqm_config:snapshot_mode()).
+
+check_snapshot_permitted(ebs) ->
+    try dry_run_snapshot() of
+        Result -> dry_run_result(Result)
+    catch
+        Class:Reason ->
+            skip_permission_check({Class, Reason})
+    end;
+check_snapshot_permitted(_SnapshotMode) ->
+    ok.
+
+dry_run_snapshot() ->
+    case discover_data_volume() of
+        {ok, _InstanceId, Volume} ->
+            VolumeId = proplists:get_value(volume_id, Volume),
+            Options = snapshot_options(proplists:get_value(tags, Volume, [])),
+            rqm_ebs:create_volume_snapshot(VolumeId, Options#{dry_run => true});
+        {error, _} = Error ->
+            Error
+    end.
+
+%% EC2 answers a DryRun it would have allowed with the DryRunOperation error.
+dry_run_result({error, {snapshot_creation_failed, ErrorData}} = Result) ->
+    case rqm_ebs:error_code(ErrorData) of
+        {ok, "DryRunOperation"} ->
+            ok;
+        {ok, "UnauthorizedOperation" = Code} ->
+            ?LOG_ERROR("rqm: snapshot dry run refused: ~p", [Result]),
+            {error, {snapshot_not_permitted, Code}};
+        _ ->
+            skip_permission_check(Result)
+    end;
+dry_run_result(Result) ->
+    skip_permission_check(Result).
+
+skip_permission_check(Result) ->
+    ?LOG_WARNING("rqm: snapshot permissions not checked, the dry run did not complete: ~p", [
+        Result
+    ]),
+    ok.
 
 %% @doc Check if there are any in-progress EBS snapshots for RabbitMQ volumes
 %% Returns ok if no snapshots in progress, {error, {snapshot_in_progress, Details}} otherwise
@@ -198,6 +244,26 @@ is_snapshot_in_progress(Snapshot) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
+%% @doc Find this node's EBS instance ID and RabbitMQ data volume
+-spec discover_data_volume() ->
+    {ok, string(), proplists:proplist()} | {error, {volume_discovery_failed, term()}}.
+discover_data_volume() ->
+    {ok, Region} = rabbitmq_aws_config:region(),
+    ok = rabbitmq_aws:set_region(Region),
+    case rqm_ebs:instance_volumes() of
+        {ok, {InstanceId, Volumes}} ->
+            case find_rabbitmq_volume(Volumes) of
+                {ok, Volume} ->
+                    {ok, InstanceId, Volume};
+                {error, Reason} ->
+                    ?LOG_ERROR("rqm: failed to find EBS volume: ~p", [Reason]),
+                    {error, {volume_discovery_failed, Reason}}
+            end;
+        {error, Reason} ->
+            ?LOG_ERROR("rqm: failed to discover EBS volumes: ~p", [Reason]),
+            {error, {volume_discovery_failed, Reason}}
+    end.
+
 %% @doc Find the RabbitMQ data volume among the attached EBS volumes (expect exactly one)
 -spec find_rabbitmq_volume(list()) -> {ok, proplists:proplist()} | {error, term()}.
 find_rabbitmq_volume([]) ->
@@ -223,13 +289,7 @@ find_rabbitmq_volume(Volumes) ->
 ) ->
     {ok, snapshot_state()} | {error, term()}.
 create_ebs_snapshot(InstanceId, VolumeId, VolumeTags) ->
-    Timestamp = rqm_util:format_iso8601_utc(),
-    Description = rqm_util:unicode_format("RabbitMQ migration snapshot ~s on ~s", [
-        Timestamp, node()
-    ]),
-
-    Options = #{description => Description, tags => snapshot_tags(VolumeTags)},
-    case rqm_ebs:create_volume_snapshot(VolumeId, Options) of
+    case rqm_ebs:create_volume_snapshot(VolumeId, snapshot_options(VolumeTags)) of
         {ok, SnapshotId, _Metadata} ->
             {ok, {
                 rqm_util:to_unicode(SnapshotId),
@@ -240,6 +300,14 @@ create_ebs_snapshot(InstanceId, VolumeId, VolumeTags) ->
             ?LOG_ERROR("rqm: failed to create snapshot for volume ~s: ~p", [VolumeId, Reason]),
             {error, {snapshot_failed, VolumeId, Reason}}
     end.
+
+%% @doc The CreateSnapshot options, shared by the real request and its dry run
+snapshot_options(VolumeTags) ->
+    Timestamp = rqm_util:format_iso8601_utc(),
+    Description = rqm_util:unicode_format("RabbitMQ migration snapshot ~s on ~s", [
+        Timestamp, node()
+    ]),
+    #{description => Description, tags => snapshot_tags(VolumeTags)}.
 
 %% @doc Build the snapshot tags: the data volume's own tags plus the purpose marker
 -spec snapshot_tags([{string(), string()}]) -> [{string(), string()}].

@@ -8,6 +8,18 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+%% The TagSpecification the plugin sends for the mocked data volume, tagged
+%% Name=my-cluster and Team=t.
+-define(DATA_VOLUME_TAG_SPECIFICATION,
+    "&TagSpecification.1.ResourceType=snapshot"
+    "&TagSpecification.1.Tag.1.Key=Name"
+    "&TagSpecification.1.Tag.1.Value=my-cluster"
+    "&TagSpecification.1.Tag.2.Key=Team"
+    "&TagSpecification.1.Tag.2.Value=t"
+    "&TagSpecification.1.Tag.3.Key=rabbitmq-queue-migration%3Apurpose"
+    "&TagSpecification.1.Tag.3.Value=pre-migration"
+).
+
 %% Common Test callbacks
 -export([
     all/0,
@@ -96,7 +108,14 @@
     % EBS snapshot error reporting tests
     snapshot_unauthorized_error_names_create_tags_test/1,
     snapshot_other_error_reports_code_without_hint_test/1,
-    ebs_snapshot_copies_data_volume_tags_test/1
+    ebs_snapshot_copies_data_volume_tags_test/1,
+    snapshot_dry_run_sends_real_request_test/1,
+    snapshot_dry_run_refused_test/1,
+    snapshot_not_permitted_on_all_nodes_message_test/1,
+    snapshot_permitted_outside_ebs_mode_test/1,
+    snapshot_dry_run_throttled_passes_test/1,
+    snapshot_dry_run_transport_error_passes_test/1,
+    unchecked_node_passes_snapshot_check_test/1
 ]).
 
 %% Test groups
@@ -193,7 +212,14 @@ groups() ->
         {ebs_snapshot_errors, [], [
             snapshot_unauthorized_error_names_create_tags_test,
             snapshot_other_error_reports_code_without_hint_test,
-            ebs_snapshot_copies_data_volume_tags_test
+            ebs_snapshot_copies_data_volume_tags_test,
+            snapshot_dry_run_sends_real_request_test,
+            snapshot_dry_run_refused_test,
+            snapshot_not_permitted_on_all_nodes_message_test,
+            snapshot_permitted_outside_ebs_mode_test,
+            snapshot_dry_run_throttled_passes_test,
+            snapshot_dry_run_transport_error_passes_test,
+            unchecked_node_passes_snapshot_check_test
         ]}
     ].
 
@@ -215,6 +241,8 @@ init_per_testcase(_TestCase, Config) ->
 
 end_per_testcase(_TestCase, _Config) ->
     _ = meck:unload(),
+    application:unset_env(rabbitmq_queue_migration, snapshot_mode),
+    application:unset_env(rabbitmq_queue_migration, ebs_volume_device),
     ok.
 
 %% =============================================================================
@@ -1016,29 +1044,106 @@ snapshot_other_error_reports_code_without_hint_test(_Config) ->
         )
     ).
 
-%% Run a CreateSnapshot that EC2 rejects with Code and Message, and return the
-%% migration error that a failed preparation records. The error document is
-%% parsed by rabbitmq_aws_xml, as rabbitmq_aws does for a 4xx response.
+%% Run a snapshot that EC2 rejects with Code and Message, and return the
+%% migration error that a failed preparation records. The gatherer wraps a
+%% node's preparation error as {error, {migration_preparation, Error}}.
 snapshot_failure_message(Code, Message) ->
-    Xml =
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        "<Response><Errors><Error><Code>" ++ Code ++ "</Code><Message>" ++ Message ++
-            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>",
-    %% httpc hands rabbitmq_aws the body as a list of UTF-8 bytes.
-    Body = rabbitmq_aws_xml:parse(binary_to_list(unicode:characters_to_binary(Xml))),
-    ok = meck:new(rabbitmq_aws, [no_link]),
-    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) ->
-        {error, "Forbidden", {[], Body}}
-    end),
-    {error, Reason} = rqm_ebs:create_volume_snapshot("vol-1", #{}),
-    rqm:format_migration_error(
-        throw, {error, {migration_preparation, {snapshot_failed, "vol-1", Reason}}}
-    ).
+    mock_ebs_instance(ec2_error_response(Code, Message)),
+    {error, Error} = rqm_snapshot:create_snapshot(<<"/">>),
+    rqm:format_migration_error(throw, {error, {migration_preparation, Error}}).
 
 %% The instance has a root volume and the RabbitMQ data volume, listed root
 %% first. The CreateSnapshot request must target the data volume and carry the
 %% data volume's tags, not the root volume's.
 ebs_snapshot_copies_data_volume_tags_test(_Config) ->
+    mock_ebs_instance(
+        {ok, {
+            [],
+            rabbitmq_aws_xml:parse(
+                "<CreateSnapshotResponse><snapshotId>snap-1</snapshotId>"
+                "<volumeId>vol-data</volumeId><status>pending</status></CreateSnapshotResponse>"
+            )
+        }}
+    ),
+    ?assertEqual(
+        {ok, {<<"snap-1">>, <<"vol-data">>, <<"i-1">>}},
+        rqm_snapshot:create_snapshot(<<"/">>)
+    ),
+    Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
+    ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
+    %% The body must end here: a real snapshot request must not be a dry run.
+    ?assert(lists:suffix(?DATA_VOLUME_TAG_SPECIFICATION ++ "&Version=2016-11-15", Body)).
+
+%% The dry run must be the real request, tags included, plus DryRun=true:
+%% EC2 checks the tagging permission only when the request carries tags.
+snapshot_dry_run_sends_real_request_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("DryRunOperation", "Request would have succeeded")),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
+    ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
+    ?assertNotEqual(
+        nomatch,
+        string:find(Body, ?DATA_VOLUME_TAG_SPECIFICATION ++ "&Version=2016-11-15&DryRun=true")
+    ).
+
+snapshot_dry_run_refused_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("UnauthorizedOperation", "You are not authorized")),
+    ?assertEqual(
+        {error, {snapshot_not_permitted, "UnauthorizedOperation"}},
+        rqm_snapshot:check_snapshot_permitted()
+    ).
+
+%% Runs the cluster-wide check through erpc against this node only.
+snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("UnauthorizedOperation", "You are not authorized")),
+    ok = meck:new(rabbit_nodes, [no_link]),
+    ok = meck:expect(rabbit_nodes, list_running, fun() -> [node()] end),
+    {error, {snapshot_not_permitted_on_nodes, BadNodes}} =
+        rqm_checks:check_snapshot_permitted_on_all_nodes(),
+    ?assertEqual([node()], BadNodes),
+    ?assertEqual(
+        rqm_util:unicode_format(
+            "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on 1 node(s): ~ts. "
+            "The instance role must allow ec2:CreateSnapshot and ec2:CreateTags; "
+            "a role set up for 1.x lacks ec2:CreateTags, see "
+            "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md",
+            [node()]
+        ),
+        rqm_checks:format_snapshot_not_permitted_error(BadNodes)
+    ).
+
+%% No AWS module is mocked here, so any EC2 call would fail the test.
+snapshot_permitted_outside_ebs_mode_test(_Config) ->
+    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, none),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, tar),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()).
+
+%% Throttling says nothing about permissions, so it must not block migration.
+snapshot_dry_run_throttled_passes_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("RequestLimitExceeded", "Request limit exceeded.")),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(1, meck:num_calls(rabbitmq_aws, post, '_')).
+
+%% rabbitmq_aws:post/4 returns this shape for an httpc failure, which
+%% rqm_ebs:create_volume_snapshot/2 does not handle (#122).
+snapshot_dry_run_transport_error_passes_test(_Config) ->
+    mock_ebs_instance({error, timeout, undefined}),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(1, meck:num_calls(rabbitmq_aws, post, '_')).
+
+%% A node whose check cannot run passes; only a refusal blocks.
+unchecked_node_passes_snapshot_check_test(_Config) ->
+    ok = meck:new(rabbit_nodes, [no_link]),
+    ok = meck:expect(rabbit_nodes, list_running, fun() -> [node()] end),
+    ok = meck:new(rqm_snapshot, [passthrough, no_link]),
+    ok = meck:expect(rqm_snapshot, check_snapshot_permitted, fun() -> error(boom) end),
+    ?assertEqual(ok, rqm_checks:check_snapshot_permitted_on_all_nodes()),
+    ?assertEqual(1, meck:num_calls(rqm_snapshot, check_snapshot_permitted, [])).
+
+%% Mock an EC2 instance with a root volume listed before the RabbitMQ data
+%% volume, and have CreateSnapshot return PostResult.
+mock_ebs_instance(PostResult) ->
     ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, ebs),
     ok = application:set_env(rabbitmq_queue_migration, ebs_volume_device, "/dev/sdh"),
     DescribeVolumes = rabbitmq_aws_xml:parse(
@@ -1047,44 +1152,24 @@ ebs_snapshot_copies_data_volume_tags_test(_Config) ->
             describe_volumes_item("vol-data", "/dev/sdh", [{"Name", "my-cluster"}, {"Team", "t"}]) ++
             "</volumeSet></DescribeVolumesResponse>"
     ),
-    CreateSnapshot = rabbitmq_aws_xml:parse(
-        "<CreateSnapshotResponse><snapshotId>snap-1</snapshotId>"
-        "<volumeId>vol-data</volumeId><status>pending</status></CreateSnapshotResponse>"
-    ),
     ok = meck:new(rabbitmq_aws_config, [no_link]),
     ok = meck:expect(rabbitmq_aws_config, region, fun() -> {ok, "us-east-1"} end),
     ok = meck:expect(rabbitmq_aws_config, instance_id, fun() -> {ok, "i-1"} end),
     ok = meck:new(rabbitmq_aws, [no_link]),
     ok = meck:expect(rabbitmq_aws, set_region, fun("us-east-1") -> ok end),
     ok = meck:expect(rabbitmq_aws, api_get_request, fun("ec2", _Path) -> {ok, DescribeVolumes} end),
-    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) ->
-        {ok, {[], CreateSnapshot}}
-    end),
-    try
-        ?assertEqual(
-            {ok, {<<"snap-1">>, <<"vol-data">>, <<"i-1">>}},
-            rqm_snapshot:create_snapshot(<<"/">>)
-        ),
-        Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
-        ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
-        ?assertNotEqual(
-            nomatch,
-            string:find(
-                Body,
-                "&TagSpecification.1.ResourceType=snapshot"
-                "&TagSpecification.1.Tag.1.Key=Name"
-                "&TagSpecification.1.Tag.1.Value=my-cluster"
-                "&TagSpecification.1.Tag.2.Key=Team"
-                "&TagSpecification.1.Tag.2.Value=t"
-                "&TagSpecification.1.Tag.3.Key=rabbitmq-queue-migration%3Apurpose"
-                "&TagSpecification.1.Tag.3.Value=pre-migration"
-                "&Version=2016-11-15"
-            )
-        )
-    after
-        application:unset_env(rabbitmq_queue_migration, snapshot_mode),
-        application:unset_env(rabbitmq_queue_migration, ebs_volume_device)
-    end.
+    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) -> PostResult end).
+
+%% An EC2 4xx error response as rabbitmq_aws:post/4 returns it.
+ec2_error_response(Code, Message) ->
+    Xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<Response><Errors><Error><Code>" ++ Code ++ "</Code><Message>" ++ Message ++
+            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>",
+    %% httpc hands rabbitmq_aws the body as a list of UTF-8 bytes.
+    {error, "Bad Request", {
+        [], rabbitmq_aws_xml:parse(binary_to_list(unicode:characters_to_binary(Xml)))
+    }}.
 
 %% A DescribeVolumes <item>; `no_tag_set' omits the <tagSet> element, as EC2
 %% does for a volume without tags.

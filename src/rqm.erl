@@ -147,6 +147,8 @@ pre_migration_validation(plugin_ready_on_all_nodes, Opts) ->
     handle_check_plugin_ready_on_all_nodes(
         rqm_checks:check_plugin_ready_on_all_nodes(), Opts
     );
+pre_migration_validation(snapshot_permitted, Opts) ->
+    handle_check_snapshot_permitted(rqm_checks:check_snapshot_permitted_on_all_nodes(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
     handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
@@ -276,7 +278,7 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     {error, {snapshot_in_progress, Details}}.
 
 handle_check_plugin_ready_on_all_nodes(ok, Opts) ->
-    pre_migration_validation(cluster_partitions, Opts);
+    pre_migration_validation(snapshot_permitted, Opts);
 handle_check_plugin_ready_on_all_nodes(
     {error, {plugin_not_ready_on_nodes, BadNodes}}, _Opts
 ) ->
@@ -289,6 +291,14 @@ handle_check_plugin_ready_on_all_nodes(
         [NodeCount, BadNodes]
     ),
     {error, {plugin_not_ready_on_nodes, BadNodes}}.
+
+handle_check_snapshot_permitted(ok, Opts) ->
+    pre_migration_validation(cluster_partitions, Opts);
+handle_check_snapshot_permitted(
+    {error, {snapshot_not_permitted_on_nodes, Nodes}} = Error, _Opts
+) ->
+    ?LOG_ERROR("rqm: ~ts", [rqm_checks:format_snapshot_not_permitted_error(Nodes)]),
+    Error.
 
 handle_check_cluster_partitions({ok, Nodes}, Opts) ->
     handle_check_eligible_queue_count(rqm_checks:check_eligible_queue_count(Opts), Nodes);
@@ -1935,9 +1945,7 @@ format_migration_error(Class, Ex) ->
 %% EC2 returns UnauthorizedOperation for any refused permission, including the
 %% CreateTags check on a tagged CreateSnapshot, which 1.x roles do not allow.
 snapshot_error_hint("UnauthorizedOperation") ->
-    " (the instance role lacks a required permission; a role set up for 1.x lacks "
-    "ec2:CreateTags, see "
-    "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)";
+    " (the instance role lacks a required permission; " ?MISSING_CREATE_TAGS_HINT ")";
 snapshot_error_hint(_) ->
     "".
 

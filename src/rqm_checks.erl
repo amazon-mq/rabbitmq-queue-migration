@@ -19,6 +19,8 @@
     check_snapshot_not_in_progress/0,
     check_cluster_partitions/0,
     check_plugin_ready_on_all_nodes/0,
+    check_snapshot_permitted_on_all_nodes/0,
+    format_snapshot_not_permitted_error/1,
     check_active_alarms/0,
     check_memory_usage/0,
     get_mirrored_classic_queues/1
@@ -525,6 +527,44 @@ plugin_status_on(Node) ->
         error:{erpc, Reason} -> {rpc_error, Reason};
         Class:Reason -> {rpc_error, {Class, Reason}}
     end.
+
+%% @doc Check, on every running node, that EC2 does not refuse the node's
+%% migration snapshot, using a DryRun of the real request. Catching a refusal
+%% here avoids disconnecting every client first, which migration preparation
+%% does before it takes the snapshots. A node that cannot be checked is logged
+%% and passes, like a dry run that did not complete.
+-spec check_snapshot_permitted_on_all_nodes() ->
+    ok | {error, {snapshot_not_permitted_on_nodes, [node()]}}.
+check_snapshot_permitted_on_all_nodes() ->
+    Nodes = rabbit_nodes:list_running(),
+    Results = lists:zip(
+        Nodes,
+        erpc:multicall(Nodes, rqm_snapshot, check_snapshot_permitted, [], ?THIRTY_SECONDS_MS)
+    ),
+    lists:foreach(
+        fun({N, R}) -> log_unchecked_node(N, R) end,
+        [{N, R} || {N, R} <- Results, not is_snapshot_check_result(R)]
+    ),
+    case [N || {N, {ok, {error, {snapshot_not_permitted, _}}}} <- Results] of
+        [] -> ok;
+        Refused -> {error, {snapshot_not_permitted_on_nodes, Refused}}
+    end.
+
+is_snapshot_check_result({ok, ok}) -> true;
+is_snapshot_check_result({ok, {error, {snapshot_not_permitted, _}}}) -> true;
+is_snapshot_check_result(_) -> false.
+
+log_unchecked_node(Node, Result) ->
+    ?LOG_WARNING("rqm: snapshot permissions not checked on node ~tp: ~tp", [Node, Result]).
+
+-spec format_snapshot_not_permitted_error([node()]) -> binary().
+format_snapshot_not_permitted_error(RefusedNodes) ->
+    rqm_util:unicode_format(
+        "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on ~b node(s): ~ts. "
+        "The instance role must allow ec2:CreateSnapshot and ec2:CreateTags; "
+        ?MISSING_CREATE_TAGS_HINT,
+        [length(RefusedNodes), lists:join(", ", [atom_to_list(N) || N <- RefusedNodes])]
+    ).
 
 %% @doc Check if any RabbitMQ alarms are active
 %% Returns ok if no alarms active, {error, alarms_active} otherwise
