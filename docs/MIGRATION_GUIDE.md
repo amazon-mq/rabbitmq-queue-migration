@@ -37,6 +37,7 @@ These checks apply to the cluster as a whole and always block migration if they 
 | Disk Space | Enough free space exists on all nodes for the estimated migration footprint; see [TROUBLESHOOTING](TROUBLESHOOTING.md) for the calculation. |
 | System Health | No active memory or disk alarms, and memory usage is below threshold. |
 | Snapshot Availability | No concurrent EBS snapshots are in progress, avoiding snapshot conflicts. |
+| Snapshot Permissions | In `ebs` snapshot mode, EC2 does not refuse a `DryRun` of any node's `CreateSnapshot` request, tags included, with `UnauthorizedOperation`. Other dry-run failures are logged and do not block. This check runs only when a migration starts, not in the compatibility check, to spare the account's EC2 request rate. |
 | Cluster Health | No network partitions exist and all cluster nodes are running. |
 
 ### Queue-Level Checks

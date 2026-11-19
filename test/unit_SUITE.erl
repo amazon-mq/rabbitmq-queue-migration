@@ -7,6 +7,20 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include("rqm.hrl").
+
+%% The TagSpecification the plugin sends for the mocked data volume, tagged
+%% Name=my-cluster and Team=t.
+-define(DATA_VOLUME_TAG_SPECIFICATION,
+    "&TagSpecification.1.ResourceType=snapshot"
+    "&TagSpecification.1.Tag.1.Key=Name"
+    "&TagSpecification.1.Tag.1.Value=my-cluster"
+    "&TagSpecification.1.Tag.2.Key=Team"
+    "&TagSpecification.1.Tag.2.Value=t"
+    "&TagSpecification.1.Tag.3.Key=rabbitmq-queue-migration%3Apurpose"
+    "&TagSpecification.1.Tag.3.Value=pre-migration"
+).
 
 %% Common Test callbacks
 -export([
@@ -89,6 +103,31 @@
     % Plugin version tests
     plugin_version_test/1,
 
+    % EBS snapshot tagging tests
+    build_snapshot_body_without_tags_test/1,
+    build_snapshot_body_with_tags_test/1,
+    parse_volume_keeps_tags_test/1,
+    parse_volume_without_tag_set_test/1,
+    snapshot_tags_copies_volume_tags_test/1,
+    snapshot_tags_skips_reserved_and_purpose_keys_test/1,
+    snapshot_tags_respects_ec2_tag_limit_test/1,
+    snapshot_tags_keeps_name_at_ec2_tag_limit_test/1,
+
+    % EBS snapshot error reporting tests
+    snapshot_unauthorized_error_names_create_tags_test/1,
+    snapshot_other_error_reports_code_without_hint_test/1,
+    ebs_snapshot_copies_data_volume_tags_test/1,
+    snapshot_dry_run_sends_real_request_test/1,
+    snapshot_dry_run_refused_test/1,
+    snapshot_not_permitted_on_all_nodes_message_test/1,
+    snapshot_permitted_outside_ebs_mode_test/1,
+    snapshot_dry_run_throttled_passes_test/1,
+    snapshot_dry_run_transport_error_passes_test/1,
+    unchecked_node_passes_snapshot_check_test/1,
+    migration_error_with_non_latin1_queue_name_test/1,
+    missing_data_volume_test/1,
+    status_json_converts_latin1_error_test/1,
+
     % HTTP API authorization tests
     requires_admin_test/1
 ]).
@@ -107,6 +146,8 @@ all() ->
         {group, allow_message_ttl_options},
         {group, ebs_snapshot_credentials},
         {group, plugin_version},
+        {group, ebs_snapshot_tags},
+        {group, ebs_snapshot_errors},
         {group, http_authorization}
     ].
 
@@ -179,6 +220,32 @@ groups() ->
         {plugin_version, [], [
             plugin_version_test
         ]},
+        {ebs_snapshot_tags, [parallel], [
+            build_snapshot_body_without_tags_test,
+            build_snapshot_body_with_tags_test,
+            parse_volume_keeps_tags_test,
+            parse_volume_without_tag_set_test,
+            snapshot_tags_copies_volume_tags_test,
+            snapshot_tags_skips_reserved_and_purpose_keys_test,
+            snapshot_tags_respects_ec2_tag_limit_test,
+            snapshot_tags_keeps_name_at_ec2_tag_limit_test
+        ]},
+        %% Not parallel: meck replaces modules node-wide.
+        {ebs_snapshot_errors, [], [
+            snapshot_unauthorized_error_names_create_tags_test,
+            snapshot_other_error_reports_code_without_hint_test,
+            ebs_snapshot_copies_data_volume_tags_test,
+            snapshot_dry_run_sends_real_request_test,
+            snapshot_dry_run_refused_test,
+            snapshot_not_permitted_on_all_nodes_message_test,
+            snapshot_permitted_outside_ebs_mode_test,
+            snapshot_dry_run_throttled_passes_test,
+            snapshot_dry_run_transport_error_passes_test,
+            unchecked_node_passes_snapshot_check_test,
+            migration_error_with_non_latin1_queue_name_test,
+            missing_data_volume_test,
+            status_json_converts_latin1_error_test
+        ]},
         {http_authorization, [parallel], [
             requires_admin_test
         ]}
@@ -201,6 +268,9 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
+    _ = meck:unload(),
+    application:unset_env(rabbitmq_queue_migration, snapshot_mode),
+    application:unset_env(rabbitmq_queue_migration, ebs_volume_device),
     ok.
 
 %% =============================================================================
@@ -946,6 +1016,365 @@ plugin_version_test(_Config) ->
     ?assertNotEqual(<<"unknown">>, Version),
     {ok, Vsn} = application:get_key(rabbitmq_queue_migration, vsn),
     ?assertEqual(unicode:characters_to_binary(Vsn), Version).
+
+%% =============================================================================
+%% EBS Snapshot Tagging Tests
+%% =============================================================================
+
+build_snapshot_body_without_tags_test(_Config) ->
+    ?assertEqual(
+        "Action=CreateSnapshot&VolumeId=vol-1&Description=RabbitMQ%20snapshot"
+        "&Version=2016-11-15",
+        rqm_ebs:build_snapshot_body("vol-1", <<"RabbitMQ snapshot">>, [], false)
+    ).
+
+%% Keys and values are URI-encoded, and tags are numbered from 1 in order.
+build_snapshot_body_with_tags_test(_Config) ->
+    Tags = [
+        {"Name", "my-cluster"},
+        {"team:owner", "ops@example.com"}
+    ],
+    ?assertEqual(
+        "Action=CreateSnapshot&VolumeId=vol-1&Description=desc"
+        "&TagSpecification.1.ResourceType=snapshot"
+        "&TagSpecification.1.Tag.1.Key=Name"
+        "&TagSpecification.1.Tag.1.Value=my-cluster"
+        "&TagSpecification.1.Tag.2.Key=team%3Aowner"
+        "&TagSpecification.1.Tag.2.Value=ops%40example.com"
+        "&Version=2016-11-15",
+        rqm_ebs:build_snapshot_body("vol-1", "desc", Tags, false)
+    ).
+
+parse_volume_keeps_tags_test(_Config) ->
+    Volume = rqm_ebs:parse_volume(
+        parsed_volume_item([{"Name", "my-cluster"}, {"Initialized", "true"}])
+    ),
+    ?assertEqual("vol-1", proplists:get_value(volume_id, Volume)),
+    ?assertEqual(
+        [{device, "/dev/sdh"}, {state, "attached"}],
+        proplists:get_value(attachment, Volume)
+    ),
+    ?assertEqual(
+        [{"Name", "my-cluster"}, {"Initialized", "true"}],
+        proplists:get_value(tags, Volume)
+    ).
+
+parse_volume_without_tag_set_test(_Config) ->
+    Volume = rqm_ebs:parse_volume(parsed_volume_item(no_tag_set)),
+    ?assertEqual([], proplists:get_value(tags, Volume)).
+
+snapshot_tags_copies_volume_tags_test(_Config) ->
+    VolumeTags = [{"Name", "my-cluster"}, {"Team", "my-team"}],
+    ?assertEqual(
+        [
+            {"Name", "my-cluster"},
+            {"Team", "my-team"},
+            {"rabbitmq-queue-migration:purpose", "pre-migration"}
+        ],
+        rqm_snapshot:snapshot_tags(VolumeTags)
+    ).
+
+snapshot_tags_skips_reserved_and_purpose_keys_test(_Config) ->
+    VolumeTags = [
+        {"aws:cloudformation:stack-name", "my-stack"},
+        {"rabbitmq-queue-migration:purpose", "something-else"},
+        {"Name", "my-cluster"}
+    ],
+    ?assertEqual(
+        [{"Name", "my-cluster"}, {"rabbitmq-queue-migration:purpose", "pre-migration"}],
+        rqm_snapshot:snapshot_tags(VolumeTags)
+    ).
+
+snapshot_tags_respects_ec2_tag_limit_test(_Config) ->
+    VolumeTags = [{"key" ++ integer_to_list(N), "v"} || N <- lists:seq(1, 50)],
+    Tags = rqm_snapshot:snapshot_tags(VolumeTags),
+    ?assertEqual(50, length(Tags)),
+    ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
+
+%% With 50 copyable volume tags one must go to make room for the purpose tag,
+%% and it must not be Name, even when Name comes last.
+snapshot_tags_keeps_name_at_ec2_tag_limit_test(_Config) ->
+    VolumeTags =
+        [{"key" ++ integer_to_list(N), "v"} || N <- lists:seq(1, 49)] ++
+            [{"Name", "my-cluster"}],
+    Tags = rqm_snapshot:snapshot_tags(VolumeTags),
+    ?assertEqual(50, length(Tags)),
+    ?assert(lists:member({"Name", "my-cluster"}, Tags)),
+    ?assertNot(lists:member({"key49", "v"}, Tags)),
+    ?assertEqual({"rabbitmq-queue-migration:purpose", "pre-migration"}, lists:last(Tags)).
+
+%% Parse a DescribeVolumes item the same way rabbitmq_aws parses the response.
+parsed_volume_item(Tags) ->
+    [{"item", Props}] = rabbitmq_aws_xml:parse(describe_volumes_item("vol-1", "/dev/sdh", Tags)),
+    {"item", Props}.
+
+%% =============================================================================
+%% EBS Snapshot Error Reporting Tests
+%% =============================================================================
+
+%% The AWS message names the instance role, so it must not reach the stored
+%% migration error.
+snapshot_unauthorized_error_names_create_tags_test(_Config) ->
+    ?assertEqual(
+        <<
+            "Snapshot creation failed: UnauthorizedOperation (the plugin's AWS credentials, "
+            "normally the EC2 instance role, lack a required permission; "
+            "credentials set up for 1.x lack ec2:CreateTags; the required permissions are in "
+            "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md)"
+        >>,
+        snapshot_failure_message(
+            "UnauthorizedOperation",
+            "You are not authorized to perform this operation. User: "
+            "arn:aws:sts::111122223333:assumed-role/broker-role/i-1 is not authorized"
+        )
+    ).
+
+%% A message outside Latin-1 must not crash formatting.
+snapshot_other_error_reports_code_without_hint_test(_Config) ->
+    ?assertEqual(
+        <<"Snapshot creation failed: SnapshotCreationPerVolumeRateExceeded">>,
+        snapshot_failure_message(
+            "SnapshotCreationPerVolumeRateExceeded", "Ralentissez, \x{90E8}\x{7F72}"
+        )
+    ).
+
+%% Run a snapshot that EC2 rejects with Code and Message, and return the
+%% migration error that a failed preparation records. The gatherer wraps a
+%% node's preparation error as {error, {migration_preparation, Error}}.
+snapshot_failure_message(Code, Message) ->
+    mock_ebs_instance(ec2_error_response(Code, Message)),
+    {error, Error} = rqm_snapshot:create_snapshot(<<"/">>),
+    rqm:format_migration_error(throw, {error, {migration_preparation, Error}}).
+
+%% The instance has a root volume and the RabbitMQ data volume, listed root
+%% first. The CreateSnapshot request must target the data volume and carry the
+%% data volume's tags, not the root volume's.
+ebs_snapshot_copies_data_volume_tags_test(_Config) ->
+    mock_ebs_instance(
+        {ok, {
+            [],
+            rabbitmq_aws_xml:parse(
+                "<CreateSnapshotResponse><snapshotId>snap-1</snapshotId>"
+                "<volumeId>vol-data</volumeId><status>pending</status></CreateSnapshotResponse>"
+            )
+        }}
+    ),
+    ?assertEqual(
+        {ok, {<<"snap-1">>, <<"vol-data">>, <<"i-1">>}},
+        rqm_snapshot:create_snapshot(<<"/">>)
+    ),
+    Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
+    ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
+    %% The body must end here: a real snapshot request must not be a dry run.
+    ?assert(lists:suffix(?DATA_VOLUME_TAG_SPECIFICATION ++ "&Version=2016-11-15", Body)).
+
+%% The dry run must be the real request, tags included, plus DryRun=true:
+%% EC2 checks the tagging permission only when the request carries tags.
+snapshot_dry_run_sends_real_request_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("DryRunOperation", "Request would have succeeded")),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    Body = meck:capture(first, rabbitmq_aws, post, '_', 3),
+    ?assertMatch("Action=CreateSnapshot&VolumeId=vol-data&" ++ _, Body),
+    ?assertNotEqual(
+        nomatch,
+        string:find(Body, ?DATA_VOLUME_TAG_SPECIFICATION ++ "&Version=2016-11-15&DryRun=true")
+    ).
+
+snapshot_dry_run_refused_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("UnauthorizedOperation", "You are not authorized")),
+    ?assertEqual(
+        {error, {snapshot_not_permitted, "UnauthorizedOperation"}},
+        rqm_snapshot:check_snapshot_permitted()
+    ).
+
+%% Runs the cluster-wide check through erpc against this node only.
+snapshot_not_permitted_on_all_nodes_message_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("UnauthorizedOperation", "You are not authorized")),
+    ok = meck:new(rabbit_nodes, [no_link]),
+    ok = meck:expect(rabbit_nodes, list_running, fun() -> [node()] end),
+    {error, {snapshot_not_permitted_on_nodes, BadNodes}} =
+        rqm_checks:check_snapshot_permitted_on_all_nodes(),
+    ?assertEqual([node()], BadNodes),
+    ?assertEqual(
+        rqm_util:unicode_format(
+            "EC2 refused the EBS snapshot dry run (UnauthorizedOperation) on 1 node(s): ~ts. "
+            "The AWS credentials the plugin uses (normally the EC2 instance role) must allow "
+            "ec2:CreateSnapshot and ec2:CreateTags; "
+            "credentials set up for 1.x lack ec2:CreateTags; the required permissions are in "
+            "https://github.com/amazon-mq/rabbitmq-queue-migration/blob/main/docs/EC2_SETUP.md",
+            [node()]
+        ),
+        rqm_checks:format_snapshot_not_permitted_error(BadNodes)
+    ).
+
+%% Outside ebs mode the check must not touch EC2 at all. The check fails open,
+%% so a return of ok alone would not show that; count the calls instead.
+%% stub_all makes meck record a call to any function of the two modules.
+snapshot_permitted_outside_ebs_mode_test(_Config) ->
+    ok = meck:new([rabbitmq_aws_config, rabbitmq_aws], [no_link, stub_all]),
+    lists:foreach(
+        fun(Mode) ->
+            ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, Mode),
+            ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted())
+        end,
+        [none, tar]
+    ),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws_config, '_', '_')),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws, '_', '_')).
+
+%% Throttling says nothing about permissions, so it must not block migration.
+snapshot_dry_run_throttled_passes_test(_Config) ->
+    mock_ebs_instance(ec2_error_response("RequestLimitExceeded", "Request limit exceeded.")),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(1, meck:num_calls(rabbitmq_aws, post, '_')).
+
+%% rabbitmq_aws:post/4 returns this shape for an httpc failure, which
+%% rqm_ebs:create_volume_snapshot/2 does not handle (#122).
+snapshot_dry_run_transport_error_passes_test(_Config) ->
+    mock_ebs_instance({error, timeout, undefined}),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(1, meck:num_calls(rabbitmq_aws, post, '_')).
+
+%% A node whose check cannot run passes; only a refusal blocks.
+unchecked_node_passes_snapshot_check_test(_Config) ->
+    ok = meck:new(rabbit_nodes, [no_link]),
+    ok = meck:expect(rabbit_nodes, list_running, fun() -> [node()] end),
+    ok = meck:new(rqm_snapshot, [passthrough, no_link]),
+    ok = meck:expect(rqm_snapshot, check_snapshot_permitted, fun() -> error(boom) end),
+    ?assertEqual(ok, rqm_checks:check_snapshot_permitted_on_all_nodes()),
+    ?assertEqual(1, meck:num_calls(rqm_snapshot, check_snapshot_permitted, [])).
+
+%% A queue named outside Latin-1 must not stop the migration error from being
+%% stored, and must be stored as valid UTF-8.
+migration_error_with_non_latin1_queue_name_test(_Config) ->
+    lists:foreach(
+        fun(Name) ->
+            Queue = #resource{virtual_host = <<"/">>, kind = queue, name = Name},
+            ?assertEqual(
+                <<"Migration failed: 1 error(s), 0 aborted. No rollback needed. First error: ",
+                    Name/binary, " - timeout">>,
+                rqm:format_migration_error(
+                    throw, {migration_failed_no_rollback, {errors, [{error, Queue, timeout}]}}
+                )
+            ),
+            %% The shape a failed queue worker reports.
+            ?assertEqual(
+                <<"Migration failed: 1 error(s), 0 aborted. Rollback pending. First error: ",
+                    Name/binary, " - timeout">>,
+                rqm:format_migration_error(
+                    error,
+                    {migration_failed_rollback_pending,
+                        {errors, [{error, Queue, {exit, timeout, []}}]}}
+                )
+            )
+        end,
+        [<<"\x{6CE8}\x{6587}"/utf8>>, <<"caf\x{E9}"/utf8>>]
+    ).
+
+%% 1.x stored a first failed queue named café as the Latin-1 byte 0xE9, which
+%% rabbit_json cannot encode. Every serializer that emits a stored error must
+%% still produce a document rabbit_json can encode.
+status_json_converts_latin1_error_test(_Config) ->
+    Prefix = <<"Migration failed: 1 error(s), 0 aborted. No rollback needed. First error: ">>,
+    Stored = <<Prefix/binary, "caf", 16#E9, " - timeout">>,
+    Expected = <<Prefix/binary, "caf\x{E9}"/utf8, " - timeout">>,
+    Migration = #queue_migration{
+        id = {1700000000000, node()},
+        vhost = <<"/">>,
+        started_at = {1700, 0, 0},
+        total_queues = 1,
+        completed_queues = 0,
+        status = failed,
+        error = Stored
+    },
+    QueueStatus = #queue_migration_status{
+        queue_resource = #resource{virtual_host = <<"/">>, kind = queue, name = <<"q">>},
+        total_messages = 0,
+        migrated_messages = 0,
+        status = failed,
+        error = Stored
+    },
+    lists:foreach(
+        fun(Json) ->
+            #{<<"error">> := Error} = rabbit_json:decode(rabbit_json:encode(Json)),
+            ?assertEqual(Expected, Error)
+        end,
+        [
+            rqm_mgmt:migration_to_json(Migration),
+            rqm_mgmt:migration_to_json_detail(Migration),
+            rqm_mgmt:queue_status_to_json(QueueStatus)
+        ]
+    ).
+
+%% With no volume at the configured device, the dry run must pass (the
+%% failure is not about permissions) without sending a CreateSnapshot, and
+%% the real snapshot must fail with volume_discovery_failed.
+missing_data_volume_test(_Config) ->
+    mock_ebs_instance(
+        [describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}])],
+        {error, unexpected}
+    ),
+    ?assertEqual(ok, rqm_snapshot:check_snapshot_permitted()),
+    ?assertEqual(
+        {error, {volume_discovery_failed, no_rabbitmq_volumes_found}},
+        rqm_snapshot:create_snapshot(<<"/">>)
+    ),
+    ?assertEqual(0, meck:num_calls(rabbitmq_aws, post, '_')).
+
+%% Mock an EC2 instance with a root volume listed before the RabbitMQ data
+%% volume, and have CreateSnapshot return PostResult.
+mock_ebs_instance(PostResult) ->
+    mock_ebs_instance(
+        [
+            describe_volumes_item("vol-root", "/dev/xvda", [{"Name", "root-disk"}]),
+            describe_volumes_item("vol-data", "/dev/sdh", [{"Name", "my-cluster"}, {"Team", "t"}])
+        ],
+        PostResult
+    ).
+
+mock_ebs_instance(VolumeItems, PostResult) ->
+    ok = application:set_env(rabbitmq_queue_migration, snapshot_mode, ebs),
+    ok = application:set_env(rabbitmq_queue_migration, ebs_volume_device, "/dev/sdh"),
+    DescribeVolumes = rabbitmq_aws_xml:parse(
+        "<DescribeVolumesResponse><volumeSet>" ++ lists:append(VolumeItems) ++
+            "</volumeSet></DescribeVolumesResponse>"
+    ),
+    ok = meck:new(rabbitmq_aws_config, [no_link]),
+    ok = meck:expect(rabbitmq_aws_config, region, fun() -> {ok, "us-east-1"} end),
+    ok = meck:expect(rabbitmq_aws_config, instance_id, fun() -> {ok, "i-1"} end),
+    ok = meck:new(rabbitmq_aws, [no_link]),
+    ok = meck:expect(rabbitmq_aws, set_region, fun("us-east-1") -> ok end),
+    ok = meck:expect(rabbitmq_aws, api_get_request, fun("ec2", _Path) -> {ok, DescribeVolumes} end),
+    ok = meck:expect(rabbitmq_aws, post, fun("ec2", "/", _Body, _Headers) -> PostResult end).
+
+%% An EC2 4xx error response as rabbitmq_aws:post/4 returns it.
+ec2_error_response(Code, Message) ->
+    Xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<Response><Errors><Error><Code>" ++ Code ++ "</Code><Message>" ++ Message ++
+            "</Message></Error></Errors><RequestID>r-1</RequestID></Response>",
+    %% httpc hands rabbitmq_aws the body as a list of UTF-8 bytes.
+    {error, "Bad Request", {
+        [], rabbitmq_aws_xml:parse(binary_to_list(unicode:characters_to_binary(Xml)))
+    }}.
+
+%% A DescribeVolumes <item>; `no_tag_set' omits the <tagSet> element, as EC2
+%% does for a volume without tags.
+describe_volumes_item(VolumeId, Device, Tags) ->
+    "<item><volumeId>" ++ VolumeId ++
+        "</volumeId><size>8</size><volumeType>gp3</volumeType><status>in-use</status>"
+        "<attachmentSet><item><device>" ++ Device ++
+        "</device><status>attached</status></item></attachmentSet>" ++
+        tag_set_xml(Tags) ++ "</item>".
+
+tag_set_xml(no_tag_set) ->
+    "";
+tag_set_xml(Tags) ->
+    "<tagSet>" ++
+        lists:append([
+            "<item><key>" ++ K ++ "</key><value>" ++ V ++ "</value></item>"
+         || {K, V} <- Tags
+        ]) ++ "</tagSet>".
 
 %% Which endpoint and method combinations need the administrator tag rather
 %% than monitoring. An endpoint or method not listed here must need

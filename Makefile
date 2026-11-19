@@ -8,7 +8,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_aws
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck
 
 PLT_APPS += mnesia rabbitmq_shovel
 

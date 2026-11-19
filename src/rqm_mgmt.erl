@@ -23,6 +23,8 @@
 -ifdef(TEST).
 -export([
     parse_all_options/2,
+    migration_to_json/1,
+    queue_status_to_json/1,
     requires_admin/2
 ]).
 -endif.
@@ -211,6 +213,9 @@ accept_migration_start(VHost, ReqData, {EndpointType, Context} = ContextArg) ->
 
 start_validated_migration(Opts0, ReqData, {EndpointType, Context}) ->
     % First, run validation synchronously to catch errors before spawning
+    % rqm:start/1 runs the whole validation chain again before it creates the
+    % migration record, so every check runs twice per start, including the
+    % EC2 calls in snapshot_permitted (#123).
     case rqm:validate_migration(Opts0) of
         ok ->
             MigrationId = rqm_util:generate_migration_id(),
@@ -330,6 +335,13 @@ start_validated_migration(Opts0, ReqData, {EndpointType, Context}) ->
                 reason => Message
             }),
             bad_request(ErrorJson, ReqData, {EndpointType, Context});
+        {error, {snapshot_not_permitted_on_nodes, BadNodes}} ->
+            Message = rqm_checks:format_snapshot_not_permitted_error(BadNodes),
+            ErrorJson = rabbit_json:encode(#{
+                error => bad_request,
+                reason => Message
+            }),
+            bad_request(ErrorJson, ReqData, {EndpointType, Context});
         {error, partitions_detected} ->
             Message =
                 <<"Cluster partitions detected. Resolve network partitions before migration.">>,
@@ -425,7 +437,7 @@ migration_to_json(#queue_migration{
         status => Status,
         skip_unsuitable_queues => SkipUnsuitableQueues,
         tolerance => undefined_to_null(Tolerance),
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 migration_to_json_detail(#queue_migration{
@@ -456,7 +468,7 @@ migration_to_json_detail(#queue_migration{
         snapshots => format_snapshots(Snapshots),
         skip_unsuitable_queues => SkipUnsuitableQueues,
         tolerance => undefined_to_null(Tolerance),
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 queue_status_to_json(#queue_migration_status{
@@ -476,7 +488,7 @@ queue_status_to_json(#queue_migration_status{
         migrated_messages => MigratedMsgs,
         progress_percentage => calculate_progress_percentage(MigratedMsgs, TotalMsgs),
         status => Status,
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 format_display_id({Timestamp, Node}, VHost, _StartedAt) ->
@@ -511,6 +523,18 @@ undefined_to_null(undefined) ->
     null;
 undefined_to_null(Error) ->
     Error.
+
+%% A migration error stored by 1.x can hold Latin-1 bytes, which rabbit_json
+%% cannot encode; that would fail the whole status response, so convert them.
+%% Valid UTF-8 is taken as written, which misreads the rare Latin-1 byte
+%% sequence that happens to be valid UTF-8.
+error_to_json(Error) when is_binary(Error) ->
+    case rqm_util:is_valid_utf8(Error) of
+        true -> Error;
+        false -> unicode:characters_to_binary(Error, latin1)
+    end;
+error_to_json(Error) ->
+    undefined_to_null(Error).
 
 calculate_progress_percentage(_, 0) ->
     0;

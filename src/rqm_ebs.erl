@@ -14,8 +14,16 @@
     create_volume_snapshot/1,
     create_volume_snapshot/2,
     delete_volume_snapshot/1,
-    delete_volume_snapshot/2
+    delete_volume_snapshot/2,
+    error_code/1
 ]).
+
+-ifdef(TEST).
+-export([
+    build_snapshot_body/4,
+    parse_volume/1
+]).
+-endif.
 
 -type attachment_info() :: [{device, string()} | {state, string()}].
 -type volume_info() :: [
@@ -24,6 +32,7 @@
     | {volume_type, string()}
     | {state, string()}
     | {attachment, attachment_info()}
+    | {tags, [{string(), string()}]}
 ].
 -type volumes_list() :: [volume_info()].
 
@@ -81,9 +90,10 @@ create_volume_snapshot(VolumeId) ->
 %% @end
 create_volume_snapshot(VolumeId, Options) ->
     Description = maps:get(description, Options, "RabbitMQ automated snapshot"),
+    Tags = maps:get(tags, Options, []),
     DryRun = maps:get(dry_run, Options, false),
 
-    Body = build_snapshot_body(VolumeId, Description, DryRun),
+    Body = build_snapshot_body(VolumeId, Description, Tags, DryRun),
     Headers = [{"content-type", "application/x-www-form-urlencoded"}],
     case rabbitmq_aws:post("ec2", "/", Body, Headers) of
         {ok, {_Headers, Response}} -> parse_snapshot_response(Response);
@@ -108,6 +118,19 @@ delete_volume_snapshot(SnapshotId, Options) ->
         {ok, Response} -> parse_delete_response(Response, SnapshotId);
         {error, Reason} -> categorize_delete_error(SnapshotId, Reason)
     end.
+
+-spec error_code(term()) -> {ok, string()} | error.
+%% @doc Extract the first error's code from a parsed EC2 error `Response'.
+%% @end
+error_code(ErrorData) when is_list(ErrorData) ->
+    case proplists:get_value("Errors", ErrorData) of
+        [{"Error", ErrorProps} | _] when is_list(ErrorProps) ->
+            {ok, proplists:get_value("Code", ErrorProps, "")};
+        _ ->
+            error
+    end;
+error_code(_) ->
+    error.
 
 %%----------------------------------------------------------------------------------------------------
 %% private functions
@@ -156,22 +179,47 @@ parse_volume({"item", VolumeProps}) ->
         {size, Size},
         {volume_type, VolumeType},
         {state, State},
-        {attachment, Attachment}
+        {attachment, Attachment},
+        {tags, parse_tag_set(proplists:get_value("tagSet", VolumeProps, []))}
     ];
 parse_volume(_) ->
     [].
 
--spec build_snapshot_body(string(), string() | binary(), boolean()) -> string().
-build_snapshot_body(VolumeId, Description, DryRun) ->
+-spec parse_tag_set(term()) -> [{string(), string()}].
+parse_tag_set(TagSet) when is_list(TagSet) ->
+    [
+        {proplists:get_value("key", TagProps, ""), proplists:get_value("value", TagProps, "")}
+     || {"item", TagProps} <- TagSet
+    ];
+parse_tag_set(_) ->
+    [].
+
+-spec build_snapshot_body(string(), string() | binary(), [{string(), string()}], boolean()) ->
+    string().
+build_snapshot_body(VolumeId, Description, Tags, DryRun) ->
     DescStr = unicode:characters_to_list(Description),
     BaseBody =
         "Action=CreateSnapshot&VolumeId=" ++ VolumeId ++
             "&Description=" ++ uri_string:quote(DescStr) ++
+            build_tag_specification(Tags) ++
             "&Version=2016-11-15",
     case DryRun of
         true -> BaseBody ++ "&DryRun=true";
         false -> BaseBody
     end.
+
+-spec build_tag_specification([{string(), string()}]) -> string().
+build_tag_specification([]) ->
+    "";
+build_tag_specification(Tags) ->
+    "&TagSpecification.1.ResourceType=snapshot" ++
+        lists:append([build_tag_param(N, Key, Value) || {N, {Key, Value}} <- lists:enumerate(Tags)]).
+
+-spec build_tag_param(pos_integer(), string(), string()) -> string().
+build_tag_param(N, Key, Value) ->
+    Prefix = "&TagSpecification.1.Tag." ++ integer_to_list(N),
+    Prefix ++ ".Key=" ++ uri_string:quote(unicode:characters_to_list(Key)) ++
+        Prefix ++ ".Value=" ++ uri_string:quote(unicode:characters_to_list(Value)).
 
 -spec build_delete_path(string(), boolean()) -> string().
 build_delete_path(SnapshotId, DryRun) ->

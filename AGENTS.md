@@ -307,6 +307,7 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `check_memory_usage/0` - Verify memory usage acceptable
 - `check_snapshot_not_in_progress/0` - Verify no concurrent snapshots
 - `check_plugin_ready_on_all_nodes/0` - Verify the queue migration plugin reports `ready` on every running node
+- `check_snapshot_permitted_on_all_nodes/0` - In `ebs` mode, fail if EC2 refuses a `CreateSnapshot` DryRun of any running node's tagged snapshot request with `UnauthorizedOperation`
 - `check_cluster_partitions/0` - Verify no network partitions
 
 **Queue Checks:**
@@ -354,16 +355,18 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `create_snapshot/1` - Create snapshot using configured mode (tar or ebs)
 - `create_snapshot/2` - Create snapshot with specific mode
 - `check_no_snapshots_in_progress/0` - Validate no concurrent EBS snapshots (used by validation chain)
+- `check_snapshot_permitted/0` - DryRun this node's tagged `CreateSnapshot` request; errors only on `UnauthorizedOperation` (used by validation chain via `rqm_checks`)
 - `check_no_snapshots_in_progress/1` - Pattern match on snapshot mode (tar skips, ebs checks)
 - `find_rabbitmq_volume/1` - Discover EBS volume for RabbitMQ data
-- `create_ebs_snapshot/1` - Create EBS snapshot for discovered volume
+- `create_ebs_snapshot/3` - Create EBS snapshot for discovered volume, tagged from the volume
 - `cleanup_snapshot/1` - Clean up snapshot using configured mode
 - `cleanup_snapshot/2` - Clean up snapshot with specific mode
 
 ### `rqm_ebs.erl`
 - `instance_volumes/0` - List all EBS volumes attached to current instance
 - `create_volume_snapshot/1` - Create snapshot for volume with default description
-- `create_volume_snapshot/2` - Create snapshot with custom description
+- `create_volume_snapshot/2` - Create snapshot with custom description and tags
+- `error_code/1` - Extract the error code from a parsed EC2 error response
 - `delete_volume_snapshot/1` - Delete snapshot with default region
 - `delete_volume_snapshot/2` - Delete snapshot with specific region
 
@@ -397,6 +400,7 @@ GET  /api/queue-migration/status/:id      # Specific migration details
 - `check_active_alarms/0` - Check for active RabbitMQ alarms
 - `check_memory_usage/0` - Validate memory usage is within limits
 - `check_snapshot_not_in_progress/0` - Verify no concurrent EBS snapshots (delegates to `rqm_snapshot`)
+- `check_snapshot_permitted_on_all_nodes/0` - Run `rqm_snapshot:check_snapshot_permitted/0` on every running node
 - `check_plugin_ready_on_all_nodes/0` - Verify the queue migration plugin is `ready` on every running cluster node
 - `check_cluster_partitions/0` - Verify no cluster partitions and all nodes up
 - `check_system_migration_readiness/1` - Overall system readiness
@@ -692,7 +696,7 @@ Performance varies significantly based on:
 ### AWS Configuration Requirements
 - **Credentials**: AWS credentials via environment variables, config files, or EC2 instance roles
 - **Region**: AWS region configuration (defaults to us-east-1, should match peer discovery)
-- **Permissions**: EC2 permissions for `ec2:DescribeVolumes`, `ec2:CreateSnapshot`, `ec2:DescribeSnapshots`, and `ec2:DeleteSnapshot`. The plugin does not call `ec2:CreateTags` or `ec2:DescribeInstances`.
+- **Permissions**: EC2 permissions for `ec2:DescribeVolumes`, `ec2:CreateSnapshot`, `ec2:DescribeSnapshots`, `ec2:DeleteSnapshot`, and `ec2:CreateTags` (required since 2.0.0, because `CreateSnapshot` tags the snapshot it creates). The plugin does not call `ec2:DescribeInstances`.
 - **Volume Setup**: RabbitMQ data directory must be on EBS volume at configured device path
 
 ### Snapshot Timing

@@ -27,7 +27,8 @@
 %% Exported for testing
 -ifdef(TEST).
 -export([
-    message_ttl_opts/1
+    message_ttl_opts/1,
+    format_migration_error/2
 ]).
 -endif.
 
@@ -146,6 +147,8 @@ pre_migration_validation(plugin_ready_on_all_nodes, Opts) ->
     handle_check_plugin_ready_on_all_nodes(
         rqm_checks:check_plugin_ready_on_all_nodes(), Opts
     );
+pre_migration_validation(snapshot_permitted, Opts) ->
+    handle_check_snapshot_permitted(rqm_checks:check_snapshot_permitted_on_all_nodes(), Opts);
 pre_migration_validation(cluster_partitions, Opts) ->
     handle_check_cluster_partitions(rqm_checks:check_cluster_partitions(), Opts).
 
@@ -275,7 +278,7 @@ handle_check_snapshot_not_in_progress({error, {snapshot_in_progress, Details}}, 
     {error, {snapshot_in_progress, Details}}.
 
 handle_check_plugin_ready_on_all_nodes(ok, Opts) ->
-    pre_migration_validation(cluster_partitions, Opts);
+    pre_migration_validation(snapshot_permitted, Opts);
 handle_check_plugin_ready_on_all_nodes(
     {error, {plugin_not_ready_on_nodes, BadNodes}}, _Opts
 ) ->
@@ -288,6 +291,14 @@ handle_check_plugin_ready_on_all_nodes(
         [NodeCount, BadNodes]
     ),
     {error, {plugin_not_ready_on_nodes, BadNodes}}.
+
+handle_check_snapshot_permitted(ok, Opts) ->
+    pre_migration_validation(cluster_partitions, Opts);
+handle_check_snapshot_permitted(
+    {error, {snapshot_not_permitted_on_nodes, Nodes}} = Error, _Opts
+) ->
+    ?LOG_ERROR("rqm: ~ts", [rqm_checks:format_snapshot_not_permitted_error(Nodes)]),
+    Error.
 
 handle_check_cluster_partitions({ok, Nodes}, Opts) ->
     handle_check_eligible_queue_count(rqm_checks:check_eligible_queue_count(Opts), Nodes);
@@ -1895,49 +1906,47 @@ format_migration_id({Timestamp, _Node}) ->
 format_migration_error(_Class, {migration_failed_rollback_pending, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
     FirstError = format_first_error(Errors),
-    iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~s", [
-            ErrorCount, AbortedCount, FirstError
-        ])
-    );
+    rqm_util:unicode_format("Migration failed: ~p error(s), ~p aborted. Rollback pending.~ts", [
+        ErrorCount, AbortedCount, FirstError
+    ]);
 format_migration_error(_Class, {migration_failed_no_rollback, {errors, Errors}}) ->
     {ErrorCount, AbortedCount} = count_errors_and_aborted(Errors),
     FirstError = format_first_error(Errors),
-    iolist_to_binary(
-        io_lib:format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~s", [
-            ErrorCount, AbortedCount, FirstError
-        ])
-    );
+    rqm_util:unicode_format("Migration failed: ~p error(s), ~p aborted. No rollback needed.~ts", [
+        ErrorCount, AbortedCount, FirstError
+    ]);
 format_migration_error(_Class, {preparation_failed, Reason}) when is_binary(Reason) ->
     <<"Preparation failed: ", Reason/binary>>;
 format_migration_error(_Class, {preparation_failed, Reason}) ->
-    iolist_to_binary(io_lib:format("Preparation failed: ~tp", [Reason]));
+    rqm_util:unicode_format("Preparation failed: ~tp", [Reason]);
 format_migration_error(
     _Class,
     {error,
         {migration_preparation, {snapshot_failed, _Volume, {snapshot_creation_failed, Details}}}}
 ) ->
-    case extract_aws_error_message(Details) of
-        {ok, Code, Message} ->
-            iolist_to_binary(io_lib:format("Snapshot creation failed: ~s - ~s", [Code, Message]));
+    %% The AWS message is logged when the snapshot fails but not stored here:
+    %% for UnauthorizedOperation it can name the instance role, and this text
+    %% is shown to every management user who can see migration status.
+    case rqm_ebs:error_code(Details) of
+        {ok, Code} ->
+            rqm_util:unicode_format("Snapshot creation failed: ~ts~ts", [
+                Code, snapshot_error_hint(Code)
+            ]);
         error ->
             <<"Snapshot creation failed">>
     end;
 format_migration_error(Class, Ex) ->
-    iolist_to_binary(io_lib:format("~tp: ~tp", [Class, Ex])).
+    rqm_util:unicode_format("~tp: ~tp", [Class, Ex]).
 
-extract_aws_error_message(Details) when is_list(Details) ->
-    try
-        Errors = proplists:get_value("Errors", Details),
-        [ErrorMap] = proplists:get_value("Error", Errors),
-        Code = proplists:get_value("Code", ErrorMap),
-        Message = proplists:get_value("Message", ErrorMap),
-        {ok, Code, Message}
-    catch
-        _:_ -> error
-    end;
-extract_aws_error_message(_) ->
-    error.
+%% EC2 returns UnauthorizedOperation for any refused permission, including the
+%% CreateTags check on a tagged CreateSnapshot, which 1.x roles do not allow.
+snapshot_error_hint("UnauthorizedOperation") ->
+    " (the plugin's AWS credentials, normally the EC2 instance role, lack a required "
+    "permission; "
+    ?MISSING_CREATE_TAGS_HINT
+    ")";
+snapshot_error_hint(_) ->
+    "".
 
 %% Helper function to compute per-node batch allocations
 %% Returns list of {Node, AllocationCount} tuples
@@ -2004,7 +2013,7 @@ format_first_error(Errors) ->
                     _ -> <<"unknown">>
                 end,
             ReasonStr = format_error_reason(Reason),
-            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr]);
+            io_lib:format(" First error: ~ts - ~ts", [QueueName, ReasonStr]);
         [{error, Resource, Reason} | _] ->
             QueueName =
                 case Resource of
@@ -2012,7 +2021,7 @@ format_first_error(Errors) ->
                     _ -> <<"unknown">>
                 end,
             ReasonStr = format_error_reason(Reason),
-            io_lib:format(" First error: ~ts - ~s", [QueueName, ReasonStr])
+            io_lib:format(" First error: ~ts - ~ts", [QueueName, ReasonStr])
     end.
 
 format_error_reason({message_count_mismatch, Expected, Actual, Diff}) ->

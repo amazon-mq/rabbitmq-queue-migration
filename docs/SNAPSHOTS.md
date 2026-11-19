@@ -84,6 +84,9 @@ queue_migration.ebs_volume_device = /dev/sdh
    - `ec2:DescribeVolumes` - Query attached volumes
    - `ec2:DescribeSnapshots` - Check snapshot status
    - `ec2:DeleteSnapshot` - Delete snapshots after successful migration
+   - `ec2:CreateTags` - Tag snapshots on creation
+
+   `ec2:CreateTags` is new in 2.0.0. A role set up for 1.x needs it added before upgrading; see [Upgrading from 1.x](EC2_SETUP.md#overview).
 
 3. **AWS Credentials**
    - EC2 instance role (recommended)

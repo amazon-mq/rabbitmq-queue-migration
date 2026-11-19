@@ -21,10 +21,11 @@ The validation chain is implemented as a series of recursive function calls. Eac
 9. `memory_usage` - Check memory usage within limits
 10. `snapshot_not_in_progress` - Check no EBS snapshots in progress
 11. `plugin_ready_on_all_nodes` - Check rabbitmq_queue_migration plugin reports `ready` on every running node
-12. `cluster_partitions` - Check no cluster partitions
-13. `eligible_queue_count` - Check at least one queue eligible for migration
+12. `snapshot_permitted` - In `ebs` mode, send each running node's `CreateSnapshot` request, tags included, with `DryRun` set, and fail if EC2 answers `UnauthorizedOperation` on any node. Any other outcome is logged and passes
+13. `cluster_partitions` - Check no cluster partitions
+14. `eligible_queue_count` - Check at least one queue eligible for migration
 
-### Terminal Behavior (Step 13)
+### Terminal Behavior (Step 14)
 
 The `eligible_queue_count` check is ONLY called by `cluster_partitions` at the end of the chain. It has different behavior based on mode:
 
@@ -159,6 +160,7 @@ validation_checks() ->
         {memory_usage, fun rqm_checks:check_memory_usage/0},
         {snapshot, fun rqm_checks:check_snapshot_not_in_progress/0},
         {plugin_ready, fun rqm_checks:check_plugin_ready_on_all_nodes/0},
+        {snapshot_permitted, fun rqm_checks:check_snapshot_permitted_on_all_nodes/0},
         {cluster_partitions, fun rqm_checks:check_cluster_partitions/0},
         {eligible_queue_count, fun rqm_checks:check_eligible_queue_count/1}
     ].
