@@ -113,11 +113,9 @@ delete_volume_snapshot(SnapshotId) ->
 delete_volume_snapshot(SnapshotId, Options) ->
     DryRun = maps:get(dry_run, Options, false),
 
-    Body = build_delete_body(SnapshotId, DryRun),
-    Headers = [{"content-type", "application/x-www-form-urlencoded"}],
-    case rabbitmq_aws:post("ec2", "/", Body, Headers) of
-        {ok, {_Headers, Response}} -> parse_delete_response(Response, SnapshotId);
-        {error, _Message, {_Headers, Response}} -> parse_delete_response(Response, SnapshotId);
+    Path = build_delete_path(SnapshotId, DryRun),
+    case rabbitmq_aws:api_get_request("ec2", Path) of
+        {ok, Response} -> parse_delete_response(Response, SnapshotId);
         {error, Reason} -> categorize_delete_error(SnapshotId, Reason)
     end.
 
@@ -223,14 +221,14 @@ build_tag_param(N, Key, Value) ->
     Prefix ++ ".Key=" ++ uri_string:quote(unicode:characters_to_list(Key)) ++
         Prefix ++ ".Value=" ++ uri_string:quote(unicode:characters_to_list(Value)).
 
--spec build_delete_body(string(), boolean()) -> string().
-build_delete_body(SnapshotId, DryRun) ->
-    BaseBody =
-        "Action=DeleteSnapshot&SnapshotId=" ++ SnapshotId ++
+-spec build_delete_path(string(), boolean()) -> string().
+build_delete_path(SnapshotId, DryRun) ->
+    BasePath =
+        "/?Action=DeleteSnapshot&SnapshotId=" ++ SnapshotId ++
             "&Version=2016-11-15",
     case DryRun of
-        true -> BaseBody ++ "&DryRun=true";
-        false -> BaseBody
+        true -> BasePath ++ "&DryRun=true";
+        false -> BasePath
     end.
 
 -spec parse_snapshot_response(term()) -> {ok, string(), snapshot_metadata()} | {error, term()}.
@@ -251,9 +249,7 @@ parse_snapshot_response([{"Response", ErrorData}]) ->
 
 -spec parse_delete_response(term(), string()) -> {ok, string()} | {error, term()}.
 parse_delete_response([{"DeleteSnapshotResponse", _ResponseData}], SnapshotId) ->
-    {ok, SnapshotId};
-parse_delete_response([{"Response", ErrorData}], _SnapshotId) ->
-    {error, {snapshot_deletion_failed, ErrorData}}.
+    {ok, SnapshotId}.
 
 -spec categorize_error(string(), term()) -> {error, term()}.
 categorize_error(VolumeId, Reason) ->

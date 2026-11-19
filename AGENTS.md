@@ -159,6 +159,8 @@ x-queue-version: <removed>                       % Classic queue specific
 
 ## HTTP API Endpoints
 
+Reading status and the compatibility check need the `monitoring` tag; starting, interrupting and updating a migration's status need `administrator` (`rqm_mgmt:requires_admin/2`).
+
 ### Migration Control
 ```
 POST /api/queue-migration/start           # Start migration on default vhost (/)
@@ -536,7 +538,7 @@ See `priv/tools/restore_snapshot_test.sh` for tar snapshot restoration example.
 
 ### Integration Tests
 
-**Test Suite**: 6 comprehensive integration tests in `test/integration/`
+**Test Suite**: 8 integration tests in `test/integration/`
 
 **Tests:**
 1. **EndToEndMigrationTest** - Happy path migration validation
@@ -545,6 +547,8 @@ See `priv/tools/restore_snapshot_test.sh` for tar snapshot restoration example.
 4. **BatchMigrationTest** - Batch migration with batch_size/batch_order (50 queues in 3 batches)
 5. **EmptyQueueTest** - Empty queue migration (20 queues, 0 messages)
 6. **AlreadyQuorumTest** - Idempotency validation (15 classic + 10 quorum)
+7. **AllowMessageTtlTest** - Migration of queues with a queue-level message TTL using `allow_message_ttl`
+8. **AuthorizationTest** - Which user tags (administrator, monitoring, management, none) can call each HTTP API endpoint, and that refused requests change nothing
 
 **CI Integration:** All tests run automatically in GitHub Actions
 

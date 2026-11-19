@@ -65,4 +65,6 @@ the version will not match.
 Creates the GitHub release from the tag, marks it `--latest`, and uploads the
 `.ez` archive.
 
+If a draft release for the version already exists, for example one created early to hold hand-written release notes, `publish` publishes that draft instead: it uploads the `.ez` archive, appends GitHub's generated notes to the draft's notes unless they are already there, and marks it `--latest`, keeping the draft's title. It first checks that the tag is on GitHub, because publishing a draft whose tag is missing would make GitHub create an unsigned tag. It stops if the release is already published.
+
 * (Optional) Update the generated release on GitHub to add the GitHub milestone

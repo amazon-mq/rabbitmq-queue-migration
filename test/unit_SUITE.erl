@@ -94,6 +94,12 @@
     message_ttl_opts_forces_tolerance_test/1,
     message_ttl_opts_without_flag_test/1,
 
+    % EBS snapshot credential refresh tests
+    delete_snapshot_uses_api_get_request_test/1,
+    delete_snapshot_dry_run_test/1,
+    delete_snapshot_credentials_error_test/1,
+    delete_snapshot_service_error_test/1,
+
     % Plugin version tests
     plugin_version_test/1,
 
@@ -120,7 +126,10 @@
     unchecked_node_passes_snapshot_check_test/1,
     migration_error_with_non_latin1_queue_name_test/1,
     missing_data_volume_test/1,
-    status_json_converts_latin1_error_test/1
+    status_json_converts_latin1_error_test/1,
+
+    % HTTP API authorization tests
+    requires_admin_test/1
 ]).
 
 %% Test groups
@@ -135,9 +144,11 @@ all() ->
         {group, migration_checks},
         {group, queue_naming},
         {group, allow_message_ttl_options},
+        {group, ebs_snapshot_credentials},
         {group, plugin_version},
         {group, ebs_snapshot_tags},
-        {group, ebs_snapshot_errors}
+        {group, ebs_snapshot_errors},
+        {group, http_authorization}
     ].
 
 groups() ->
@@ -200,6 +211,12 @@ groups() ->
             message_ttl_opts_forces_tolerance_test,
             message_ttl_opts_without_flag_test
         ]},
+        {ebs_snapshot_credentials, [], [
+            delete_snapshot_uses_api_get_request_test,
+            delete_snapshot_dry_run_test,
+            delete_snapshot_credentials_error_test,
+            delete_snapshot_service_error_test
+        ]},
         {plugin_version, [], [
             plugin_version_test
         ]},
@@ -228,6 +245,9 @@ groups() ->
             migration_error_with_non_latin1_queue_name_test,
             missing_data_volume_test,
             status_json_converts_latin1_error_test
+        ]},
+        {http_authorization, [parallel], [
+            requires_admin_test
         ]}
     ].
 
@@ -913,6 +933,71 @@ message_ttl_opts_without_flag_test(_Config) ->
         rqm:message_ttl_opts(#{allow_message_ttl => false, tolerance => 10.0})
     ).
 
+delete_snapshot_uses_api_get_request_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(
+            rabbitmq_aws,
+            api_get_request,
+            2,
+            {ok, [{"DeleteSnapshotResponse", []}]}
+        ),
+        ?assertEqual({ok, "snap-123"}, rqm_ebs:delete_volume_snapshot("snap-123")),
+        ?assert(
+            meck:called(
+                rabbitmq_aws,
+                api_get_request,
+                ["ec2", "/?Action=DeleteSnapshot&SnapshotId=snap-123&Version=2016-11-15"]
+            )
+        )
+    end).
+
+delete_snapshot_dry_run_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(
+            rabbitmq_aws,
+            api_get_request,
+            2,
+            {ok, [{"DeleteSnapshotResponse", []}]}
+        ),
+        ?assertEqual(
+            {ok, "snap-123"},
+            rqm_ebs:delete_volume_snapshot("snap-123", #{dry_run => true})
+        ),
+        ?assert(
+            meck:called(
+                rabbitmq_aws,
+                api_get_request,
+                [
+                    "ec2",
+                    "/?Action=DeleteSnapshot&SnapshotId=snap-123&Version=2016-11-15&DryRun=true"
+                ]
+            )
+        )
+    end).
+
+delete_snapshot_credentials_error_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(rabbitmq_aws, api_get_request, 2, {error, credentials}),
+        ?assertEqual({error, credentials}, rqm_ebs:delete_volume_snapshot("snap-123"))
+    end).
+
+delete_snapshot_service_error_test(_Config) ->
+    with_rabbitmq_aws_mock(fun() ->
+        meck:expect(rabbitmq_aws, api_get_request, 2, {error, "AWS service is unavailable"}),
+        ?assertEqual(
+            {error, "AWS service is unavailable"},
+            rqm_ebs:delete_volume_snapshot("snap-123")
+        )
+    end).
+
+with_rabbitmq_aws_mock(Test) ->
+    meck:new(rabbitmq_aws, [passthrough, no_link]),
+    try
+        Test()
+    after
+        meck:unload(rabbitmq_aws)
+    end.
+
 %% plugin_version/0 surfaces the application's `vsn' (baked in from
 %% PROJECT_VERSION at build time) as a binary. Once the app is loaded it
 %% must match the `vsn' key verbatim and never be the `unknown' fallback.
@@ -1290,3 +1375,38 @@ tag_set_xml(Tags) ->
             "<item><key>" ++ K ++ "</key><value>" ++ V ++ "</value></item>"
          || {K, V} <- Tags
         ]) ++ "</tagSet>".
+
+%% Which endpoint and method combinations need the administrator tag rather
+%% than monitoring. An endpoint or method not listed here must need
+%% administrator.
+requires_admin_test(_Config) ->
+    Cases = [
+        {status_list, <<"GET">>, false},
+        {status_list, <<"HEAD">>, false},
+        {status_detail, <<"GET">>, false},
+        {status_detail, <<"HEAD">>, false},
+        {rollback_pending, <<"GET">>, false},
+        {rollback_pending, <<"HEAD">>, false},
+        {check, <<"POST">>, false},
+        {check, <<"OPTIONS">>, false},
+        {start, <<"OPTIONS">>, false},
+        {status_detail, <<"POST">>, true},
+        {start, <<"POST">>, true},
+        {start_vhost, <<"POST">>, true},
+        {interrupt, <<"POST">>, true},
+        {check, <<"GET">>, true},
+        {check, <<"HEAD">>, true},
+        {start, <<"GET">>, true},
+        {interrupt, <<"GET">>, true},
+        {status_list, <<"POST">>, true},
+        {status_list, <<"DELETE">>, true},
+        {rollback_pending, <<"PUT">>, true},
+        {some_future_endpoint, <<"GET">>, true}
+    ],
+    [
+        ?assertEqual({Endpoint, Method, Expected}, {
+            Endpoint, Method, rqm_mgmt:requires_admin(Endpoint, Method)
+        })
+     || {Endpoint, Method, Expected} <- Cases
+    ],
+    ok.
