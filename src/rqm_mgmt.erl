@@ -22,7 +22,9 @@
 %% Exported for testing
 -ifdef(TEST).
 -export([
-    parse_all_options/2
+    parse_all_options/2,
+    migration_to_json/1,
+    queue_status_to_json/1
 ]).
 -endif.
 
@@ -401,7 +403,7 @@ migration_to_json(#queue_migration{
         status => Status,
         skip_unsuitable_queues => SkipUnsuitableQueues,
         tolerance => undefined_to_null(Tolerance),
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 migration_to_json_detail(#queue_migration{
@@ -432,7 +434,7 @@ migration_to_json_detail(#queue_migration{
         snapshots => format_snapshots(Snapshots),
         skip_unsuitable_queues => SkipUnsuitableQueues,
         tolerance => undefined_to_null(Tolerance),
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 queue_status_to_json(#queue_migration_status{
@@ -452,7 +454,7 @@ queue_status_to_json(#queue_migration_status{
         migrated_messages => MigratedMsgs,
         progress_percentage => calculate_progress_percentage(MigratedMsgs, TotalMsgs),
         status => Status,
-        error => undefined_to_null(Error)
+        error => error_to_json(Error)
     }.
 
 format_display_id({Timestamp, Node}, VHost, _StartedAt) ->
@@ -487,6 +489,18 @@ undefined_to_null(undefined) ->
     null;
 undefined_to_null(Error) ->
     Error.
+
+%% A migration error stored by 1.x can hold Latin-1 bytes, which rabbit_json
+%% cannot encode; that would fail the whole status response, so convert them.
+%% Valid UTF-8 is taken as written, which misreads the rare Latin-1 byte
+%% sequence that happens to be valid UTF-8.
+error_to_json(Error) when is_binary(Error) ->
+    case rqm_util:is_valid_utf8(Error) of
+        true -> Error;
+        false -> unicode:characters_to_binary(Error, latin1)
+    end;
+error_to_json(Error) ->
+    undefined_to_null(Error).
 
 calculate_progress_percentage(_, 0) ->
     0;

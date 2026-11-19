@@ -8,6 +8,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rqm.hrl").
 
 %% The TagSpecification the plugin sends for the mocked data volume, tagged
 %% Name=my-cluster and Team=t.
@@ -117,7 +118,8 @@
     snapshot_dry_run_throttled_passes_test/1,
     snapshot_dry_run_transport_error_passes_test/1,
     unchecked_node_passes_snapshot_check_test/1,
-    migration_error_with_non_latin1_queue_name_test/1
+    migration_error_with_non_latin1_queue_name_test/1,
+    status_json_converts_latin1_error_test/1
 ]).
 
 %% Test groups
@@ -222,7 +224,8 @@ groups() ->
             snapshot_dry_run_throttled_passes_test,
             snapshot_dry_run_transport_error_passes_test,
             unchecked_node_passes_snapshot_check_test,
-            migration_error_with_non_latin1_queue_name_test
+            migration_error_with_non_latin1_queue_name_test,
+            status_json_converts_latin1_error_test
         ]}
     ].
 
@@ -1186,6 +1189,41 @@ migration_error_with_non_latin1_queue_name_test(_Config) ->
             )
         end,
         [<<"\x{6CE8}\x{6587}"/utf8>>, <<"caf\x{E9}"/utf8>>]
+    ).
+
+%% 1.x stored a first failed queue named café as the Latin-1 byte 0xE9, which
+%% rabbit_json cannot encode. Every serializer that emits a stored error must
+%% still produce a document rabbit_json can encode.
+status_json_converts_latin1_error_test(_Config) ->
+    Prefix = <<"Migration failed: 1 error(s), 0 aborted. No rollback needed. First error: ">>,
+    Stored = <<Prefix/binary, "caf", 16#E9, " - timeout">>,
+    Expected = <<Prefix/binary, "caf\x{E9}"/utf8, " - timeout">>,
+    Migration = #queue_migration{
+        id = {1700000000000, node()},
+        vhost = <<"/">>,
+        started_at = {1700, 0, 0},
+        total_queues = 1,
+        completed_queues = 0,
+        status = failed,
+        error = Stored
+    },
+    QueueStatus = #queue_migration_status{
+        queue_resource = #resource{virtual_host = <<"/">>, kind = queue, name = <<"q">>},
+        total_messages = 0,
+        migrated_messages = 0,
+        status = failed,
+        error = Stored
+    },
+    lists:foreach(
+        fun(Json) ->
+            #{<<"error">> := Error} = rabbit_json:decode(rabbit_json:encode(Json)),
+            ?assertEqual(Expected, Error)
+        end,
+        [
+            rqm_mgmt:migration_to_json(Migration),
+            rqm_mgmt:migration_to_json_detail(Migration),
+            rqm_mgmt:queue_status_to_json(QueueStatus)
+        ]
     ).
 
 %% Mock an EC2 instance with a root volume listed before the RabbitMQ data
