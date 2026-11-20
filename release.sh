@@ -357,7 +357,7 @@ create_release() {
     then
         run gh release create "$version" \
             --verify-tag \
-            --title "$gh_project $version" \
+            --title "$version" \
             --latest \
             --generate-notes \
             "$ez"
@@ -369,9 +369,9 @@ create_release() {
     log_success "publish complete. Optionally attach the GitHub milestone to the release."
 }
 
-# Publish a draft release prepared ahead of time, keeping its title and
-# hand-written notes and appending the notes GitHub generates, which
-# `gh release create --generate-notes` would otherwise have produced.
+# Publish a draft release prepared ahead of time: set its title to the
+# version, keep its hand-written notes and append the notes GitHub generates,
+# which `gh release create --generate-notes` would otherwise have produced.
 publish_draft_release() {
     local -r version="$1"
     local -r ez="$2"
@@ -406,6 +406,7 @@ publish_draft_release() {
     run gh release edit "$version" \
         --tag "$version" \
         --verify-tag \
+        --title "$version" \
         --draft=false \
         --latest \
         --notes "$notes"
