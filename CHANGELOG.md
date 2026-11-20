@@ -1,11 +1,25 @@
 # Changelog
 
-## [Unreleased](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/HEAD)
+## [2.0.0](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/2.0.0) (2026-11-20)
+
+[Full Changelog](https://github.com/amazon-mq/rabbitmq-queue-migration/compare/1.2.1...2.0.0)
+
+**Closed issues:**
+
+- Monitoring-tag users can start and interrupt migrations [\#125](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/125)
+- Tag migration EBS snapshots for out-of-band discoverability [\#103](https://github.com/amazon-mq/rabbitmq-queue-migration/issues/103)
 
 **Merged pull requests:**
 
-- Show the deployed plugin version as a link in the management UI, and expose it in the `version` field of the status and `503` init-state HTTP responses
-- Require the `administrator` tag for the HTTP API endpoints that start, interrupt or change a migration; reading status and the compatibility check still need `monitoring`. The status update endpoint now accepts only `rollback_completed`, `GET` on the `start` and `interrupt` endpoints returns `405`, and `HEAD` on the `check` endpoint returns `405` instead of `500`
+- Require the administrator tag to start, interrupt or change a migration [\#133](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/133) ([lukebakken](https://github.com/lukebakken))
+- Publish an existing draft release from `release.sh publish` [\#132](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/132) ([lukebakken](https://github.com/lukebakken))
+- Tag migration snapshots with the data volume's tags [\#118](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/118) ([laperlej](https://github.com/laperlej))
+- Refresh credentials before deleting EBS snapshots [\#117](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/117) ([sunfinite](https://github.com/sunfinite))
+- Surface the message-TTL footgun across the docs [\#107](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/107) ([lukebakken](https://github.com/lukebakken))
+- Document removed queue-level TTL as a hidden message-loss cause [\#106](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/106) ([lukebakken](https://github.com/lukebakken))
+- Add plugin version indicator to the management UI [\#104](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/104) ([karanaizen](https://github.com/karanaizen))
+- Reorganize documentation by operator journey and consolidate message-loss guidance [\#102](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/102) ([lukebakken](https://github.com/lukebakken))
+- Support `--load-balancer` in every integration test entry point [\#101](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/101) ([lukebakken](https://github.com/lukebakken))
 
 ## [1.2.1](https://github.com/amazon-mq/rabbitmq-queue-migration/tree/1.2.1) (2026-07-13)
 
@@ -17,6 +31,7 @@
 
 **Merged pull requests:**
 
+- rabbitmq-queue-migration 1.2.1 [\#99](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/99) ([lukebakken](https://github.com/lukebakken))
 - Add `release.sh` to automate the release process [\#98](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/98) ([lukebakken](https://github.com/lukebakken))
 - Replicate migration tables as `disc_copies` on all cluster nodes [\#97](https://github.com/amazon-mq/rabbitmq-queue-migration/pull/97) ([lukebakken](https://github.com/lukebakken))
 
